@@ -1,0 +1,12 @@
+Lavik (formerly Keylane)
+Copyright (C) 2026 EloqData Inc.
+
+EloqData-authored code and accompanying materials are licensed under the
+Apache License, Version 2.0. See LICENSE for the complete terms.
+
+Third-party components retain their original copyright notices and licenses.
+The Apache-2.0 license for this project does not replace those terms. These
+components include third_party/, include/spdlog/, tests/valkey/, CLI11.hpp,
+the Valkey-derived storage/scan_hash_map.h, and the Redis-derived RDB format
+and CRC implementation in src/redis/rdb.cpp. Refer to the notices in those
+files and dependencies. The Bycorf runtime is a separately licensed submodule.

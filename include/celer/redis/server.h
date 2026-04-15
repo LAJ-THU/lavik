@@ -1,0 +1,33 @@
+/*
+ * Copyright (C) 2026 EloqData Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#pragma once
+
+#include <cstdint>
+#include <string_view>
+
+#include "celer/base/status.h"
+#include "celer/net/connection.h"
+#include "celer/runtime/task.h"
+#include "celer/runtime/worker.h"
+
+namespace celer::redis {
+
+int RunServer(std::string_view bind_ip, std::uint16_t port, unsigned thread_count,
+              int idle_timeout_ms);
+Task<Status> RedisSession(Worker& worker, Connection* connection);
+
+}  // namespace celer::redis
