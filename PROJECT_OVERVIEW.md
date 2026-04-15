@@ -18,7 +18,7 @@ limitations under the License.
 
 ## Goal
 
-`celer_redis` is a Redis/Valkey-protocol server built on top of the `celer` core runtime.
+`keylane` is a Redis/Valkey-protocol server built on top of the `celer` core runtime.
 
 This repository should own:
 
