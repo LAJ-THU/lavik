@@ -20,11 +20,13 @@
 #include <vector>
 
 #include "celer/base/status.h"
-#include "celer/redis/db.h"
-#include "celer/redis/resp.h"
 
 namespace keylane {
-using namespace celer;
+
+class DbShard;
+struct RespCommand;
+
+using celer::StatusOr;
 
 enum class CommandKind {
   kPing,
