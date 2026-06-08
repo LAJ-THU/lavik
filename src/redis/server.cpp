@@ -40,7 +40,8 @@
 #include "celer/redis/db.h"
 #include "celer/redis/resp.h"
 
-namespace celer::redis {
+namespace keylane {
+using namespace celer;
 
 namespace {
 
@@ -127,12 +128,9 @@ WaitResult WaitForSignalOrServerStop(const TcpServer& server) {
 class RedisHandler final : public TcpConnectionHandler {
  public:
   Task<Status> HandleRequests(TcpStream stream) override;
-
- private:
-  static DbShard db_;
 };
 
-DbShard RedisHandler::db_{};
+thread_local DbShard tls_db_;
 
 Task<StatusOr<RespCommand>> ReadNextCommand(TcpStream& stream, std::string* pending) {
   std::array<std::byte, 4096> buffer{};
@@ -192,7 +190,7 @@ Task<Status> RedisHandler::HandleRequests(TcpStream stream) {
     if (!request_result.ok()) [[unlikely]] {
       reply = EncodeError("ERR " + request_result.status().message());
     } else {
-      CommandReply executed = ExecuteCommand(&db_, *request_result);
+      CommandReply executed = ExecuteCommand(&tls_db_, *request_result);
       reply = std::move(executed.encoded);
       close_connection = executed.close_connection;
     }
@@ -258,4 +256,4 @@ int RunServer(std::string_view bind_ip, std::uint16_t port, unsigned thread_coun
   return exit_code;
 }
 
-}  // namespace celer::redis
+}  // namespace keylane

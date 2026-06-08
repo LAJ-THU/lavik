@@ -23,6 +23,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(KEYLANE_BUILD_EXAMPLE "Build keylane example binary" ON)
 option(KEYLANE_ENABLE_WERROR "Treat warnings as errors" OFF)
+option(KEYLANE_ENABLE_OPT "Enable aggressive optimization" ON)
 
 set(CELER_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 
@@ -51,6 +52,9 @@ target_link_libraries(keylane_module PUBLIC celer::core)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
   target_compile_options(keylane_module PRIVATE -Wall -Wextra -Wpedantic)
+  if (KEYLANE_ENABLE_OPT)
+    target_compile_options(keylane_module PRIVATE -O3 -march=native -flto)
+  endif()
   if (KEYLANE_ENABLE_WERROR)
     target_compile_options(keylane_module PRIVATE -Werror)
   endif()
@@ -60,5 +64,9 @@ if (KEYLANE_BUILD_EXAMPLE)
   add_executable(keylane
     app/keylane.cpp
   )
+  if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU" AND KEYLANE_ENABLE_OPT)
+    target_compile_options(keylane PRIVATE -O3 -march=native -flto)
+    target_link_options(keylane PRIVATE -flto)
+  endif()
   target_link_libraries(keylane PRIVATE keylane::module)
 endif()

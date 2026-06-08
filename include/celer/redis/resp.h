@@ -23,7 +23,8 @@
 
 #include "celer/base/status.h"
 
-namespace celer::redis {
+namespace keylane {
+using namespace celer;
 
 struct RespCommand {
   std::vector<std::string> args;
@@ -50,4 +51,4 @@ std::string EncodeNullBulkString();
 std::string EncodeInteger(long long value);
 std::string EncodeError(std::string_view message);
 
-}  // namespace celer::redis
+}  // namespace keylane

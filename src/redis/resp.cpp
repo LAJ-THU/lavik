@@ -19,7 +19,8 @@
 #include <charconv>
 #include <string_view>
 
-namespace celer::redis {
+namespace keylane {
+using namespace celer;
 
 namespace {
 
@@ -163,4 +164,4 @@ std::string EncodeError(std::string_view message) {
   return out;
 }
 
-}  // namespace celer::redis
+}  // namespace keylane
