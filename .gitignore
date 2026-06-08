@@ -65,3 +65,4 @@ vgcore.*
 .DS_Store
 Thumbs.db
 build-keylane/
+dump.rdb
