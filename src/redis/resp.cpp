@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/redis/resp.h"
+#include "keylane/resp.h"
 
 #include <charconv>
 #include <string_view>
