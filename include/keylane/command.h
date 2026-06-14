@@ -20,13 +20,14 @@
 #include <vector>
 
 #include "celer/base/status.h"
+#include "celer/runtime/task.h"
 
 namespace keylane {
 
-class DbShard;
 struct RespCommand;
 
 using celer::StatusOr;
+using celer::Task;
 
 enum class CommandKind {
   kPing,
@@ -49,6 +50,12 @@ struct CommandReply {
 };
 
 StatusOr<CommandRequest> BuildCommandRequest(RespCommand command);
-CommandReply ExecuteCommand(DbShard* db, const CommandRequest& request);
+
+// Create one shard (DbShard) per worker. Call once before the server starts.
+void InitShards(unsigned num_shards);
+
+// Route `request` to the shard that owns its key (hash(key) % num_shards),
+// running it locally or via cross-core SubmitTo, and return the encoded reply.
+Task<CommandReply> ExecuteCommand(const CommandRequest& request);
 
 }  // namespace keylane
