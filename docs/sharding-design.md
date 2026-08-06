@@ -19,6 +19,8 @@ limitations under the License.
 > Storage ownership has evolved beyond the original worker-equals-shard model
 > described here. See [Worker-Count-Independent Storage Ownership](storage-block-ownership.md)
 > for the current persistent block, recovery, read, and defrag design.
+> See [Logical Databases and SELECT](logical-databases.md) for current
+> connection-level database selection and persistent `(db_id, key)` identity.
 
 ## Problem
 
