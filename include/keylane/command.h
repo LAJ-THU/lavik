@@ -17,6 +17,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -59,6 +60,7 @@ enum class CommandKind {
   kWatch,
   kUnwatch,
   kInfo,
+  kKeys,
   kUnknown,
 };
 
@@ -71,12 +73,18 @@ struct CommandRequest {
   std::vector<std::string> args;
 };
 
+// Pulls the next chunk of a streamed reply; an empty chunk ends the stream.
+// Lets unbounded replies (KEYS) reach the socket in bounded memory.
+using ReplyChunkSource =
+    std::function<Task<StatusOr<std::string>>()>;
+
 struct CommandReply {
   // TODO: Add a connection-local RESP reply builder for composite and small
   // replies. Keep DiskValue as the specialized direct-from-read-buffer GET
   // path.
   std::string encoded;
   std::optional<storage::DiskValue> disk_value;
+  ReplyChunkSource chunks;  // drained after `encoded` when set
   bool close_connection = false;
   ReadLatencyTrace read_trace;
   std::optional<std::uint8_t> selected_db;
