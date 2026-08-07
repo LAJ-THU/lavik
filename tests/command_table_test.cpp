@@ -94,6 +94,7 @@ int main() {
   CheckKind("TTL", CommandKind::kTtl);
   CheckKind("PTTL", CommandKind::kPttl);
   CheckKind("PING", CommandKind::kPing);
+  CheckKind("ECHO", CommandKind::kEcho);
   CheckKind("SELECT", CommandKind::kSelect);
   CheckKind("DBSIZE", CommandKind::kDbSize);
   CheckKind("SCAN", CommandKind::kScan);
@@ -139,7 +140,8 @@ int main() {
     }
   }
   {
-    const char* no_keys[] = {"ping", "select", "dbsize", "scan", "flushdb"};
+    const char* no_keys[] = {"ping", "echo", "select", "dbsize", "scan",
+                             "flushdb"};
     for (const char* name : no_keys) {
       const CommandSpec* spec = FindCommand(name);
       Check(spec != nullptr && (spec->flags & keylane::kCmdNoKeys) != 0 &&
@@ -170,6 +172,8 @@ int main() {
   CheckArity("ping", 1, true);
   CheckArity("ping", 2, true);
   CheckArity("ping", 3, false);
+  CheckArity("echo", 2, true);
+  CheckArity("echo", 1, false);
   CheckArity("select", 2, true);
   CheckArity("select", 1, false);
   CheckArity("del", 1, false);

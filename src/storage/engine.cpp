@@ -1482,9 +1482,9 @@ class StorageEngine::Impl {
       }
     }
     if (!orphan_extents->empty()) {
-      worker.Spawn(ReclaimExtents(
-          &store, std::shared_ptr<const std::vector<ExtentRef>>(
-                      std::move(orphan_extents))));
+      SpawnExtentReclaim(store,
+                         std::shared_ptr<const std::vector<ExtentRef>>(
+                             std::move(orphan_extents)));
     }
     worker.SpawnRoot(PeriodicFlush(&store));
     if (options_.expiration_authority) {
@@ -2347,7 +2347,7 @@ class StorageEngine::Impl {
             applied.mutation_sequence, 0, false, true, true,
             applied.value.size(), *extents);
         if (!written.ok()) {
-          store.worker->Spawn(ReclaimExtents(&store, *extents));
+          SpawnExtentReclaim(store, *extents);
         }
       } else {
         written = co_await WriteRecordLocked(
@@ -3004,7 +3004,7 @@ class StorageEngine::Impl {
       });
 
       for (const auto& extents : dead_extents) {
-        store.worker->Spawn(ReclaimExtents(&store, extents));
+        SpawnExtentReclaim(store, extents);
       }
 
       for (const auto& [block, delta] : dead_by_block) {
@@ -3950,7 +3950,8 @@ class StorageEngine::Impl {
       }
       if (active_defrags_.load(std::memory_order_acquire) != 0 ||
           pending_defrags_.load(std::memory_order_acquire) != 0 ||
-          active_flushes_.load(std::memory_order_acquire) != 0) {
+          active_flushes_.load(std::memory_order_acquire) != 0 ||
+          active_extent_reclaims_.load(std::memory_order_acquire) != 0) {
         Status waited = co_await celer::SleepFor(
             *store.worker, std::chrono::milliseconds(1));
         if (!waited.ok()) {
@@ -3965,9 +3966,22 @@ class StorageEngine::Impl {
           generation_after) {
         continue;
       }
-      co_return Status(
-          StatusCode::kResourceExhausted,
-          "no foreground blocks remain and no flush or defrag can reclaim space");
+      std::string devices;
+      for (std::size_t d = 0; d < device_allocators_.size(); ++d) {
+        const DeviceAllocator& allocator = *device_allocators_[d];
+        devices += " dev" + std::to_string(d) +
+                   " ready=" + std::to_string(allocator.ready_blocks.size()) +
+                   " cold=" + std::to_string(allocator.cold_free.size()) +
+                   " reserve=" + std::to_string(DefragReserveForDevice(d));
+      }
+      spdlog::warn(
+          "allocator: out of disk space;{} flushes={} defrags={}/{} "
+          "extent_reclaims={}",
+          devices, active_flushes_.load(std::memory_order_relaxed),
+          active_defrags_.load(std::memory_order_relaxed),
+          pending_defrags_.load(std::memory_order_relaxed),
+          active_extent_reclaims_.load(std::memory_order_relaxed));
+      co_return Status(StatusCode::kResourceExhausted, "out of disk space");
     }
   }
 
@@ -4037,9 +4051,8 @@ class StorageEngine::Impl {
                   kExtentPayloadBytes);
     auto reclaim_allocated = [&]() {
       if (!refs->empty()) {
-        store.worker->Spawn(ReclaimExtents(
-            &store,
-            std::shared_ptr<const std::vector<ExtentRef>>(refs)));
+        SpawnExtentReclaim(
+            store, std::shared_ptr<const std::vector<ExtentRef>>(refs));
       }
     };
     std::size_t value_offset = 0;
@@ -4838,6 +4851,27 @@ class StorageEngine::Impl {
     co_return Status::Ok();
   }
 
+  // Spawn an asynchronous extent reclaim, counted from before the spawn so
+  // the block allocator's full-device check always sees it in flight.
+  void SpawnExtentReclaim(WorkerStore& store,
+                          std::shared_ptr<const std::vector<ExtentRef>> extents) {
+    active_extent_reclaims_.fetch_add(1, std::memory_order_acq_rel);
+    store.worker->Spawn(ReclaimExtentsCounted(&store, std::move(extents)));
+  }
+
+  Task<Status> ReclaimExtentsCounted(
+      WorkerStore* store,
+      std::shared_ptr<const std::vector<ExtentRef>> extents) {
+    struct ReclaimGuard {
+      Impl* engine = nullptr;
+      ~ReclaimGuard() {
+        engine->active_extent_reclaims_.fetch_sub(1,
+                                                  std::memory_order_acq_rel);
+      }
+    } guard{this};
+    co_return co_await ReclaimExtents(store, std::move(extents));
+  }
+
   Task<Status> ReclaimExtents(
       WorkerStore* store,
       std::shared_ptr<const std::vector<ExtentRef>> extents) {
@@ -5071,8 +5105,7 @@ class StorageEngine::Impl {
 
       for (const RecordIdentity& identity : pending->staged_records) {
         if (identity.retired_extents != nullptr) {
-          store->worker->Spawn(
-              ReclaimExtents(store, identity.retired_extents));
+          SpawnExtentReclaim(*store, identity.retired_extents);
         }
         if (identity.entry == nullptr) {
           continue;
@@ -5568,6 +5601,9 @@ class StorageEngine::Impl {
   std::atomic<unsigned> active_defrags_{0};
   std::atomic<unsigned> pending_defrags_{0};
   std::atomic<unsigned> active_flushes_{0};
+  // Extent reclaims in flight (from the moment they are spawned): the block
+  // allocator must not report the device full while one may still free space.
+  std::atomic<unsigned> active_extent_reclaims_{0};
   std::atomic<std::uint64_t> space_reclaim_generation_{0};
   std::atomic<bool> shutdown_flush_requested_{false};
   std::atomic<unsigned> shutdown_flush_completed_{0};
