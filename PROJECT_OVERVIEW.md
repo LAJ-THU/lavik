@@ -20,6 +20,9 @@ limitations under the License.
 
 `keylane` is a Redis/Valkey-protocol server built on top of the `celer` core runtime.
 
+Supported commands follow the Redis 7.2 semantic baseline documented in
+[`docs/redis-compatibility.md`](docs/redis-compatibility.md).
+
 This repository should own:
 
 - RESP parsing and serialization
