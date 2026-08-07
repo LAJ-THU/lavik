@@ -35,6 +35,7 @@ using celer::Task;
 
 enum class CommandKind {
   kPing,
+  kEcho,
   kDbSize,
   kDel,
   kExists,
