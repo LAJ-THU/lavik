@@ -56,6 +56,8 @@ enum class CommandKind {
   kMulti,
   kExec,
   kDiscard,
+  kWatch,
+  kUnwatch,
   kUnknown,
 };
 
@@ -88,6 +90,10 @@ struct ConnectionContext;
 // everything else falls through to ExecuteCommand.
 Task<CommandReply> DispatchCommand(ConnectionContext& ctx,
                                    CommandRequest request);
+
+// Unregisters every WATCH this connection holds (connection close, UNWATCH,
+// DISCARD, and the end of every EXEC).
+Task<celer::Status> ReleaseConnectionWatches(ConnectionContext& ctx);
 
 // Bind command routing to the disk engine. Call once before the server starts.
 void InitStorage(storage::StorageEngine* engine, bool replica_read_only = false);
