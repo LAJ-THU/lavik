@@ -51,8 +51,8 @@
 #include "celer/runtime/cross_core.h"
 #include "celer/runtime/worker.h"
 #include "keylane/storage/format.h"
-#include "keylane/storage/intent_lock.h"
 #include "keylane/storage/scan_hash_map.h"
+#include "keylane/tx/tx_shard.h"
 #include "spdlog/spdlog.h"
 
 namespace keylane::storage {
@@ -827,7 +827,6 @@ class StorageEngine::Impl {
     std::deque<DetachedIndex> detached_indexes;
     bool detached_reclaim_running = false;
     std::array<std::size_t, kLogicalDatabaseCount> live_key_count{};
-    std::array<IntentLockTable, kLogicalDatabaseCount> key_locks;
     std::optional<ActiveBlock> active_block;
     std::optional<ReservedBlock> standby_block;
     std::optional<Status> standby_error;
@@ -1272,9 +1271,6 @@ class StorageEngine::Impl {
   Task<Status> InitializeWorker(Worker& worker) {
     WorkerStore& store = *stores_[worker.id()];
     store.worker = &worker;
-    for (IntentLockTable& locks : store.key_locks) {
-      locks.Bind(worker);
-    }
 
     Status status = store.buffers.Init(worker, options_.buffers);
     if (status.ok()) {
@@ -1504,12 +1500,20 @@ class StorageEngine::Impl {
   Task<StatusOr<DiskValue>> Get(std::uint8_t db_id, std::string_view key,
                                 ReadLatencyTrace* trace) {
     assert(db_id < kLogicalDatabaseCount);
+    const Digest digest = ComputeDigest(key);
+    auto key_lock = co_await tx::CurrentTxShard().AcquireKey(
+        db_id, tx::FingerprintOf(digest), tx::LockMode::kShared);
+    co_return co_await GetLocked(db_id, key, digest, trace);
+  }
+
+  // Caller holds this worker's key lock for `digest` (shared) and runs on
+  // OwnerForKey(key). `digest` must equal ComputeDigest(key).
+  Task<StatusOr<DiskValue>> GetLocked(std::uint8_t db_id, std::string_view key,
+                                      const Digest& digest,
+                                      ReadLatencyTrace* trace) {
+    assert(db_id < kLogicalDatabaseCount);
     WorkerStore& store = CurrentStore();
     auto& partition = PartitionForKey(store, key);
-    const Digest digest = ComputeDigest(key);
-    auto key_lock =
-        co_await store.key_locks[db_id].Acquire(digest,
-                                                IntentLockMode::kShared);
     auto& index = partition.indexes[db_id];
     auto* found = index.Find(digest, key);
     if (found == nullptr || found->value.kind == RecordKind::kTombstone) {
@@ -1543,11 +1547,19 @@ class StorageEngine::Impl {
   Task<StatusOr<std::uint64_t>> StringLength(std::uint8_t db_id,
                                              std::string_view key) {
     assert(db_id < kLogicalDatabaseCount);
+    const Digest digest = ComputeDigest(key);
+    auto key_lock = co_await tx::CurrentTxShard().AcquireKey(
+        db_id, tx::FingerprintOf(digest), tx::LockMode::kShared);
+    co_return co_await StringLengthLocked(db_id, key, digest);
+  }
+
+  // Caller holds the key lock (shared); see GetLocked.
+  Task<StatusOr<std::uint64_t>> StringLengthLocked(std::uint8_t db_id,
+                                                   std::string_view key,
+                                                   const Digest& digest) {
+    assert(db_id < kLogicalDatabaseCount);
     WorkerStore& store = CurrentStore();
     auto& partition = PartitionForKey(store, key);
-    const Digest digest = ComputeDigest(key);
-    auto key_lock = co_await store.key_locks[db_id].Acquire(
-        digest, IntentLockMode::kShared);
     auto* found = partition.indexes[db_id].Find(digest, key);
     if (found == nullptr || found->value.kind != RecordKind::kValue ||
         IsExpired(found->value, UnixTimeMillis())) {
@@ -1567,12 +1579,20 @@ class StorageEngine::Impl {
                                 std::string_view value,
                                 SetOptions options) {
     assert(db_id < kLogicalDatabaseCount);
+    const Digest digest = ComputeDigest(key);
+    auto key_lock = co_await tx::CurrentTxShard().AcquireKey(
+        db_id, tx::FingerprintOf(digest), tx::LockMode::kExclusive);
+    co_return co_await SetLocked(db_id, key, digest, value, options);
+  }
+
+  // Caller holds the key lock (exclusive); takes writer_mutex internally.
+  Task<StatusOr<SetResult>> SetLocked(std::uint8_t db_id, std::string_view key,
+                                      const Digest& digest,
+                                      std::string_view value,
+                                      SetOptions options) {
+    assert(db_id < kLogicalDatabaseCount);
     WorkerStore& store = CurrentStore();
     auto& partition = PartitionForKey(store, key);
-    const Digest digest = ComputeDigest(key);
-    auto key_lock =
-        co_await store.key_locks[db_id].Acquire(digest,
-                                                IntentLockMode::kExclusive);
     co_await store.writer_mutex.Lock();
     UnlockGuard unlock(&store.writer_mutex, store.worker);
 
@@ -1623,11 +1643,19 @@ class StorageEngine::Impl {
   Task<ExpirationInfo> GetExpiration(std::uint8_t db_id,
                                      std::string_view key) {
     assert(db_id < kLogicalDatabaseCount);
+    const Digest digest = ComputeDigest(key);
+    auto key_lock = co_await tx::CurrentTxShard().AcquireKey(
+        db_id, tx::FingerprintOf(digest), tx::LockMode::kShared);
+    co_return co_await GetExpirationLocked(db_id, key, digest);
+  }
+
+  // Caller holds the key lock (shared); see GetLocked.
+  Task<ExpirationInfo> GetExpirationLocked(std::uint8_t db_id,
+                                           std::string_view key,
+                                           const Digest& digest) {
+    assert(db_id < kLogicalDatabaseCount);
     WorkerStore& store = CurrentStore();
     auto& partition = PartitionForKey(store, key);
-    const Digest digest = ComputeDigest(key);
-    auto key_lock = co_await store.key_locks[db_id].Acquire(
-        digest, IntentLockMode::kShared);
     auto* found = partition.indexes[db_id].Find(digest, key);
     if (found == nullptr || found->value.kind != RecordKind::kValue) {
       co_return ExpirationInfo{};
@@ -1646,11 +1674,20 @@ class StorageEngine::Impl {
       std::uint8_t db_id, std::string_view key,
       std::uint64_t expire_at_ms, ExpirationCondition condition) {
     assert(db_id < kLogicalDatabaseCount);
+    const Digest digest = ComputeDigest(key);
+    auto key_lock = co_await tx::CurrentTxShard().AcquireKey(
+        db_id, tx::FingerprintOf(digest), tx::LockMode::kExclusive);
+    co_return co_await UpdateExpirationLocked(db_id, key, digest, expire_at_ms,
+                                              condition);
+  }
+
+  // Caller holds the key lock (exclusive); takes writer_mutex internally.
+  Task<StatusOr<bool>> UpdateExpirationLocked(
+      std::uint8_t db_id, std::string_view key, const Digest& digest,
+      std::uint64_t expire_at_ms, ExpirationCondition condition) {
+    assert(db_id < kLogicalDatabaseCount);
     WorkerStore& store = CurrentStore();
     auto& partition = PartitionForKey(store, key);
-    const Digest digest = ComputeDigest(key);
-    auto key_lock = co_await store.key_locks[db_id].Acquire(
-        digest, IntentLockMode::kExclusive);
     co_await store.writer_mutex.Lock();
     UnlockGuard unlock(&store.writer_mutex, store.worker);
 
@@ -1712,12 +1749,18 @@ class StorageEngine::Impl {
 
   Task<StatusOr<bool>> Delete(std::uint8_t db_id, std::string_view key) {
     assert(db_id < kLogicalDatabaseCount);
+    const Digest digest = ComputeDigest(key);
+    auto key_lock = co_await tx::CurrentTxShard().AcquireKey(
+        db_id, tx::FingerprintOf(digest), tx::LockMode::kExclusive);
+    co_return co_await DeleteLocked(db_id, key, digest);
+  }
+
+  // Caller holds the key lock (exclusive); takes writer_mutex internally.
+  Task<StatusOr<bool>> DeleteLocked(std::uint8_t db_id, std::string_view key,
+                                    const Digest& digest) {
+    assert(db_id < kLogicalDatabaseCount);
     WorkerStore& store = CurrentStore();
     auto& partition = PartitionForKey(store, key);
-    const Digest digest = ComputeDigest(key);
-    auto key_lock =
-        co_await store.key_locks[db_id].Acquire(digest,
-                                                IntentLockMode::kExclusive);
     co_await store.writer_mutex.Lock();
     UnlockGuard unlock(&store.writer_mutex, store.worker);
 
@@ -1738,12 +1781,18 @@ class StorageEngine::Impl {
 
   Task<bool> Exists(std::uint8_t db_id, std::string_view key) {
     assert(db_id < kLogicalDatabaseCount);
+    const Digest digest = ComputeDigest(key);
+    auto key_lock = co_await tx::CurrentTxShard().AcquireKey(
+        db_id, tx::FingerprintOf(digest), tx::LockMode::kShared);
+    co_return co_await ExistsLocked(db_id, key, digest);
+  }
+
+  // Caller holds the key lock (shared); see GetLocked.
+  Task<bool> ExistsLocked(std::uint8_t db_id, std::string_view key,
+                          const Digest& digest) {
+    assert(db_id < kLogicalDatabaseCount);
     WorkerStore& store = CurrentStore();
     auto& partition = PartitionForKey(store, key);
-    const Digest digest = ComputeDigest(key);
-    auto key_lock =
-        co_await store.key_locks[db_id].Acquire(digest,
-                                                IntentLockMode::kShared);
     auto& index = partition.indexes[db_id];
     auto* found = index.Find(digest, key);
     if (found == nullptr || found->value.kind != RecordKind::kValue) {
@@ -1759,12 +1808,19 @@ class StorageEngine::Impl {
   Task<StatusOr<std::int64_t>> Increment(std::uint8_t db_id,
                                          std::string_view key) {
     assert(db_id < kLogicalDatabaseCount);
+    const Digest digest = ComputeDigest(key);
+    auto key_lock = co_await tx::CurrentTxShard().AcquireKey(
+        db_id, tx::FingerprintOf(digest), tx::LockMode::kExclusive);
+    co_return co_await IncrementLocked(db_id, key, digest);
+  }
+
+  // Caller holds the key lock (exclusive); takes writer_mutex internally.
+  Task<StatusOr<std::int64_t>> IncrementLocked(std::uint8_t db_id,
+                                               std::string_view key,
+                                               const Digest& digest) {
+    assert(db_id < kLogicalDatabaseCount);
     WorkerStore& store = CurrentStore();
     auto& partition = PartitionForKey(store, key);
-    const Digest digest = ComputeDigest(key);
-    auto key_lock =
-        co_await store.key_locks[db_id].Acquire(digest,
-                                                IntentLockMode::kExclusive);
     co_await store.writer_mutex.Lock();
     UnlockGuard unlock(&store.writer_mutex, store.worker);
 
@@ -2005,8 +2061,8 @@ class StorageEngine::Impl {
     batch.records.reserve(keys.size());
     for (const std::string& key : keys) {
       const Digest digest = ComputeDigest(key);
-      auto key_lock = co_await store.key_locks[db_id].Acquire(
-          digest, IntentLockMode::kShared);
+      auto key_lock = co_await tx::CurrentTxShard().AcquireKey(
+          db_id, tx::FingerprintOf(digest), tx::LockMode::kShared);
       auto* current = index.Find(digest, key);
       if (current == nullptr || current->value.kind != RecordKind::kValue) {
         continue;
@@ -2254,8 +2310,8 @@ class StorageEngine::Impl {
 
       const SnapshotRecord& applied = *effective;
       const Digest digest = ComputeDigest(applied.key);
-      auto key_lock = co_await store.key_locks[applied.db_id].Acquire(
-          digest, IntentLockMode::kExclusive);
+      auto key_lock = co_await tx::CurrentTxShard().AcquireKey(
+          applied.db_id, tx::FingerprintOf(digest), tx::LockMode::kExclusive);
       co_await store.writer_mutex.Lock();
       UnlockGuard write_unlock(&store.writer_mutex, store.worker);
       auto& index = partition.indexes[applied.db_id];
@@ -4682,8 +4738,9 @@ class StorageEngine::Impl {
       co_return Status::Ok();
     }
     auto& partition = PartitionFor(store, candidate.partition_id);
-    auto key_lock = co_await store.key_locks[candidate.db_id].Acquire(
-        candidate.digest, IntentLockMode::kExclusive);
+    auto key_lock = co_await tx::CurrentTxShard().AcquireKey(
+        candidate.db_id, tx::FingerprintOf(candidate.digest),
+        tx::LockMode::kExclusive);
     co_await store.writer_mutex.Lock();
     UnlockGuard unlock(&store.writer_mutex, store.worker);
     auto* current = partition.indexes[candidate.db_id].Find(
@@ -5214,8 +5271,11 @@ class StorageEngine::Impl {
                                  const RecordHeader& record,
                                  const RecordLocation& source_location) {
     WorkerStore& key_store = *stores_[key_owner];
-    auto key_lock = co_await key_store.key_locks[record.db_id].Acquire(
-        record.digest, IntentLockMode::kExclusive);
+    // Always dispatched to key_owner's thread (see the defrag loop), so the
+    // current worker's TxShard is the right lock authority.
+    auto key_lock = co_await tx::CurrentTxShard().AcquireKey(
+        record.db_id, tx::FingerprintOf(record.digest),
+        tx::LockMode::kExclusive);
     co_await key_store.writer_mutex.Lock();
     UnlockGuard write_unlock(&key_store.writer_mutex, key_store.worker);
 
@@ -5646,6 +5706,56 @@ Task<bool> StorageEngine::Exists(std::uint8_t db_id, std::string_view key) {
 Task<StatusOr<std::int64_t>> StorageEngine::Increment(
     std::uint8_t db_id, std::string_view key) {
   co_return co_await impl_->Increment(db_id, key);
+}
+
+Task<StatusOr<DiskValue>> StorageEngine::GetLocked(std::uint8_t db_id,
+                                                   std::string_view key,
+                                                   const Digest& digest,
+                                                   ReadLatencyTrace* trace) {
+  co_return co_await impl_->GetLocked(db_id, key, digest, trace);
+}
+
+Task<StatusOr<std::uint64_t>> StorageEngine::StringLengthLocked(
+    std::uint8_t db_id, std::string_view key, const Digest& digest) {
+  co_return co_await impl_->StringLengthLocked(db_id, key, digest);
+}
+
+Task<StatusOr<SetResult>> StorageEngine::SetLocked(std::uint8_t db_id,
+                                                   std::string_view key,
+                                                   const Digest& digest,
+                                                   std::string_view value,
+                                                   SetOptions options) {
+  co_return co_await impl_->SetLocked(db_id, key, digest, value, options);
+}
+
+Task<ExpirationInfo> StorageEngine::GetExpirationLocked(std::uint8_t db_id,
+                                                        std::string_view key,
+                                                        const Digest& digest) {
+  co_return co_await impl_->GetExpirationLocked(db_id, key, digest);
+}
+
+Task<StatusOr<bool>> StorageEngine::UpdateExpirationLocked(
+    std::uint8_t db_id, std::string_view key, const Digest& digest,
+    std::uint64_t expire_at_ms, ExpirationCondition condition) {
+  co_return co_await impl_->UpdateExpirationLocked(db_id, key, digest,
+                                                   expire_at_ms, condition);
+}
+
+Task<StatusOr<bool>> StorageEngine::DeleteLocked(std::uint8_t db_id,
+                                                 std::string_view key,
+                                                 const Digest& digest) {
+  co_return co_await impl_->DeleteLocked(db_id, key, digest);
+}
+
+Task<bool> StorageEngine::ExistsLocked(std::uint8_t db_id,
+                                       std::string_view key,
+                                       const Digest& digest) {
+  co_return co_await impl_->ExistsLocked(db_id, key, digest);
+}
+
+Task<StatusOr<std::int64_t>> StorageEngine::IncrementLocked(
+    std::uint8_t db_id, std::string_view key, const Digest& digest) {
+  co_return co_await impl_->IncrementLocked(db_id, key, digest);
 }
 
 }  // namespace keylane::storage
