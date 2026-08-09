@@ -55,7 +55,7 @@ struct ShardSlice {
 // the hot path never heap-allocates a closure. They run on the owning shard
 // with all of the transaction's holds acquired and may suspend on disk I/O.
 using ShardCallback = celer::Task<absl::Status> (*)(void* ctx,
-                                                     const ShardSlice& slice);
+                                                    const ShardSlice& slice);
 
 // A multi-key transaction, embedded in the coordinator coroutine's frame.
 //
@@ -94,8 +94,7 @@ class Transaction {
   // Runs `cb` on every shard's slice. `release` drops all locks and queue
   // positions once the hop completes. Single-shard transactions currently
   // require release == true (multi-hop lands with MULTI/EXEC).
-  celer::Task<absl::Status> Execute(ShardCallback cb, void* ctx,
-                                     bool release);
+  celer::Task<absl::Status> Execute(ShardCallback cb, void* ctx, bool release);
 
   // Final no-op hop that releases every shard's locks and queue position.
   celer::Task<absl::Status> Release();

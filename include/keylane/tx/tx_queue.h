@@ -93,9 +93,7 @@ class TxQueue {
     assert(false && "waiter not found in queue");
   }
 
-  bool Empty() {
-    return Front() == nullptr;
-  }
+  bool Empty() { return Front() == nullptr; }
 
   // txid of the last live entry; 0 when empty. Used by the reordering rule.
   std::uint64_t TailTxid() const {
