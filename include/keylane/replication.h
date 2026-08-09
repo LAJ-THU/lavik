@@ -36,10 +36,10 @@ class StorageEngine;
 namespace keylane {
 
 struct ReplicationOptions {
-  std::uint16_t listen_port = 0;
-  std::string target_ip;
-  std::uint16_t target_port = 0;
-  bool replica_read_only = false;
+  std::uint16_t listen_port_ = 0;
+  std::string target_ip_;
+  std::uint16_t target_port_ = 0;
+  bool replica_read_only_ = false;
 };
 
 class ReplicationManager {
@@ -52,7 +52,9 @@ class ReplicationManager {
 
   celer::Service* service() noexcept;
   void StorageReady(celer::Worker& worker);
-  bool replica_read_only() const noexcept { return options_.replica_read_only; }
+  bool replica_read_only() const noexcept {
+    return options_.replica_read_only_;
+  }
 
  private:
   class Impl;
