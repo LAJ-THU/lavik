@@ -31,6 +31,7 @@
 #include <string_view>
 #include <vector>
 
+#include "absl/strings/str_cat.h"
 #include "celer/runtime/cross_core.h"
 #include "celer/runtime/worker.h"
 #include "celer/io/storage.h"
@@ -79,10 +80,10 @@ bool CmpCaseInsensitive(std::string_view a, std::string_view b) {
 
 }  // namespace
 
-StatusOr<CommandRequest> BuildCommandRequest(RespCommand command,
+absl::StatusOr<CommandRequest> BuildCommandRequest(RespCommand command,
                                              std::uint8_t db_id) {
   if (command.args.empty()) {
-    return Status(StatusCode::kInvalidArgument, "empty command");
+    return absl::Status(absl::StatusCode::kInvalidArgument, "empty command");
   }
 
   CommandRequest request;
@@ -294,7 +295,7 @@ Task<CommandReply> ExecuteFlushDb(const CommandRequest& request) {
         EncodeError("ERR wrong number of arguments for 'flushdb' command"));
   }
 
-  Status detached = Status::Ok();
+  absl::Status detached = absl::OkStatus();
   {
     // The gate closes the database to every other command, so it covers only
     // the phase that has to be exclusive: draining commands already in flight,
@@ -307,22 +308,22 @@ Task<CommandReply> ExecuteFlushDb(const CommandRequest& request) {
     DbCloseGuard reopen(request.db_id);
     while ((g_db_gates[request.db_id].load(std::memory_order_acquire) &
             kDbGateCountMask) != 0) {
-      Status waited = co_await celer::SleepFor(
+      absl::Status waited = co_await celer::SleepFor(
           *ThisWorker().self, std::chrono::milliseconds(1));
       if (!waited.ok()) {
-        co_return EncodedReply(EncodeError("ERR " + waited.message()));
+        co_return EncodedReply(EncodeError(absl::StrCat("ERR ", waited.message())));
       }
     }
     detached = co_await g_storage->FlushDbDetach(request.db_id);
   }
   if (!detached.ok()) {
-    co_return EncodedReply(EncodeError("ERR " + detached.message()));
+    co_return EncodedReply(EncodeError(absl::StrCat("ERR ", detached.message())));
   }
 
-  Status reclaimed = co_await g_storage->FlushDbReclaim(wait_for_reclaim);
+  absl::Status reclaimed = co_await g_storage->FlushDbReclaim(wait_for_reclaim);
   co_return EncodedReply(reclaimed.ok()
                              ? EncodeSimpleString("OK")
-                             : EncodeError("ERR " + reclaimed.message()));
+                             : EncodeError(absl::StrCat("ERR ", reclaimed.message())));
 }
 
 struct ScanOptions {
@@ -332,9 +333,9 @@ struct ScanOptions {
   std::optional<std::string_view> type;
 };
 
-StatusOr<ScanOptions> ParseScanOptions(const std::vector<std::string>& args) {
+absl::StatusOr<ScanOptions> ParseScanOptions(const std::vector<std::string>& args) {
   if (args.size() < 2) {
-    return Status(StatusCode::kInvalidArgument,
+    return absl::Status(absl::StatusCode::kInvalidArgument,
                   "wrong number of arguments for 'scan' command");
   }
   ScanOptions options;
@@ -343,7 +344,7 @@ StatusOr<ScanOptions> ParseScanOptions(const std::vector<std::string>& args) {
   auto [parsed_cursor, cursor_error] =
       std::from_chars(cursor_begin, cursor_end, options.cursor);
   if (cursor_error != std::errc{} || parsed_cursor != cursor_end) {
-    return Status(StatusCode::kInvalidArgument, "invalid cursor");
+    return absl::Status(absl::StatusCode::kInvalidArgument, "invalid cursor");
   }
 
   for (std::size_t i = 2; i < args.size();) {
@@ -354,7 +355,7 @@ StatusOr<ScanOptions> ParseScanOptions(const std::vector<std::string>& args) {
       auto [parsed, error] = std::from_chars(begin, end, count);
       if (error != std::errc{} || parsed != end || count == 0 ||
           count > std::numeric_limits<std::size_t>::max()) {
-        return Status(StatusCode::kInvalidArgument,
+        return absl::Status(absl::StatusCode::kInvalidArgument,
                       "value is not an integer or out of range");
       }
       options.count = static_cast<std::size_t>(count);
@@ -371,7 +372,7 @@ StatusOr<ScanOptions> ParseScanOptions(const std::vector<std::string>& args) {
       i += 2;
       continue;
     }
-    return Status(StatusCode::kInvalidArgument, "syntax error");
+    return absl::Status(absl::StatusCode::kInvalidArgument, "syntax error");
   }
   return options;
 }
@@ -467,7 +468,7 @@ bool GlobMatch(std::string_view pattern, std::string_view text) {
 Task<CommandReply> ExecuteScan(const CommandRequest& request) {
   auto parsed = ParseScanOptions(request.args);
   if (!parsed.ok()) {
-    co_return EncodedReply(EncodeError("ERR " + parsed.status().message()));
+    co_return EncodedReply(EncodeError(absl::StrCat("ERR ", parsed.status().message())));
   }
 
   constexpr unsigned kPartitionBits = 14;
@@ -648,7 +649,7 @@ Task<KeysWorkerBatch> KeysBatchOnWorker(std::uint8_t db, unsigned worker,
       });
 }
 
-Task<StatusOr<std::string>> NextKeysChunk(
+Task<absl::StatusOr<std::string>> NextKeysChunk(
     std::shared_ptr<KeysStreamState> state) {
   while (state->worker < g_storage->worker_count()) {
     KeysWorkerBatch batch = co_await KeysBatchOnWorker(
@@ -686,15 +687,15 @@ Task<CommandReply> ExecuteKeys(const CommandRequest& request) {
   // end of the stream the keyspace cannot change, so the counted N is exact.
   while ((g_db_gates[db].load(std::memory_order_acquire) &
           kDbGateCountMask) != 0) {
-    Status waited = co_await celer::SleepFor(*ThisWorker().self,
+    absl::Status waited = co_await celer::SleepFor(*ThisWorker().self,
                                              std::chrono::milliseconds(1));
     if (!waited.ok()) {
-      co_return EncodedReply(EncodeError("ERR " + waited.message()));
+      co_return EncodedReply(EncodeError(absl::StrCat("ERR ", waited.message())));
     }
   }
-  Status quiesced = co_await g_storage->QuiesceExpiration();
+  absl::Status quiesced = co_await g_storage->QuiesceExpiration();
   if (!quiesced.ok()) {
-    co_return EncodedReply(EncodeError("ERR " + quiesced.message()));
+    co_return EncodedReply(EncodeError(absl::StrCat("ERR ", quiesced.message())));
   }
   state->expiration_quiesced = true;
 
@@ -739,14 +740,14 @@ bool ParseInt64(std::string_view text, std::int64_t* value) {
   return error == std::errc{} && parsed_end == end;
 }
 
-std::string EncodeStorageError(const Status& status) {
+std::string EncodeStorageError(const absl::Status& status) {
   if (status.message().starts_with("WRONGTYPE ")) {
     return EncodeError(status.message());
   }
-  return EncodeError("ERR " + status.message());
+  return EncodeError(absl::StrCat("ERR ", status.message()));
 }
 
-StatusOr<storage::SetOptions> ParseSetOptions(
+absl::StatusOr<storage::SetOptions> ParseSetOptions(
     const std::vector<std::string>& args) {
   storage::SetOptions options;
   bool condition_seen = false;
@@ -761,7 +762,7 @@ StatusOr<storage::SetOptions> ParseSetOptions(
     if (CmpCaseInsensitive(option, "NX") ||
         CmpCaseInsensitive(option, "XX")) {
       if (condition_seen) {
-        return Status(StatusCode::kInvalidArgument, "syntax error");
+        return absl::Status(absl::StatusCode::kInvalidArgument, "syntax error");
       }
       condition_seen = true;
       options.condition = CmpCaseInsensitive(option, "NX")
@@ -771,7 +772,7 @@ StatusOr<storage::SetOptions> ParseSetOptions(
     }
     if (CmpCaseInsensitive(option, "GET")) {
       if (get_seen) {
-        return Status(StatusCode::kInvalidArgument, "syntax error");
+        return absl::Status(absl::StatusCode::kInvalidArgument, "syntax error");
       }
       get_seen = true;
       options.return_old_value = true;
@@ -779,7 +780,7 @@ StatusOr<storage::SetOptions> ParseSetOptions(
     }
     if (CmpCaseInsensitive(option, "KEEPTTL")) {
       if (expiration_seen) {
-        return Status(StatusCode::kInvalidArgument, "syntax error");
+        return absl::Status(absl::StatusCode::kInvalidArgument, "syntax error");
       }
       expiration_seen = true;
       options.keep_ttl = true;
@@ -791,32 +792,32 @@ StatusOr<storage::SetOptions> ParseSetOptions(
     const bool exat = CmpCaseInsensitive(option, "EXAT");
     const bool pxat = CmpCaseInsensitive(option, "PXAT");
     if (!ex && !px && !exat && !pxat) {
-      return Status(StatusCode::kInvalidArgument, "syntax error");
+      return absl::Status(absl::StatusCode::kInvalidArgument, "syntax error");
     }
     if (expiration_seen || i + 1 >= args.size()) {
-      return Status(StatusCode::kInvalidArgument, "syntax error");
+      return absl::Status(absl::StatusCode::kInvalidArgument, "syntax error");
     }
     expiration_seen = true;
     std::int64_t parsed = 0;
     if (!ParseInt64(args[++i], &parsed)) {
-      return Status(StatusCode::kInvalidArgument,
+      return absl::Status(absl::StatusCode::kInvalidArgument,
                     "value is not an integer or out of range");
     }
     if (parsed <= 0) {
-      return Status(StatusCode::kInvalidArgument,
+      return absl::Status(absl::StatusCode::kInvalidArgument,
                     "invalid expire time in 'set' command");
     }
     const std::uint64_t amount = static_cast<std::uint64_t>(parsed);
     if (ex || exat) {
       if (amount > kMaxTimestamp / 1000) {
-        return Status(StatusCode::kInvalidArgument,
+        return absl::Status(absl::StatusCode::kInvalidArgument,
                       "invalid expire time in 'set' command");
       }
     }
     const std::uint64_t millis = (ex || exat) ? amount * 1000 : amount;
     if (ex || px) {
       if (millis > kMaxTimestamp - now_ms) {
-        return Status(StatusCode::kInvalidArgument,
+        return absl::Status(absl::StatusCode::kInvalidArgument,
                       "invalid expire time in 'set' command");
       }
       options.expire_at_ms = now_ms + millis;
@@ -827,13 +828,13 @@ StatusOr<storage::SetOptions> ParseSetOptions(
   return options;
 }
 
-StatusOr<storage::ExpirationCondition> ParseExpirationCondition(
+absl::StatusOr<storage::ExpirationCondition> ParseExpirationCondition(
     const std::vector<std::string>& args) {
   if (args.size() == 3) {
     return storage::ExpirationCondition::kNone;
   }
   if (args.size() != 4) {
-    return Status(StatusCode::kInvalidArgument, "syntax error");
+    return absl::Status(absl::StatusCode::kInvalidArgument, "syntax error");
   }
   if (CmpCaseInsensitive(args[3], "NX")) {
     return storage::ExpirationCondition::kIfNoExpiration;
@@ -847,7 +848,7 @@ StatusOr<storage::ExpirationCondition> ParseExpirationCondition(
   if (CmpCaseInsensitive(args[3], "LT")) {
     return storage::ExpirationCondition::kIfLess;
   }
-  return Status(StatusCode::kInvalidArgument, "syntax error");
+  return absl::Status(absl::StatusCode::kInvalidArgument, "syntax error");
 }
 
 Task<CommandReply> ExecuteStorageCommand(const CommandRequest& request,
@@ -864,10 +865,10 @@ Task<CommandReply> ExecuteStorageCommand(const CommandRequest& request,
       auto value =
           co_await g_storage->Get(request.db_id, args[1], read_trace);
       if (!value.ok()) {
-        if (value.status().code() == StatusCode::kNotFound) {
+        if (value.status().code() == absl::StatusCode::kNotFound) {
           reply.encoded = EncodeNullBulkString();
         } else {
-          reply.encoded = EncodeError("ERR " + value.status().message());
+          reply.encoded = EncodeError(absl::StrCat("ERR ", value.status().message()));
         }
       } else {
         reply.disk_value.emplace(std::move(*value));
@@ -883,7 +884,7 @@ Task<CommandReply> ExecuteStorageCommand(const CommandRequest& request,
       }
       auto options = ParseSetOptions(args);
       if (!options.ok()) {
-        reply.encoded = EncodeError("ERR " + options.status().message());
+        reply.encoded = EncodeError(absl::StrCat("ERR ", options.status().message()));
         co_return reply;
       }
       auto result = co_await g_storage->Set(request.db_id, args[1], args[2],
@@ -914,7 +915,7 @@ Task<CommandReply> ExecuteStorageCommand(const CommandRequest& request,
       auto length =
           co_await g_storage->StringLength(request.db_id, args[1]);
       if (!length.ok()) {
-        if (length.status().code() == StatusCode::kNotFound) {
+        if (length.status().code() == absl::StatusCode::kNotFound) {
           reply.encoded = EncodeInteger(0);
         } else {
           reply.encoded = EncodeStorageError(length.status());
@@ -1024,10 +1025,10 @@ Task<CommandReply> ExecuteStorageCommand(const CommandRequest& request,
           reply.encoded = EncodeError(value.status().message());
         } else {
           reply.encoded =
-              value.status().code() == StatusCode::kInvalidArgument
+              value.status().code() == absl::StatusCode::kInvalidArgument
                   ? EncodeError(
                         "ERR value is not an integer or out of range")
-                  : EncodeError("ERR " + value.status().message());
+                  : EncodeError(absl::StrCat("ERR ", value.status().message()));
         }
       } else {
         reply.encoded = EncodeInteger(*value);
@@ -1154,15 +1155,15 @@ Task<std::string> RunSingleKeyLocked(std::uint8_t db_id,
         co_return std::string(reinterpret_cast<const char*>(bytes.data()),
                               bytes.size());
       }
-      co_return value.status().code() == StatusCode::kNotFound
+      co_return value.status().code() == absl::StatusCode::kNotFound
           ? EncodeNullBulkString()
-          : EncodeError("ERR " + value.status().message());
+          : EncodeError(absl::StrCat("ERR ", value.status().message()));
     }
 
     case CommandKind::kSet: {
       auto options = ParseSetOptions(args);
       if (!options.ok()) {
-        co_return EncodeError("ERR " + options.status().message());
+        co_return EncodeError(absl::StrCat("ERR ", options.status().message()));
       }
       auto result = co_await g_storage->SetLocked(db_id, args[1], digest,
                                                   args[2], *options, tx);
@@ -1185,7 +1186,7 @@ Task<std::string> RunSingleKeyLocked(std::uint8_t db_id,
       auto length =
           co_await g_storage->StringLengthLocked(db_id, args[1], digest);
       if (!length.ok()) {
-        co_return length.status().code() == StatusCode::kNotFound
+        co_return length.status().code() == absl::StatusCode::kNotFound
             ? EncodeInteger(0)
             : EncodeStorageError(length.status());
       }
@@ -1259,9 +1260,9 @@ Task<std::string> RunSingleKeyLocked(std::uint8_t db_id,
       if (value.status().message().starts_with("WRONGTYPE ")) {
         co_return EncodeError(value.status().message());
       }
-      co_return value.status().code() == StatusCode::kInvalidArgument
+      co_return value.status().code() == absl::StatusCode::kInvalidArgument
           ? EncodeError("ERR value is not an integer or out of range")
-          : EncodeError("ERR " + value.status().message());
+          : EncodeError(absl::StrCat("ERR ", value.status().message()));
     }
 
     default:
@@ -1275,9 +1276,9 @@ Task<std::string> RunSingleKeyLocked(std::uint8_t db_id,
 struct ShardReadJoin {
   std::size_t pending = 0;
   std::coroutine_handle<> waiter;
-  Status error;
+  absl::Status error;
 
-  void Complete(Status status) {
+  void Complete(absl::Status status) {
     if (!status.ok() && error.ok()) {
       error = std::move(status);
     }
@@ -1304,20 +1305,20 @@ struct ShardReadJoin {
 // One concurrent MGET read: locks are already held for the whole hop, and
 // distinct keys live in distinct blocks, so per-key disk reads overlap
 // instead of accumulating latency serially.
-Task<Status> ReadFrameIntoSlot(std::uint8_t db, const std::string* key,
+Task<absl::Status> ReadFrameIntoSlot(std::uint8_t db, const std::string* key,
                                storage::Digest digest,
                                std::optional<std::string>* slot,
                                ShardReadJoin* join) {
   auto value = co_await g_storage->GetLocked(db, *key, digest);
-  Status status = Status::Ok();
+  absl::Status status = absl::OkStatus();
   if (value.ok()) {
     const auto bytes = value->network_bytes();
     slot->emplace(reinterpret_cast<const char*>(bytes.data()), bytes.size());
-  } else if (value.status().code() != StatusCode::kNotFound) {
+  } else if (value.status().code() != absl::StatusCode::kNotFound) {
     status = value.status();
   }
   join->Complete(std::move(status));
-  co_return Status::Ok();
+  co_return absl::OkStatus();
 }
 
 // Shared context of one multi-key command's transaction. Shard callbacks
@@ -1339,7 +1340,7 @@ struct MultiKeyContext {
 // locks are still held, so undoing (or discarding the journal) here is
 // invisible to every other client — readers can never observe the aborted
 // values.
-Task<Status> MultiKeyFinishCallback(void* context,
+Task<absl::Status> MultiKeyFinishCallback(void* context,
                                     const tx::ShardSlice&) {
   auto* ctx = static_cast<MultiKeyContext*>(context);
   const std::uint64_t txid = ctx->tx_writes.front().txid;
@@ -1354,7 +1355,7 @@ Task<Status> MultiKeyFinishCallback(void* context,
 // reply never waits for this — losing the commit before it lands drops the
 // whole transaction at recovery, which relaxed durability already allows;
 // what it can never do is keep half of it.
-Task<Status> RunTxCommit(std::uint64_t txid,
+Task<absl::Status> RunTxCommit(std::uint64_t txid,
                          std::vector<storage::TxShardWrites> writes) {
   struct CommitDone {
     ~CommitDone() { g_storage->NoteTxCommitFinished(); }
@@ -1366,18 +1367,18 @@ Task<Status> RunTxCommit(std::uint64_t txid,
     }
   }
   if (shards.empty()) {
-    co_return Status::Ok();
+    co_return absl::OkStatus();
   }
-  Status committed = co_await g_storage->CommitTxWrites(txid,
+  absl::Status committed = co_await g_storage->CommitTxWrites(txid,
                                                         std::move(shards));
   if (!committed.ok()) {
     spdlog::warn("transaction {} commit append failed: {}", txid,
                  committed.message());
   }
-  co_return Status::Ok();
+  co_return absl::OkStatus();
 }
 
-Task<Status> MultiKeyShardCallback(void* context,
+Task<absl::Status> MultiKeyShardCallback(void* context,
                                    const tx::ShardSlice& slice) {
   auto* ctx = static_cast<MultiKeyContext*>(context);
   const auto& args = ctx->request->args;
@@ -1418,7 +1419,7 @@ Task<Status> MultiKeyShardCallback(void* context,
           const auto bytes = value->network_bytes();
           ctx->frames[key.arg_index - 1].emplace(
               reinterpret_cast<const char*>(bytes.data()), bytes.size());
-        } else if (value.status().code() != StatusCode::kNotFound) {
+        } else if (value.status().code() != absl::StatusCode::kNotFound) {
           co_return value.status();
         }
         break;
@@ -1450,7 +1451,7 @@ Task<Status> MultiKeyShardCallback(void* context,
       }
     }
   }
-  co_return Status::Ok();
+  co_return absl::OkStatus();
 }
 
 // DEL / EXISTS / MSET / MGET run as one transaction: every key locked up
@@ -1460,7 +1461,7 @@ Task<CommandReply> ExecuteMultiKey(const CommandRequest& request) {
   const auto& args = request.args;
   auto keys = DetermineKeys(*request.spec, args.size());
   if (!keys.ok()) {
-    co_return EncodedReply(EncodeError("ERR " + keys.status().message()));
+    co_return EncodedReply(EncodeError(absl::StrCat("ERR ", keys.status().message())));
   }
   if (request.kind == CommandKind::kMSet && args.size() % 2 != 1) {
     co_return EncodedReply(
@@ -1492,9 +1493,9 @@ Task<CommandReply> ExecuteMultiKey(const CommandRequest& request) {
     }
   }
 
-  Status scheduled = co_await txn.Schedule();
+  absl::Status scheduled = co_await txn.Schedule();
   if (!scheduled.ok()) {
-    co_return EncodedReply(EncodeError("ERR " + scheduled.message()));
+    co_return EncodedReply(EncodeError(absl::StrCat("ERR ", scheduled.message())));
   }
   // A tagged multi-shard write holds every shard's locks across a second
   // hop, so a mid-transaction storage failure can be undone before any other
@@ -1502,11 +1503,11 @@ Task<CommandReply> ExecuteMultiKey(const CommandRequest& request) {
   // one hop (Execute requires release there), and reads have nothing to
   // undo.
   const bool two_hop = write_txid != 0 && !txn.single_shard();
-  Status status =
+  absl::Status status =
       co_await txn.Execute(&MultiKeyShardCallback, &ctx, !two_hop);
   if (two_hop) {
     ctx.rollback = !status.ok();
-    Status finish =
+    absl::Status finish =
         co_await txn.Execute(&MultiKeyFinishCallback, &ctx, true);
     if (!finish.ok() && status.ok()) {
       status = finish;
@@ -1569,7 +1570,7 @@ struct ExecRunContext {
   std::vector<std::vector<std::optional<std::string>>> mget;
   std::unique_ptr<std::atomic<long long>[]> counters;
   std::mutex error_mutex;
-  std::vector<Status> errors;
+  std::vector<absl::Status> errors;
 };
 
 // Builds the replies of a completed run from its per-command sinks.
@@ -1618,7 +1619,7 @@ void InitExecRun(ExecRunContext& run,
   run.end = end;
   const std::size_t count = end - begin;
   run.counters = std::make_unique<std::atomic<long long>[]>(count);
-  run.errors.assign(count, Status::Ok());
+  run.errors.assign(count, absl::OkStatus());
   run.mget.resize(count);
   for (std::size_t i = begin; i < end; ++i) {
     if (queued[i].kind == CommandKind::kMGet) {
@@ -1630,8 +1631,8 @@ void InitExecRun(ExecRunContext& run,
 // A hop that does nothing but acquire (and keep) every shard's holds, so the
 // coordinator can act at the transaction's position in the serial order
 // before running any command.
-Task<Status> ArmOnlyShardCallback(void*, const tx::ShardSlice&) {
-  co_return Status::Ok();
+Task<absl::Status> ArmOnlyShardCallback(void*, const tx::ShardSlice&) {
+  co_return absl::OkStatus();
 }
 
 // One EXEC hop = one squashed run: every shard executes its keys of each
@@ -1639,7 +1640,7 @@ Task<Status> ArmOnlyShardCallback(void*, const tx::ShardSlice&) {
 // so their relative order is preserved). A command's failure is recorded and
 // the remaining commands still run, matching Redis's continue-on-error
 // transaction semantics.
-Task<Status> ExecRunShardCallback(void* context, const tx::ShardSlice&) {
+Task<absl::Status> ExecRunShardCallback(void* context, const tx::ShardSlice&) {
   auto* ctx = static_cast<ExecRunContext*>(context);
   const unsigned self = ThisWorker().id;
   for (std::size_t i = ctx->begin; i < ctx->end; ++i) {
@@ -1647,7 +1648,7 @@ Task<Status> ExecRunShardCallback(void* context, const tx::ShardSlice&) {
     const auto& args = cmd.args;
     const auto& keys = (*ctx->cmd_keys)[i];
     const std::size_t local = i - ctx->begin;
-    auto record_error = [&](Status status) {
+    auto record_error = [&](absl::Status status) {
       std::lock_guard<std::mutex> lock(ctx->error_mutex);
       if (ctx->errors[local].ok()) {
         ctx->errors[local] = std::move(status);
@@ -1702,7 +1703,7 @@ Task<Status> ExecRunShardCallback(void* context, const tx::ShardSlice&) {
             const auto bytes = value->network_bytes();
             ctx->mget[local][key.slot].emplace(
                 reinterpret_cast<const char*>(bytes.data()), bytes.size());
-          } else if (value.status().code() != StatusCode::kNotFound) {
+          } else if (value.status().code() != absl::StatusCode::kNotFound) {
             record_error(value.status());
             command_failed = true;
           }
@@ -1738,7 +1739,7 @@ Task<Status> ExecRunShardCallback(void* context, const tx::ShardSlice&) {
       }
     }
   }
-  co_return Status::Ok();
+  co_return absl::OkStatus();
 }
 
 // The union lock set of an EXEC, deduplicated per fingerprint with
@@ -1773,7 +1774,7 @@ Task<CommandReply> ExecuteWatch(ConnectionContext& ctx,
                                 const CommandRequest& request) {
   auto keys = DetermineKeys(*request.spec, request.args.size());
   if (!keys.ok()) {
-    co_return EncodedReply(EncodeError("ERR " + keys.status().message()));
+    co_return EncodedReply(EncodeError(absl::StrCat("ERR ", keys.status().message())));
   }
   for (std::size_t i = keys->first; i <= keys->last; i += keys->step) {
     const std::uint8_t db = ctx.selected_db;
@@ -1831,7 +1832,7 @@ Task<bool> CheckConnectionWatches(const ConnectionContext& ctx) {
 }
 
 // EXEC consumes the connection's watches whatever its outcome.
-Task<Status> DropWatches(ConnectionContext& ctx) {
+Task<absl::Status> DropWatches(ConnectionContext& ctx) {
   for (const auto& watched : ctx.watched) {
     co_await SubmitTo(watched.owner,
                       [db = watched.db, fp = watched.fp,
@@ -1841,7 +1842,7 @@ Task<Status> DropWatches(ConnectionContext& ctx) {
                       });
   }
   ctx.watched.clear();
-  co_return Status::Ok();
+  co_return absl::OkStatus();
 }
 
 Task<CommandReply> ExecuteExec(ConnectionContext& ctx) {
@@ -1875,7 +1876,7 @@ Task<CommandReply> ExecuteExec(ConnectionContext& ctx) {
       // watches whatever its outcome — leaving them registered would
       // false-abort every later EXEC on this connection.
       co_await DropWatches(ctx);
-      co_return EncodedReply(EncodeError("ERR " + keys.status().message()));
+      co_return EncodedReply(EncodeError(absl::StrCat("ERR ", keys.status().message())));
     }
     const bool write = (cmd.spec->flags & kCmdWrite) != 0;
     std::uint16_t slot = 0;
@@ -1940,14 +1941,14 @@ Task<CommandReply> ExecuteExec(ConnectionContext& ctx) {
       // over the union lock set, run every command inline.
       const std::vector<tx::KeyRef> refs = DedupExecLocks(cmd_keys);
       bool watch_aborted = false;
-      Status status = co_await SubmitTaskTo(
-          owners.front(), [&]() -> Task<Status> {
+      absl::Status status = co_await SubmitTaskTo(
+          owners.front(), [&]() -> Task<absl::Status> {
             auto guard = co_await tx::CurrentTxShard().AcquireKeys(
                 std::span<const tx::KeyRef>(refs));
             if (!ctx.watched.empty() &&
                 !co_await CheckConnectionWatches(ctx)) {
               watch_aborted = true;
-              co_return Status::Ok();
+              co_return absl::OkStatus();
             }
             std::size_t i = 0;
             while (i < queued.size()) {
@@ -1973,11 +1974,11 @@ Task<CommandReply> ExecuteExec(ConnectionContext& ctx) {
               AssembleRunReplies(run);
               i = end;
             }
-            co_return Status::Ok();
+            co_return absl::OkStatus();
           });
       if (!status.ok()) {
         co_await DropWatches(ctx);
-        co_return EncodedReply(EncodeError("ERR " + status.message()));
+        co_return EncodedReply(EncodeError(absl::StrCat("ERR ", status.message())));
       }
       if (watch_aborted) {
         co_await DropWatches(ctx);
@@ -1993,10 +1994,10 @@ Task<CommandReply> ExecuteExec(ConnectionContext& ctx) {
         }
       }
       txn.Seal();
-      Status scheduled = co_await txn.Schedule();
+      absl::Status scheduled = co_await txn.Schedule();
       if (!scheduled.ok()) {
         co_await DropWatches(ctx);
-        co_return EncodedReply(EncodeError("ERR " + scheduled.message()));
+        co_return EncodedReply(EncodeError(absl::StrCat("ERR ", scheduled.message())));
       }
       if (!ctx.watched.empty()) {
         // Schedule only records a queue position; conflicting transactions
@@ -2006,12 +2007,12 @@ Task<CommandReply> ExecuteExec(ConnectionContext& ctx) {
         // everything serialized before it has committed, which is the point
         // the watch check is defined at (and where the single-shard path
         // already takes it).
-        Status armed = co_await txn.Execute(&ArmOnlyShardCallback, nullptr,
+        absl::Status armed = co_await txn.Execute(&ArmOnlyShardCallback, nullptr,
                                             /*release=*/false);
         if (!armed.ok()) {
           (void)co_await txn.Release();
           co_await DropWatches(ctx);
-          co_return EncodedReply(EncodeError("ERR " + armed.message()));
+          co_return EncodedReply(EncodeError(absl::StrCat("ERR ", armed.message())));
         }
         if (!co_await CheckConnectionWatches(ctx)) {
           (void)co_await txn.Release();
@@ -2042,7 +2043,7 @@ Task<CommandReply> ExecuteExec(ConnectionContext& ctx) {
         ExecRunContext run;
         InitExecRun(run, queued, cmd_keys, replies, i, end);
         run.tx_writes = tx_writes.data();
-        Status hop = co_await txn.Execute(&ExecRunShardCallback, &run,
+        absl::Status hop = co_await txn.Execute(&ExecRunShardCallback, &run,
                                           /*release=*/false);
         if (!hop.ok()) {
           for (std::size_t j = i; j < end; ++j) {
@@ -2053,14 +2054,14 @@ Task<CommandReply> ExecuteExec(ConnectionContext& ctx) {
         }
         i = end;
       }
-      Status released = co_await txn.Release();
+      absl::Status released = co_await txn.Release();
       if (!released.ok()) {
         // Defensive: the no-op release hop cannot fail today. If it ever
         // can, the watches must still be consumed — EXEC ends them whatever
         // its outcome, and stale entries would falsely abort every later
         // EXEC on this connection.
         co_await DropWatches(ctx);
-        co_return EncodedReply(EncodeError("ERR " + released.message()));
+        co_return EncodedReply(EncodeError(absl::StrCat("ERR ", released.message())));
       }
       g_storage->NoteTxCommitStarted();
       SpawnOnCurrentWorker(RunTxCommit(exec_txid, std::move(tx_writes)));
@@ -2197,7 +2198,7 @@ Task<CommandReply> DispatchCommand(ConnectionContext& ctx,
   co_return co_await ExecuteCommand(request);
 }
 
-Task<celer::Status> ReleaseConnectionWatches(ConnectionContext& ctx) {
+Task<absl::Status> ReleaseConnectionWatches(ConnectionContext& ctx) {
   co_return co_await DropWatches(ctx);
 }
 

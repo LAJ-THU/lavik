@@ -22,7 +22,7 @@
 #include <string>
 #include <vector>
 
-#include "celer/base/status.h"
+#include "absl/status/statusor.h"
 #include "celer/runtime/task.h"
 #include "keylane/read_trace.h"
 #include "keylane/storage/engine.h"
@@ -31,7 +31,6 @@ namespace keylane {
 
 struct RespCommand;
 
-using celer::StatusOr;
 using celer::Task;
 
 enum class CommandKind {
@@ -76,7 +75,7 @@ struct CommandRequest {
 // Pulls the next chunk of a streamed reply; an empty chunk ends the stream.
 // Lets unbounded replies (KEYS) reach the socket in bounded memory.
 using ReplyChunkSource =
-    std::function<Task<StatusOr<std::string>>()>;
+    std::function<Task<absl::StatusOr<std::string>>()>;
 
 struct CommandReply {
   // TODO: Add a connection-local RESP reply builder for composite and small
@@ -90,7 +89,7 @@ struct CommandReply {
   std::optional<std::uint8_t> selected_db;
 };
 
-StatusOr<CommandRequest> BuildCommandRequest(RespCommand command,
+absl::StatusOr<CommandRequest> BuildCommandRequest(RespCommand command,
                                              std::uint8_t db_id);
 
 struct ConnectionContext;
@@ -102,7 +101,7 @@ Task<CommandReply> DispatchCommand(ConnectionContext& ctx,
 
 // Unregisters every WATCH this connection holds (connection close, UNWATCH,
 // DISCARD, and the end of every EXEC).
-Task<celer::Status> ReleaseConnectionWatches(ConnectionContext& ctx);
+Task<absl::Status> ReleaseConnectionWatches(ConnectionContext& ctx);
 
 // Bind command routing to the disk engine. Call once before the server starts.
 void InitStorage(storage::StorageEngine* engine, bool replica_read_only = false);

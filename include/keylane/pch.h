@@ -30,5 +30,5 @@
 #include "spdlog/spdlog.h"
 
 // Celer runtime
-#include "celer/base/status.h"
+#include "absl/status/statusor.h"
 #include "celer/runtime/task.h"
