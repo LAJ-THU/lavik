@@ -16,7 +16,7 @@
 
 #include "keylane/storage/engine.h"
 
-#include "engine_impl.h"
+#include "engine/impl.h"
 
 namespace keylane::storage {
 
