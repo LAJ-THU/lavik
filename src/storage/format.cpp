@@ -382,6 +382,11 @@ bool EncodeRecordHeader(
        (header.logical_size != 0 || header.payload_bytes != 0 ||
         header.external || header.expire_at_ms != 0 ||
         header.value_type != ValueType::kNone)) ||
+      (header.kind == RecordKind::kTxCommit &&
+       (header.logical_size != 0 || header.payload_bytes != 0 ||
+        header.external || header.expire_at_ms != 0 ||
+        header.value_type != ValueType::kNone || header.txid == 0 ||
+        header.key_bytes != 0)) ||
       header.header_bytes != header_bytes || output.size() != header_bytes) {
     return false;
   }
@@ -416,7 +421,8 @@ bool DecodeRecordHeader(
   if (decoded.magic != kRecordMagic ||
       decoded.version != kStorageFormatVersion ||
       (decoded.kind != RecordKind::kValue &&
-       decoded.kind != RecordKind::kTombstone) ||
+       decoded.kind != RecordKind::kTombstone &&
+       decoded.kind != RecordKind::kTxCommit) ||
       decoded.db_id >= kLogicalDatabaseCount ||
       static_cast<std::uint8_t>(decoded.value_type) >
           static_cast<std::uint8_t>(ValueType::kStream) ||
@@ -432,10 +438,14 @@ bool DecodeRecordHeader(
       decoded.total_disk_bytes > kStorageBlockBytes - kBlockHeaderBytes) {
     return false;
   }
-  if (decoded.kind == RecordKind::kTombstone &&
+  if (decoded.kind != RecordKind::kValue &&
       (decoded.logical_size != 0 || decoded.payload_bytes != 0 ||
        decoded.external || decoded.expire_at_ms != 0 ||
        decoded.value_type != ValueType::kNone)) {
+    return false;
+  }
+  if (decoded.kind == RecordKind::kTxCommit &&
+      (decoded.txid == 0 || decoded.key_bytes != 0)) {
     return false;
   }
   const std::uint32_t expected = decoded.header_checksum;
