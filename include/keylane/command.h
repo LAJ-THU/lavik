@@ -42,6 +42,7 @@ enum class CommandKind {
   kDel,
   kExists,
   kFlushDb,
+  kFlushAll,
   kGet,
   kStrlen,
   kIncr,
