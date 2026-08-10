@@ -64,6 +64,7 @@ enum class CommandKind {
   kInfo,
   kKeys,
   kUnknown,
+  kCount,
 };
 
 struct CommandSpec;
