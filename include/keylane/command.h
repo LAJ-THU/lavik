@@ -63,6 +63,7 @@ enum class CommandKind {
   kUnwatch,
   kInfo,
   kKeys,
+  kTombRaider,
   kUnknown,
   kCount,
 };
