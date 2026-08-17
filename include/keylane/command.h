@@ -32,6 +32,7 @@
 namespace keylane {
 
 struct RespCommand;
+struct ReplicatedCommand;
 class ReplyBuilder;
 
 using celer::Task;
@@ -227,6 +228,9 @@ struct CommandRequest {
   std::uint8_t db_id_ = 0;
   const CommandSpec* spec_ = nullptr;
   std::vector<std::string> args_;
+  // Internal replay marker. It bypasses client-only admission checks; the
+  // replica role invariant keeps its source backlog disabled.
+  bool replication_origin_ = false;
 };
 
 struct ReplicaOfRequest {
@@ -295,5 +299,10 @@ void EndCommandDbOperation(std::uint8_t db_id) noexcept;
 // worker.
 Task<CommandReply> ExecuteCommand(const CommandRequest& request,
                                   ReplyBuilder& reply_builder);
+
+// Replays one trusted command from the native replication stream through the
+// normal command implementation. Only the deterministic SET and single-key
+// DEL subset is accepted by the first replication vertical slice.
+Task<absl::Status> ApplyReplicatedCommand(const ReplicatedCommand& command);
 
 }  // namespace keylane
