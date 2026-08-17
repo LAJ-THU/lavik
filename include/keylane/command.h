@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -210,6 +211,7 @@ enum class CommandKind {
   kDiscard,
   kWatch,
   kUnwatch,
+  kReplicaOf,
   kInfo,
   kKeys,
   kTombRaider,
@@ -226,6 +228,17 @@ struct CommandRequest {
   const CommandSpec* spec_ = nullptr;
   std::vector<std::string> args_;
 };
+
+struct ReplicaOfRequest {
+  // Empty for REPLICAOF NO ONE; otherwise identifies the requested upstream.
+  std::optional<std::string> host_;
+  std::uint16_t port_ = 0;
+};
+
+// Parses REPLICAOF <host> <port> and REPLICAOF NO ONE without changing role.
+// The replication backend will consume this request in a later change.
+absl::StatusOr<ReplicaOfRequest> ParseReplicaOfRequest(
+    std::span<const std::string> args);
 
 // Pulls the next chunk of a streamed reply; an empty chunk ends the stream.
 // Lets unbounded replies (KEYS) reach the socket in bounded memory.
