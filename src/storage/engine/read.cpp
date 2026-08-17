@@ -23,6 +23,7 @@ Task<absl::StatusOr<std::optional<std::string>>>
 StorageEngine::Impl::RandomKeyLocal(std::uint8_t db_id) {
   assert(db_id < kLogicalDatabaseCount);
   WorkerStore& store = CurrentStore();
+  bool revalidation_failed = false;
   auto materialize = [&](WorkerStore::PartitionStore& partition,
                          RecordIndex& index,
                          RecordIndex::Entry* selected)
@@ -36,11 +37,13 @@ StorageEngine::Impl::RandomKeyLocal(std::uint8_t db_id) {
     const ExtentManifest extents = ExtentsFor(store, selected);
     const std::uint32_t key_bytes = selected->logical_key_size();
     const std::uint64_t index_generation = store.index_generations_[db_id];
+    const std::uint64_t db_epoch = DbEpoch(db_id);
     const std::uint64_t replication_epoch = partition.replication_epoch_;
     auto loaded =
         co_await LoadOutOfIndexKey(store, location, extents, key_bytes);
     if (!loaded.ok()) co_return loaded.status();
     if (store.index_generations_[db_id] != index_generation ||
+        DbEpoch(db_id) != db_epoch ||
         partition.replication_epoch_ != replication_epoch ||
         !index.Contains(identity, hash) ||
         !identity->value_.SamePhysicalRecord(location) ||
@@ -77,20 +80,13 @@ StorageEngine::Impl::RandomKeyLocal(std::uint8_t db_id) {
     }
 
     RecordIndex& index = selected_partition->indexes_[db_id];
-    RecordIndex::Entry* selected = nullptr;
-    index.ForEachWhile([&](RecordIndex::Entry& entry) {
-      if (entry.value_.kind_ != RecordKind::kValue) return true;
-      if (rank == 0) {
-        selected = &entry;
-        return false;
-      } else {
-        --rank;
-      }
-      return true;
-    });
+    RecordIndex::Entry* selected =
+        index.FairRandomEntry(RandomSampleGenerator()());
     if (selected == nullptr) {
       continue;
     }
+
+    if (selected->value_.kind_ != RecordKind::kValue) continue;
 
     const std::uint64_t now_ms = UnixTimeMillis();
     if (IsExpired(selected->value_, now_ms)) {
@@ -101,6 +97,7 @@ StorageEngine::Impl::RandomKeyLocal(std::uint8_t db_id) {
     auto key = co_await materialize(*selected_partition, index, selected);
     if (!key.ok()) co_return key.status();
     if (key->has_value()) co_return std::move(*key);
+    revalidation_failed = true;
   }
 
   // Scan the worker's indexes directly on the pathological fallback. Calling
@@ -124,6 +121,10 @@ StorageEngine::Impl::RandomKeyLocal(std::uint8_t db_id) {
     auto key = co_await materialize(partition, index, selected);
     if (!key.ok()) co_return key.status();
     if (key->has_value()) co_return std::move(*key);
+    revalidation_failed = true;
+  }
+  if (revalidation_failed) {
+    co_return absl::AbortedError("keyspace changed during RANDOMKEY");
   }
   co_return std::optional<std::string>{};
 }
