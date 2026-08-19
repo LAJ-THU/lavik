@@ -42,4 +42,8 @@ absl::Status ApplyRedisConfigDirective(
 absl::Status LoadRedisConfigFile(const std::string& path,
                                  ServerOptions* options);
 
+// Validates cross-field startup constraints after config-file and CLI values
+// have both been applied.
+absl::Status ValidateServerOptions(const ServerOptions& options);
+
 }  // namespace keylane

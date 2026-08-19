@@ -74,6 +74,7 @@ class ReplicationCommandCapture {
 enum class CommandKind {
   kPing,
   kEcho,
+  kAuth,
   kDbSize,
   kDel,
   kUnlink,
