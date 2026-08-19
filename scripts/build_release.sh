@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Copyright (C) 2026 EloqData Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,9 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set -e
+set -euo pipefail
 cd "$(dirname "$0")/.."
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DKEYLANE_ENABLE_OPT=ON \
+  -DKEYLANE_MARCH=native -DKEYLANE_STATIC_OPENSSL=ON \
   -DBUILD_TESTING=OFF
-cmake --build build -j$(nproc)
+cmake --build build --target keylane -j"$(nproc)"
 echo "Release build complete: build/keylane"
