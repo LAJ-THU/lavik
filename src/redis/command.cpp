@@ -61,6 +61,7 @@
 #include "keylane/tx/tx_shard.h"
 #include "list_command.h"
 #include "set_command.h"
+#include "sort_command.h"
 #include "stream_command.h"
 #include "string_command.h"
 #include "zset_command.h"
@@ -85,7 +86,9 @@ constexpr std::string_view kReplicationTransactionEnvelope =
 bool CmpCaseInsensitive(std::string_view a, std::string_view b);
 std::string_view AppendStorageError(ReplyBuilder& reply_builder,
                                     const absl::Status& status);
-void NotifyRenamedValue(std::uint8_t db_id, std::string_view key,
+void NotifyRenamedValue(const CommandRequest& request, std::uint8_t db_id,
+                        std::string_view key, storage::ValueType type);
+void NotifyRenamedValue(const CommandRequest& request, std::string_view key,
                         storage::ValueType type);
 
 std::size_t SaturatingAdd(std::size_t left, std::size_t right) noexcept {
@@ -138,6 +141,7 @@ std::size_t EstimatedMemoryGrowth(const CommandRequest& request) noexcept {
     case CommandKind::kIncr:
     case CommandKind::kCopy:
     case CommandKind::kRestore:
+    case CommandKind::kSort:
       keys = 1;
       break;
     case CommandKind::kXGroup:
@@ -1782,6 +1786,13 @@ bool ParseInt64(std::string_view text, std::int64_t* value) {
 absl::Status ValidateBlockingTimeout(std::string_view text) {
   double timeout = 0;
   if (!ParseRedisDouble(text, &timeout)) {
+    long double extended_timeout = 0;
+    if (ParseRedisLongDouble(text, &extended_timeout) &&
+        extended_timeout * 1000.0L >
+            static_cast<long double>(
+                std::numeric_limits<std::int64_t>::max())) {
+      return absl::InvalidArgumentError("timeout is out of range");
+    }
     return absl::InvalidArgumentError("timeout is not a float or out of range");
   }
   if (timeout < 0) {
@@ -2394,7 +2405,7 @@ Task<CommandReply> ExecuteStorageCommand(
             "BUSYKEY Target key name already exists.");
       } else {
         if (restored->changed_ && !restored->deleted_) {
-          NotifyRenamedValue(request.db_id_, args[1], value->value_type_);
+          NotifyRenamedValue(request, args[1], value->value_type_);
         }
         reply.encoded_ = reply_builder.AppendSimpleString("OK");
       }
@@ -2708,7 +2719,9 @@ Task<CommandReply> ExecuteInfo(const CommandRequest& request,
   if (wants("clients")) {
     info += "# Clients\r\n";
     info += "connected_clients:" +
-            std::to_string(runtime_metrics->connected_clients_) + "\r\n\r\n";
+            std::to_string(runtime_metrics->connected_clients_) + "\r\n";
+    info += "blocked_clients:" +
+            std::to_string(runtime_metrics->blocked_clients_) + "\r\n\r\n";
   }
   if (wants("memory")) {
     RefreshMemoryDiagnostics();
@@ -2996,7 +3009,7 @@ Task<std::string> RunSingleKeyLocked(std::uint8_t db_id,
             request,
             CanonicalRestoreCommand(args[1], args[3], options->expire_at_ms_));
         if (!restored->deleted_) {
-          NotifyRenamedValue(db_id, args[1], value->value_type_);
+          NotifyRenamedValue(request, db_id, args[1], value->value_type_);
         }
       }
       co_return EncodeSimpleString("OK");
@@ -3535,8 +3548,13 @@ Task<absl::Status> ReleaseHeldKeys(void*, const tx::ShardSlice&) {
   co_return absl::OkStatus();
 }
 
-void NotifyRenamedValue(std::uint8_t db_id, std::string_view key,
-                        storage::ValueType type) {
+void NotifyRenamedValue(const CommandRequest& request, std::uint8_t db_id,
+                        std::string_view key, storage::ValueType type) {
+  if (request.blocking_notification_capture_ != nullptr) {
+    request.blocking_notification_capture_->Record(db_id, std::string(key),
+                                                   type);
+    return;
+  }
   if (type == storage::ValueType::kList) {
     NotifyListBlockingKey(db_id, key);
   } else if (type == storage::ValueType::kSortedSet) {
@@ -3544,6 +3562,11 @@ void NotifyRenamedValue(std::uint8_t db_id, std::string_view key,
   } else if (type == storage::ValueType::kStream) {
     NotifyStreamBlockingKey(db_id, key);
   }
+}
+
+void NotifyRenamedValue(const CommandRequest& request, std::string_view key,
+                        storage::ValueType type) {
+  NotifyRenamedValue(request, request.db_id_, key, type);
 }
 
 Task<CommandReply> ExecuteRename(const CommandRequest& request,
@@ -3596,7 +3619,7 @@ Task<CommandReply> ExecuteRename(const CommandRequest& request,
   g_storage->NoteTxCommitStarted();
   SpawnOnCurrentWorker(
       RunTxCommit(execution.txid_, std::move(context.writes_)));
-  NotifyRenamedValue(request.db_id_, args[2], context.source_.value_type_);
+  NotifyRenamedValue(request, args[2], context.source_.value_type_);
   co_return BuiltReply(nx ? reply_builder.AppendInteger(1)
                           : reply_builder.AppendSimpleString("OK"));
 }
@@ -3747,7 +3770,7 @@ Task<CommandReply> ExecuteCopy(const CommandRequest& request,
   g_storage->NoteTxCommitStarted();
   SpawnOnCurrentWorker(
       RunTxCommit(execution.txid_, std::move(context.writes_)));
-  NotifyRenamedValue(options->destination_db_, args[2],
+  NotifyRenamedValue(request, options->destination_db_, args[2],
                      context.source_->value_type_);
   co_return BuiltReply(reply_builder.AppendInteger(1));
 }
@@ -4124,6 +4147,10 @@ bool IsExecSequentialStreamRead(CommandKind kind) {
   return kind == CommandKind::kXRead || kind == CommandKind::kXReadGroup;
 }
 
+bool IsExecSequentialSort(CommandKind kind) {
+  return kind == CommandKind::kSort || kind == CommandKind::kSortRo;
+}
+
 enum class ExecSequentialFamily : std::uint8_t {
   kNone,
   kListPop,
@@ -4134,6 +4161,7 @@ enum class ExecSequentialFamily : std::uint8_t {
   kSetMulti,
   kZSetMulti,
   kStreamRead,
+  kSort,
 };
 
 ExecSequentialFamily ClassifyExecSequential(CommandKind kind) {
@@ -4147,6 +4175,7 @@ ExecSequentialFamily ClassifyExecSequential(CommandKind kind) {
   if (IsExecSequentialZSetMulti(kind)) return ExecSequentialFamily::kZSetMulti;
   if (IsExecSequentialStreamRead(kind))
     return ExecSequentialFamily::kStreamRead;
+  if (IsExecSequentialSort(kind)) return ExecSequentialFamily::kSort;
   return ExecSequentialFamily::kNone;
 }
 
@@ -4178,6 +4207,18 @@ Task<std::string> ExecuteExecSequentialStreamRead(
         .digest_ = key.digest_, .owner_ = key.owner_, .arg_ = key.arg_});
   }
   co_return co_await ExecuteStreamReadLocked(command, stream_keys, tx_writes);
+}
+
+Task<std::string> ExecuteExecSequentialSort(
+    const CommandRequest& command, const std::vector<ExecKey>& keys,
+    std::vector<storage::TxShardWrites>& tx_writes) {
+  std::vector<SortExecKey> sort_keys;
+  sort_keys.reserve(keys.size());
+  for (const ExecKey& key : keys) {
+    sort_keys.push_back(SortExecKey{
+        .digest_ = key.digest_, .owner_ = key.owner_, .arg_ = key.arg_});
+  }
+  co_return co_await ExecuteSortCommandLocked(command, sort_keys, tx_writes);
 }
 
 // EXEC uses one write receipt per shard for all commands. A command such as
@@ -4322,7 +4363,7 @@ Task<std::string> ExecuteExecSequentialRename(
   absl::Status completed =
       co_await FinishExecCommandUndo(checkpoints, tx_writes, false);
   if (!completed.ok()) co_return EncodeStorageError(completed);
-  NotifyRenamedValue(command.db_id_, args[2], raw->value_type_);
+  NotifyRenamedValue(command, args[2], raw->value_type_);
   if (nx) {
     CaptureReplicationCommand(command, {"RENAME", args[1], args[2]});
   }
@@ -4393,7 +4434,7 @@ Task<std::string> ExecuteExecSequentialCopy(
   absl::Status completed =
       co_await FinishExecCommandUndo(checkpoints, tx_writes, false);
   if (!completed.ok()) co_return EncodeStorageError(completed);
-  NotifyRenamedValue(destination->db_, args[2], raw->value_type_);
+  NotifyRenamedValue(command, destination->db_, args[2], raw->value_type_);
   std::vector<std::string> canonical = args;
   if (!options->replace_) canonical.emplace_back("REPLACE");
   CaptureReplicationCommand(command, std::move(canonical));
@@ -4880,7 +4921,7 @@ Task<std::string> ExecuteExecSequentialListMove(
     CaptureReplicationCommand(
         command,
         {destination_left ? "LPUSH" : "RPUSH", args[2], value});
-    NotifyListBlockingKey(command.db_id_, args[1]);
+    NotifyListBlockingKey(command, args[1]);
     co_return EncodeBulkString(value);
   }
 
@@ -4939,8 +4980,8 @@ Task<std::string> ExecuteExecSequentialListMove(
                             {source_left ? "LPOP" : "RPOP", args[1]});
   CaptureReplicationCommand(
       command, {destination_left ? "LPUSH" : "RPUSH", args[2], value});
-  NotifyListBlockingKey(command.db_id_, args[1]);
-  NotifyListBlockingKey(command.db_id_, args[2]);
+  NotifyListBlockingKey(command, args[1]);
+  NotifyListBlockingKey(command, args[2]);
   co_return EncodeBulkString(value);
 }
 
@@ -4970,6 +5011,8 @@ Task<std::string> ExecuteExecSequentialCommand(
     case ExecSequentialFamily::kStreamRead:
       co_return co_await ExecuteExecSequentialStreamRead(command, keys,
                                                          tx_writes);
+    case ExecSequentialFamily::kSort:
+      co_return co_await ExecuteExecSequentialSort(command, keys, tx_writes);
     case ExecSequentialFamily::kNone:
       co_return EncodeError("ERR internal EXEC sequential routing error");
   }
@@ -5337,7 +5380,12 @@ Task<CommandReply> ExecuteExec(ConnectionContext& ctx,
       queued.begin(), queued.end(), [](const CommandRequest& command) {
         return command.spec_ != nullptr &&
                (command.spec_->flags_ & kCmdWrite) != 0;
-      });
+  });
+  auto blocking_notifications =
+      std::make_shared<BlockingNotificationCapture>(g_storage->worker_count());
+  for (CommandRequest& command : queued) {
+    command.blocking_notification_capture_ = blocking_notifications;
+  }
   const bool source_write = has_write && std::any_of(
       queued.begin(), queued.end(), [](const CommandRequest& command) {
         return !command.replication_origin_ && command.spec_ != nullptr &&
@@ -5781,6 +5829,13 @@ Task<CommandReply> ExecuteExec(ConnectionContext& ctx,
     }
   }
 
+  absl::Status notified =
+      co_await FlushBlockingNotifications(*blocking_notifications);
+  if (!notified.ok()) {
+    co_await DropWatches(ctx);
+    co_return BuiltReply(reply_builder.AppendError(
+        absl::StrCat("ERR ", notified.message())));
+  }
   co_await DropWatches(ctx);
   if (ctx.strict_replication_apply_) {
     const auto failed = std::find_if(
@@ -5900,6 +5955,7 @@ void InitStorage(storage::StorageEngine* engine, ReplicationManager* replication
   InitHashCommandStorage(engine);
   InitListCommandStorage(engine);
   InitSetCommandStorage(engine);
+  InitSortCommandStorage(engine);
   InitStringCommandStorage(engine);
   InitStreamCommandStorage(engine);
   InitZSetCommandStorage(engine);
@@ -6386,6 +6442,10 @@ Task<CommandReply> ExecuteCommand(const CommandRequest& request,
 
     case CommandKind::kCopy:
       co_return co_await ExecuteCopy(request, reply_builder);
+
+    case CommandKind::kSort:
+    case CommandKind::kSortRo:
+      co_return co_await ExecuteSortCommand(request, reply_builder);
 
     case CommandKind::kMSetNx:
       co_return co_await ExecuteMSetNx(request, reply_builder);
