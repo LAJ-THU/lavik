@@ -19,6 +19,7 @@
 #include <coroutine>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <optional>
 #include <span>
 #include <vector>
@@ -126,6 +127,9 @@ class RegisteredBufferPool {
   std::size_t available_read_buffers() const noexcept {
     return free_read_buffers_.size();
   }
+  std::size_t overflow_read_buffer_count() const noexcept {
+    return overflow_read_buffers_.size();
+  }
   std::size_t write_buffer_count() const noexcept {
     return options_.storage_write_buffer_count_;
   }
@@ -162,8 +166,12 @@ class RegisteredBufferPool {
     absl::StatusOr<ReadBufferLease> await_resume();
 
    private:
+    friend class RegisteredBufferPool;
+
     RegisteredBufferPool* pool_ = nullptr;
     std::size_t minimum_payload_bytes_ = 0;
+    std::coroutine_handle<> awaiting_{};
+    std::uint16_t assigned_buffer_id_ = 0;
   };
 
   // Requests larger than a registered read slot use an aligned heap lease.
@@ -176,6 +184,7 @@ class RegisteredBufferPool {
   friend class ReadBufferLease;
 
   ReadBufferLease TakeReadBuffer();
+  ReadBufferLease LeaseReadBuffer(std::uint16_t buffer_id);
   absl::StatusOr<ReadBufferLease> AllocateHeapReadBuffer(
       std::size_t minimum_payload_bytes);
   void ReleaseOverflow(std::size_t overflow_id) noexcept;
@@ -206,6 +215,7 @@ class RegisteredBufferPool {
   std::vector<celer::FixedBuffer> read_buffers_;
   std::vector<std::uint16_t> free_read_buffers_;
   std::vector<bool> read_buffer_in_use_;
+  std::deque<AcquireReadAwaiter*> read_waiters_;
   // SPDK and io_uring overflow reads grow this cache to the observed
   // concurrency high-water mark. Released DMA/aligned buffers are reused,
   // avoiding allocation and huge-page faults on every pool miss.
