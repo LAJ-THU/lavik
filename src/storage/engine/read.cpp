@@ -25,8 +25,7 @@ StorageEngine::Impl::RandomKeyLocal(std::uint8_t db_id) {
   WorkerStore& store = CurrentStore();
   bool revalidation_failed = false;
   auto materialize = [&](WorkerStore::PartitionStore& partition,
-                         RecordIndex& index,
-                         RecordIndex::Entry* selected)
+                         RecordIndex& index, RecordIndex::Entry* selected)
       -> Task<absl::StatusOr<std::optional<std::string>>> {
     if (selected->key_complete()) {
       co_return std::optional<std::string>(std::string(selected->key()));
@@ -546,7 +545,7 @@ Task<absl::Status> StorageEngine::Impl::ReadExtentInto(
   }
   const auto payload = std::span<const std::byte>(io.data_ + kBlockHeaderBytes,
                                                   ref.payload_bytes_);
-  if (options_.verify_read_crc_ && Crc32c(payload) != ref.payload_checksum_) {
+  if (Crc32c(payload) != ref.payload_checksum_) {
     co_return absl::Status(absl::StatusCode::kInternal,
                            "extent payload checksum mismatch");
   }
@@ -1167,8 +1166,7 @@ StorageEngine::Impl::LoadValueLocal(WorkerStore& store, std::uint8_t db_id,
                              "inline value length does not match metadata");
     }
     std::memcpy(io.data_, payload_data + key_prefix, value_bytes);
-    if (options_.verify_read_crc_ &&
-        Crc32c(std::span<const std::byte>(
+    if (Crc32c(std::span<const std::byte>(
             payload_data, record.payload_bytes_)) != record.payload_checksum_) {
       co_return absl::Status(absl::StatusCode::kInternal,
                              "record value checksum mismatch");
@@ -1264,9 +1262,8 @@ StorageEngine::Impl::LoadValueLocal(WorkerStore& store, std::uint8_t db_id,
                            "inline value length does not match metadata");
   }
   const std::byte* value_data = payload_data + key_prefix;
-  if (options_.verify_read_crc_ &&
-      Crc32c(std::span<const std::byte>(payload_data, record.payload_bytes_)) !=
-          record.payload_checksum_) {
+  if (Crc32c(std::span<const std::byte>(payload_data, record.payload_bytes_)) !=
+      record.payload_checksum_) {
     co_return absl::Status(absl::StatusCode::kInternal,
                            "record value checksum mismatch");
   }
