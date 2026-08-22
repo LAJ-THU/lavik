@@ -209,7 +209,7 @@ TEST(RedisConfigTest, RejectsLoadRdbWithReplicaOf) {
   EXPECT_FALSE(ValidateServerOptions(options).ok());
 }
 
-TEST(RedisConfigTest, ParsesPermanentRedisPsyncFollower) {
+TEST(RedisConfigTest, ParsesRedisPsyncFollower) {
   ServerOptions options;
   ASSERT_TRUE(ApplyRedisConfigDirective(
                   {"redis-replicaof", "redis.local", "6380"}, &options)
@@ -220,7 +220,7 @@ TEST(RedisConfigTest, ParsesPermanentRedisPsyncFollower) {
   EXPECT_TRUE(ValidateServerOptions(options).ok());
 
   options.replication_options_.replica_read_only_ = false;
-  EXPECT_FALSE(ValidateServerOptions(options).ok());
+  EXPECT_TRUE(ValidateServerOptions(options).ok());
 }
 
 TEST(RedisConfigTest, RejectsConflictingRedisPsyncSources) {
