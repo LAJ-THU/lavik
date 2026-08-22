@@ -287,6 +287,7 @@ enum class CommandKind {
   kSave,
   kBgSave,
   kLastSave,
+  kMonitor,
   kTombRaider,
   kDefrag,
   kUnknown,
@@ -332,6 +333,7 @@ struct CommandReply {
   std::optional<storage::DiskValue> disk_value_;
   ReplyChunkSource chunks_;  // drained after `encoded` when set
   bool close_connection_ = false;
+  bool start_monitoring_ = false;
   ReadLatencyTrace read_trace_;
   SetLatencyTrace set_trace_;
   std::optional<std::uint8_t> selected_db_;
