@@ -98,6 +98,9 @@ TEST(RedisConfigTest, AppliesSupportedDirectives) {
                   .ok());
   ASSERT_TRUE(
       ApplyRedisConfigDirective({"replica-read-only", "no"}, &options).ok());
+  ASSERT_TRUE(
+      ApplyRedisConfigDirective({"redis-export-backpressure", "yes"}, &options)
+          .ok());
   ASSERT_TRUE(ApplyRedisConfigDirective(
                   {"replication-publish-queue-mb-per-worker", "64"}, &options)
                   .ok());
@@ -147,6 +150,7 @@ TEST(RedisConfigTest, AppliesSupportedDirectives) {
   EXPECT_EQ(options.replicaof_->host_, "redis.internal");
   EXPECT_EQ(options.replicaof_->port_, 6379);
   EXPECT_FALSE(options.replication_options_.replica_read_only_);
+  EXPECT_TRUE(options.replication_options_.redis_export_backpressure_);
   EXPECT_EQ(options.replication_publish_queue_bytes_, 64ULL * 1024 * 1024);
   EXPECT_EQ(options.registered_buffer_bytes_, 192ULL * 1024 * 1024);
   EXPECT_EQ(options.recv_buffer_count_, 2048u);
@@ -172,6 +176,9 @@ TEST(RedisConfigTest, RejectsInvalidAndUnsupportedDirectives) {
       ApplyRedisConfigDirective({"replicaof", "host", "zero"}, &options).ok());
   EXPECT_FALSE(
       ApplyRedisConfigDirective({"replica-read-only", "maybe"}, &options).ok());
+  EXPECT_FALSE(ApplyRedisConfigDirective({"redis-export-backpressure", "maybe"},
+                                         &options)
+                   .ok());
   EXPECT_FALSE(ApplyRedisConfigDirective(
                    {"replication-publish-queue-mb-per-worker", "0"}, &options)
                    .ok());
