@@ -50,7 +50,6 @@
 #include "keylane/config.h"
 #include "keylane/expiration.h"
 #include "keylane/glob.h"
-#include "keylane/hop_count.h"
 #include "keylane/memory.h"
 #include "keylane/metrics.h"
 #include "keylane/random_sample.h"
@@ -229,14 +228,6 @@ CommandReply BuiltReply(std::string_view encoded) {
   CommandReply reply;
   reply.encoded_ = encoded;
   return reply;
-}
-
-// SubmitTaskTo, routed so that a test build can count command dispatch's
-// cross-core transfers in one place instead of at each call site.
-template <typename Fn>
-auto SubmitCountedTaskTo(unsigned target, Fn fn) {
-  CountCommandCrossCoreHop();
-  return SubmitTaskTo(target, std::move(fn));
 }
 
 unsigned ShardForKey(std::string_view key) {
@@ -1524,7 +1515,7 @@ AcquireReplicationPublisherAdmission(std::size_t logical_bytes,
     absl::StatusOr<storage::ReplicationPublisherAdmission> token =
         target_worker == ThisWorker().id_
             ? co_await acquire()
-            : co_await SubmitCountedTaskTo(target_worker, acquire);
+            : co_await SubmitTaskTo(target_worker, acquire);
     if (!token.ok()) {
       for (const auto& acquired : admission.worker_tokens_) {
         const auto acquired_token = acquired.token_;
@@ -1537,7 +1528,7 @@ AcquireReplicationPublisherAdmission(std::size_t logical_bytes,
         };
         (void)(acquired.worker_ == ThisWorker().id_
                    ? co_await release()
-                   : co_await SubmitCountedTaskTo(acquired.worker_, release));
+                   : co_await SubmitTaskTo(acquired.worker_, release));
       }
       co_return token.status();
     }
@@ -1562,7 +1553,7 @@ Task<absl::Status> ReleaseReplicationPublisherAdmission(
     absl::Status status =
         worker_token.worker_ == ThisWorker().id_
             ? co_await release()
-            : co_await SubmitCountedTaskTo(worker_token.worker_, release);
+            : co_await SubmitTaskTo(worker_token.worker_, release);
     if (!status.ok()) co_return status;
   }
   co_return absl::OkStatus();
@@ -3182,8 +3173,13 @@ Task<CommandReply> ExecuteInfo(const CommandRequest& request,
     info += std::string("storage_durability_pending:") +
             (durability.pending() ? "1\r\n\r\n" : "0\r\n\r\n");
 #if KEYLANE_ENABLE_CROSS_CORE_HOP_COUNT
+    std::uint64_t command_cross_core_hops = 0;
+    for (unsigned worker = 0; worker < g_server_threads; ++worker) {
+      command_cross_core_hops += co_await SubmitTo(
+          worker, [] { return celer::LocalSubmitTaskCount(); });
+    }
     info +=
-        "command_cross_core_hops:" + std::to_string(CommandCrossCoreHops()) +
+        "command_cross_core_hops:" + std::to_string(command_cross_core_hops) +
         "\r\n\r\n";
 #endif
   }
@@ -7293,7 +7289,7 @@ Task<CommandReply> ExecuteCommandBody(const CommandRequest& request,
       if (args.size() >= 3) {
         const unsigned target = ShardForKey(args[2]);
         if (target != ThisWorker().id_) {
-          co_return co_await SubmitCountedTaskTo(
+          co_return co_await SubmitTaskTo(
               target, [&request, &reply_builder]() -> Task<CommandReply> {
                 co_return co_await ExecuteStorageCommand(request,
                                                          reply_builder);
@@ -7433,7 +7429,7 @@ Task<CommandReply> ExecuteCommandBody(const CommandRequest& request,
           trace.remote_ = target != ThisWorker().id_;
           CommandReply reply;
           if (trace.remote_) {
-            reply = co_await SubmitCountedTaskTo(
+            reply = co_await SubmitTaskTo(
                 target,
                 [&request, &reply_builder, &trace]() -> Task<CommandReply> {
                   trace.owner_start_ns_ = ReadTraceNowNanos();
@@ -7463,7 +7459,7 @@ Task<CommandReply> ExecuteCommandBody(const CommandRequest& request,
           trace.remote_ = target != ThisWorker().id_;
           CommandReply reply;
           if (trace.remote_) {
-            reply = co_await SubmitCountedTaskTo(
+            reply = co_await SubmitTaskTo(
                 target,
                 [&request, &reply_builder, &trace]() -> Task<CommandReply> {
                   trace.owner_start_ns_ = SetTraceNowNanos();
@@ -7484,7 +7480,7 @@ Task<CommandReply> ExecuteCommandBody(const CommandRequest& request,
         }
 #endif
         if (target != ThisWorker().id_) {
-          co_return co_await SubmitCountedTaskTo(
+          co_return co_await SubmitTaskTo(
               target, [&request, &reply_builder]() -> Task<CommandReply> {
                 co_return co_await ExecuteStorageCommand(request,
                                                          reply_builder);
@@ -7571,7 +7567,7 @@ Task<CommandReply> ExecuteCommand(const CommandRequest& request,
                                   ReplyBuilder& reply_builder) {
   const std::optional<unsigned> owner = SingleKeyWriteOwner(request);
   if (owner.has_value() && *owner != ThisWorker().id_) {
-    co_return co_await SubmitCountedTaskTo(
+    co_return co_await SubmitTaskTo(
         *owner, [&request, &reply_builder]() -> Task<CommandReply> {
           co_return co_await ExecuteAdmittedCommand(request, reply_builder);
         });
