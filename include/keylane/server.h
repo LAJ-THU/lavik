@@ -22,6 +22,7 @@
 #include <string>
 #include <vector>
 
+#include "keylane/logging.h"
 #include "keylane/replication.h"
 #include "keylane/storage/format.h"
 
@@ -31,6 +32,7 @@ inline constexpr long kDefaultMimallocPurgeDelayMs = 60'000;
 
 struct ServerOptions {
   std::string config_file_;
+  LoggingOptions logging_;
   std::vector<std::string> bind_addresses_{"127.0.0.1"};
   std::uint16_t port_ = 6379;
   std::uint16_t tls_port_ = 0;

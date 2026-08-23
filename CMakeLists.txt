@@ -131,6 +131,7 @@ endif()
 
 add_library(keylane_module
   src/config.cpp
+  src/logging.cpp
   src/storage/buffer_pool.cpp
   src/storage/engine.cpp
   src/storage/engine/alloc.cpp
@@ -268,6 +269,7 @@ if (BUILD_TESTING)
     tests/buffer_pool_test.cpp
     tests/config_test.cpp
     tests/cross_core_active_sender_test.cpp
+    tests/logging_test.cpp
     tests/resp_test.cpp
     tests/scan_hash_map_test.cpp
     tests/command_table_test.cpp

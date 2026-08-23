@@ -534,6 +534,7 @@ class ServerProcess {
       }
       std::vector<std::string> arguments{
           std::string(binary),
+          "--logtostderr",
           "--port",
           std::to_string(port),
           "--threads",
