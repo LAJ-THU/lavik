@@ -1317,6 +1317,7 @@ class StorageEngine::Impl {
   absl::Status Prepare(unsigned worker_count);
 
   Task<absl::Status> InitializeWorker(Worker& worker);
+  void FinalizeWorker(unsigned worker_id) noexcept;
 
   unsigned OwnerForKey(std::string_view key) const noexcept {
     return StorageShardForKey(key) % worker_count_;
