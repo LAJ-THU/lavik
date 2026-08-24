@@ -42,6 +42,10 @@ namespace {
 
 storage::StorageEngine* g_storage = nullptr;
 
+std::string EncodeSemanticNull(RespVersion version) {
+  return version == RespVersion::k3 ? "_\r\n" : EncodeNullBulkString();
+}
+
 CommandReply Built(std::string_view encoded) {
   CommandReply reply;
   reply.encoded_ = encoded;
@@ -611,7 +615,7 @@ celer::Task<std::string> RunBitmapLocked(const CommandRequest& request,
       return storage::CompactValueUpdate{};
     }
 
-    ReplyBuilder builder;
+    ReplyBuilder builder(request.resp_version_);
     builder.AppendArrayHeader(bitfield->operations_.size());
     std::string next = bitfield->writes_ ? std::string(old) : std::string{};
     if (bitfield->writes_) {
@@ -643,7 +647,7 @@ celer::Task<std::string> RunBitmapLocked(const CommandRequest& request,
             operation);
       }
       if (result.failed_) {
-        builder.AppendNullBulkString();
+        builder.AppendNull();
         continue;
       }
       builder.AppendInteger(result.reply_);
@@ -757,7 +761,8 @@ celer::Task<std::string> RunStringLocked(const CommandRequest& request,
                                       replication ? &*replication : nullptr);
     if (!result.ok()) co_return StorageError(result.status());
     CaptureReplicationCommand(request, {"SET", args[1], args[2]});
-    if (!result->old_value_) co_return EncodeNullBulkString();
+    if (!result->old_value_)
+      co_return EncodeSemanticNull(request.resp_version_);
     const auto bytes = result->old_value_->network_bytes();
     co_return std::string(reinterpret_cast<const char*>(bytes.data()),
                           bytes.size());
@@ -817,7 +822,8 @@ celer::Task<std::string> RunStringLocked(const CommandRequest& request,
     };
 
     if (request.kind_ == CommandKind::kGetDel) {
-      reply = exists ? EncodeBulkString(old) : EncodeNullBulkString();
+      reply = exists ? EncodeBulkString(old)
+                     : EncodeSemanticNull(request.resp_version_);
       if (exists) captured_args = {"DEL", args[1]};
       return exists ? storage::CompactValueUpdate{.changed_ = true,
                                                   .erase_ = true,
@@ -829,7 +835,7 @@ celer::Task<std::string> RunStringLocked(const CommandRequest& request,
 
     if (request.kind_ == CommandKind::kGetEx) {
       if (!exists) {
-        reply = EncodeNullBulkString();
+        reply = EncodeSemanticNull(request.resp_version_);
         return storage::CompactValueUpdate{};
       }
       reply = EncodeBulkString(old);
@@ -921,7 +927,14 @@ celer::Task<std::string> RunStringLocked(const CommandRequest& request,
       if (!FormatRedisLongDouble(result, &formatted)) {
         return absl::InternalError("failed to format String float");
       }
-      reply = EncodeBulkString(formatted);
+      if (request.resp_version_ == RespVersion::k3) {
+        reply.reserve(formatted.size() + 3);
+        reply.push_back(',');
+        reply.append(formatted);
+        reply.append("\r\n");
+      } else {
+        reply = EncodeBulkString(formatted);
+      }
       if (replication.has_value()) {
         replication->args_ = {"SET", std::string(key), formatted, "KEEPTTL"};
       }
@@ -1026,7 +1039,8 @@ struct LcsMatch {
 
 absl::StatusOr<std::string> BuildLcsReply(std::string_view a,
                                           std::string_view b,
-                                          const LcsOptions& options) {
+                                          const LcsOptions& options,
+                                          RespVersion resp_version) {
   if (a.size() >= UINT32_MAX - 1 || b.size() >= UINT32_MAX - 1) {
     return absl::OutOfRangeError("String too long for LCS");
   }
@@ -1148,8 +1162,8 @@ absl::StatusOr<std::string> BuildLcsReply(std::string_view a,
   }
   if (!options.indexes_) return EncodeBulkString(result);
 
-  ReplyBuilder builder;
-  builder.AppendArrayHeader(4);
+  ReplyBuilder builder(resp_version);
+  builder.AppendMapHeader(2);
   builder.AppendBulkString("matches");
   builder.AppendArrayHeader(matches.size());
   for (const LcsMatch& match : matches) {
@@ -1513,7 +1527,8 @@ celer::Task<CommandReply> ExecuteLcsCommand(const CommandRequest& request,
     co_return Built(reply_builder.AppendError(
         absl::StrCat("ERR ", options.status().message())));
   }
-  auto result = BuildLcsReply(context.values_[0], context.values_[1], *options);
+  auto result = BuildLcsReply(context.values_[0], context.values_[1], *options,
+                              request.resp_version_);
   co_return result.ok() ? Built(reply_builder.AppendRaw(*result))
                         : Built(reply_builder.AppendError(
                               absl::StrCat("ERR ", result.status().message())));
@@ -1553,7 +1568,8 @@ celer::Task<std::string> ExecuteLcsLocked(
   if (!options.ok()) {
     co_return EncodeError(absl::StrCat("ERR ", options.status().message()));
   }
-  auto result = BuildLcsReply(values[0], values[1], *options);
+  auto result = BuildLcsReply(values[0], values[1], *options,
+                              request.resp_version_);
   co_return result.ok()
       ? std::move(*result)
       : EncodeError(absl::StrCat("ERR ", result.status().message()));

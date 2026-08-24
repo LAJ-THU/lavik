@@ -206,7 +206,10 @@ Task<CommandReply> ExecuteSetCommandImpl(const CommandRequest& request,
     case CommandKind::kSCard:
       co_return BuiltReply(reply_builder.AppendInteger(result->length_));
     case CommandKind::kSMembers:
-      AppendBulkArray(reply_builder, result->values_);
+      reply_builder.AppendSetHeader(result->values_.size());
+      for (const auto& value : result->values_) {
+        reply_builder.AppendBulkString(*value);
+      }
       co_return BuiltReply(reply_builder.View());
     case CommandKind::kSMIsMember:
       reply_builder.AppendArrayHeader(result->values_.size());
@@ -218,16 +221,19 @@ Task<CommandReply> ExecuteSetCommandImpl(const CommandRequest& request,
       if (!operation.count_provided_) {
         co_return BuiltReply(
             result->values_.empty()
-                ? reply_builder.AppendNullBulkString()
+                ? reply_builder.AppendNull()
                 : reply_builder.AppendBulkString(*result->values_.front()));
       }
-      AppendBulkArray(reply_builder, result->values_);
+      reply_builder.AppendSetHeader(result->values_.size());
+      for (const auto& value : result->values_) {
+        reply_builder.AppendBulkString(*value);
+      }
       co_return BuiltReply(reply_builder.View());
     case CommandKind::kSRandMember:
       if (!operation.count_provided_) {
         co_return BuiltReply(
             result->values_.empty()
-                ? reply_builder.AppendNullBulkString()
+                ? reply_builder.AppendNull()
                 : reply_builder.AppendBulkString(*result->values_.front()));
       }
       AppendBulkArray(reply_builder, result->values_);
@@ -696,7 +702,7 @@ Task<CommandReply> ExecuteSetMultiKey(const CommandRequest& request,
             ? cardinality
             : std::min(cardinality, cardinality_limit)));
   }
-  reply_builder.AppendArrayHeader(context.output_.size());
+  reply_builder.AppendSetHeader(context.output_.size());
   for (const std::string& member : context.output_) {
     reply_builder.AppendBulkString(member);
   }
