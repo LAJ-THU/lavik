@@ -307,6 +307,7 @@ enum class CommandKind {
   kBgSave,
   kLastSave,
   kMonitor,
+  kSlowLog,
   kTombRaider,
   kDefrag,
   kUnknown,
