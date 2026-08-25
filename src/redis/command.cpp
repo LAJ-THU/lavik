@@ -964,6 +964,8 @@ constexpr std::string_view kStreamNodeMaxEntriesConfig =
     "stream-node-max-entries";
 constexpr std::string_view kSlowLogThresholdConfig = "slowlog-log-slower-than";
 constexpr std::string_view kSlowLogMaxLenConfig = "slowlog-max-len";
+constexpr std::string_view kLuaTimeLimitConfig = "lua-time-limit";
+constexpr std::string_view kBusyReplyThresholdConfig = "busy-reply-threshold";
 
 enum class RuntimeConfigKey : std::uint8_t {
   kSnapshotReadConcurrency,
@@ -987,6 +989,7 @@ enum class RuntimeConfigKey : std::uint8_t {
   kStreamNodeMaxEntries,
   kSlowLogThreshold,
   kSlowLogMaxLen,
+  kLuaTimeLimit,
 };
 
 struct RuntimeConfigDescriptor {
@@ -1038,6 +1041,10 @@ constexpr std::array kRuntimeConfigs{
                             RuntimeConfigKey::kSlowLogThreshold},
     RuntimeConfigDescriptor{kSlowLogMaxLenConfig,
                             RuntimeConfigKey::kSlowLogMaxLen},
+    RuntimeConfigDescriptor{kLuaTimeLimitConfig,
+                            RuntimeConfigKey::kLuaTimeLimit},
+    RuntimeConfigDescriptor{kBusyReplyThresholdConfig,
+                            RuntimeConfigKey::kLuaTimeLimit},
 };
 
 absl::StatusOr<std::uint32_t> ParseDailySecond(std::string_view text);
@@ -1192,6 +1199,8 @@ Task<CommandReply> ExecuteConfig(const CommandRequest& request,
           return std::to_string(SlowLogThresholdMicros());
         case RuntimeConfigKey::kSlowLogMaxLen:
           return std::to_string(SlowLogMaxLen());
+        case RuntimeConfigKey::kLuaTimeLimit:
+          return std::to_string(LuaScriptBusyThresholdMs());
       }
       return {};
     };
@@ -1411,6 +1420,13 @@ Task<CommandReply> ExecuteConfig(const CommandRequest& request,
       } else {
         configured =
             co_await ConfigureSlowLogMaxLen(static_cast<std::size_t>(value));
+      }
+    } else if (config->key_ == RuntimeConfigKey::kLuaTimeLimit) {
+      if (!ParseUint64(args[3], &value)) {
+        configured = absl::InvalidArgumentError(
+            "value is not an integer or out of range");
+      } else {
+        SetLuaScriptBusyThresholdMs(value);
       }
     }
     co_return configured.ok()
@@ -6118,7 +6134,7 @@ Task<std::string> ExecuteLuaRedisCall(
                      name));
   }
   CommandRequest command = std::move(*built);
-  command.resp_version_ = RespVersion::k2;
+  command.resp_version_ = lua_execution->resp_version();
   command.replication_origin_ = eval_request.replication_origin_;
   command.blocking_notification_capture_ = notifications;
   command.blocking_wake_cascade_ = eval_request.blocking_wake_cascade_;
@@ -6405,11 +6421,12 @@ Task<std::string> ExecuteEvalWithTransaction(
   const bool source_cached =
       source_kind && !sha.empty() && FindCachedLuaScript(sha).has_value();
   auto execution = source_kind && !source_cached
-                       ? LuaExecution::Create(script, declared_keys, script_argv)
+                       ? LuaExecution::Create(script, declared_keys, script_argv,
+                                              request.resp_version_)
                        : LuaExecution::CreateCached(
                              source_kind ? std::string_view(sha)
                                          : std::string_view(request.args_[1]),
-                             declared_keys, script_argv);
+                             declared_keys, script_argv, request.resp_version_);
   if (!execution.ok()) {
     if (absl::IsNotFound(execution.status())) {
       co_return EncodeError("NOSCRIPT No matching script. Please use EVAL.");
@@ -6425,7 +6442,9 @@ Task<std::string> ExecuteEvalWithTransaction(
     }
   }
 
-  LuaExecutionStep step = (*execution)->Start(request.replication_origin_);
+  LuaExecutionStep step = (*execution)->Start(
+      request.replication_origin_,
+      source_kind ? std::string_view(sha) : std::string_view(request.args_[1]));
   for (;;) {
     if (step.scheduler_yield_) {
       co_await Yield(*ThisWorker().self_);
@@ -8616,6 +8635,14 @@ Task<CommandReply> DispatchCommandImpl(ConnectionContext& ctx,
           reply_builder.AppendError("ERR wrong number of arguments for '" +
                                     std::string(spec.name_) + "' command"));
     }
+  }
+  const bool script_kill =
+      kind == CommandKind::kScript && request.args_.size() == 2 &&
+      CmpCaseInsensitive(request.args_[1], "kill");
+  if (!request.replication_origin_ && LuaScriptsBusy() && !script_kill) {
+    co_return BuiltReply(reply_builder.AppendError(
+        "BUSY Redis is busy running a script. You can only call SCRIPT KILL "
+        "or SHUTDOWN NOSAVE."));
   }
   if (g_replication != nullptr && g_replication->is_loading()) [[unlikely]] {
     const bool allowed_while_loading = [&] {
