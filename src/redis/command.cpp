@@ -6069,6 +6069,14 @@ bool IsEvalSourceKind(CommandKind kind) {
   return kind == CommandKind::kEval || kind == CommandKind::kEvalRo;
 }
 
+std::string NormalizeEvalSha(std::string_view sha) {
+  std::string normalized(sha);
+  for (char& byte : normalized) {
+    if (byte >= 'A' && byte <= 'Z') byte += 'a' - 'A';
+  }
+  return normalized;
+}
+
 void CollectLuaReplicationEffects(
     const CommandRequest& command, std::string_view reply,
     std::vector<CapturedReplicationCommand>* effects) {
@@ -6556,6 +6564,10 @@ Task<std::string> ExecuteEvalWithTransaction(
   if (source_kind) {
     script = request.args_[1];
     sha = LuaScriptSha1(script);
+  } else if (!function_kind) {
+    // Redis accepts EVALSHA digests in either case. Keep this normalization
+    // local to EVALSHA/EVALSHA_RO; SCRIPT EXISTS remains an exact lookup.
+    sha = NormalizeEvalSha(request.args_[1]);
   }
 
   const std::size_t key_count = key_view->count();
@@ -6576,10 +6588,8 @@ Task<std::string> ExecuteEvalWithTransaction(
       : source_kind && !source_cached
           ? LuaExecution::Create(script, declared_keys, script_argv,
                                  request.resp_version_)
-          : LuaExecution::CreateCached(
-                source_kind ? std::string_view(sha)
-                            : std::string_view(request.args_[1]),
-                declared_keys, script_argv, request.resp_version_);
+          : LuaExecution::CreateCached(sha, declared_keys, script_argv,
+                                       request.resp_version_);
   if (!execution.ok()) {
     if (absl::IsNotFound(execution.status())) {
       if (function_kind) co_return EncodeError("ERR Function not found");
