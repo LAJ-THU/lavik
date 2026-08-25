@@ -4713,7 +4713,7 @@ Task<absl::Status> MSetNxWriteLocal(MSetNxContext* context) {
 }
 
 Task<absl::Status> MSetNxWriteCallback(void* opaque, const tx::ShardSlice&) {
-  co_return co_await MSetNxWriteLocal(static_cast<MSetNxContext*>(opaque));
+  return MSetNxWriteLocal(static_cast<MSetNxContext*>(opaque));
 }
 
 Task<absl::Status> MSetNxSingleShardCallback(void* opaque,
@@ -9539,7 +9539,7 @@ Task<CommandReply> DispatchCommand(ConnectionContext& ctx,
 }
 
 Task<absl::Status> ReleaseConnectionWatches(ConnectionContext& ctx) {
-  co_return co_await DropWatches(ctx);
+  return DropWatches(ctx);
 }
 
 Task<CommandReply> ExecuteCommandBody(
