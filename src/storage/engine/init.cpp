@@ -866,7 +866,7 @@ Task<absl::Status> StorageEngine::Impl::InitializeWorker(Worker& worker) {
     for (std::uint8_t db_id = 0; db_id < kLogicalDatabaseCount; ++db_id) {
       auto& index = partition.indexes_[db_id];
       index.ForEach([&](RecordIndex::Entry& entry) {
-        if (entry.value_.kind_ == RecordKind::kValue &&
+        if (entry.value_.kind() == RecordKind::kValue &&
             IsExpired(entry.value_, recovery_now_ms)) {
           std::string key;
           Digest digest;
@@ -888,7 +888,7 @@ Task<absl::Status> StorageEngine::Impl::InitializeWorker(Worker& worker) {
               .db_id_ = db_id,
               .digest_ = digest,
               .key_ = std::move(key),
-              .shielding_ = entry.value_.shielding_,
+              .shielding_ = entry.value_.shielding(),
           });
         }
       });
@@ -916,17 +916,17 @@ Task<absl::Status> StorageEngine::Impl::InitializeWorker(Worker& worker) {
     for (std::uint8_t db_id = 0; db_id < kLogicalDatabaseCount; ++db_id) {
       partition.indexes_[db_id].ForEach([&](const RecordIndex::Entry& entry) {
         const RecordLocation& location = entry.value_;
-        assert(location.block_owner_ < worker_count_);
-        live_by_owner[location.block_owner_].push_back(RecoveryLiveReference{
-            .block_id_ = location.block_id_,
-            .allocation_epoch_ = location.allocation_epoch_,
+        assert(location.block_owner() < worker_count_);
+        live_by_owner[location.block_owner()].push_back(RecoveryLiveReference{
+            .block_id_ = location.block_id(),
+            .allocation_epoch_ = location.allocation_epoch(),
             .txid_ = store.recovery_txids_.contains(&entry)
                          ? store.recovery_txids_.at(&entry)
                          : 0,
-            .bytes_ = location.total_disk_bytes_,
+            .bytes_ = location.total_disk_bytes(),
         });
         const ExtentManifest extents = ExtentsFor(store, &entry);
-        if (!location.external_ || extents == nullptr) return;
+        if (!location.external() || extents == nullptr) return;
         for (std::size_t extent_index = 0; extent_index < extents->size();
              ++extent_index) {
           const ExtentRef& extent = extents->at(extent_index);
@@ -1124,11 +1124,12 @@ Task<absl::Status> StorageEngine::Impl::InitializeWorker(Worker& worker) {
           co_return resolved.status();
         }
         RecordIndex::Entry* current = *resolved;
-        if (current == nullptr || current->value_.kind_ != RecordKind::kValue ||
+        if (current == nullptr ||
+            current->value_.kind() != RecordKind::kValue ||
             !IsExpired(current->value_, recovery_now_ms)) {
           continue;
         }
-        if (current->value_.shielding_) {
+        if (current->value_.shielding()) {
           Fail(deleted.status());
           co_return deleted.status();
         }
@@ -1141,7 +1142,9 @@ Task<absl::Status> StorageEngine::Impl::InitializeWorker(Worker& worker) {
         store.external_manifests_.erase(current);
         store.recovery_external_keys_.erase(current);
         partition.indexes_[expired.db_id_].Erase(current);
-        if (!dropped.external_ || dropped.key_external_) value_extents.reset();
+        if (!dropped.external() || dropped.key_external()) {
+          value_extents.reset();
+        }
       }
       if (value_extents != nullptr) SpawnExtentReclaim(store, value_extents);
       absl::Status dead = co_await MarkRecordDead(*retired);
