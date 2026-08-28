@@ -37,6 +37,7 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <new>
 #include <optional>
 #include <random>
 #include <string>
@@ -159,6 +160,54 @@ void PutString(std::string& output, std::string_view value) {
   output.append(value.data(), value.size());
 }
 
+absl::Status ReplicationMemoryExhausted(std::string_view operation) {
+  RecordMemoryRejection();
+  return absl::ResourceExhaustedError(
+      absl::StrCat(operation, " exceeds this worker's maxmemory share"));
+}
+
+absl::Status ReserveReplicationString(std::string* output,
+                                      std::size_t desired) {
+  if (desired <= output->capacity()) return absl::OkStatus();
+  std::size_t allocation_capacity = desired;
+  if (output->capacity() <= std::numeric_limits<std::size_t>::max() / 2) {
+    allocation_capacity =
+        std::max(allocation_capacity, output->capacity() * 2);
+  } else {
+    return ReplicationMemoryExhausted("replication buffer");
+  }
+  if (allocation_capacity == std::numeric_limits<std::size_t>::max()) {
+    return ReplicationMemoryExhausted("replication buffer");
+  }
+  auto reservation =
+      TryReserveMemoryAllocation(allocation_capacity + 1);
+  if (!reservation.has_value()) {
+    return ReplicationMemoryExhausted("replication buffer");
+  }
+  try {
+    output->reserve(desired);
+  } catch (const std::bad_alloc&) {
+    return ReplicationMemoryExhausted("replication buffer allocation");
+  }
+  return absl::OkStatus();
+}
+
+absl::Status AppendReplicationString(std::string* output,
+                                     std::string_view value) {
+  if (value.size() > std::numeric_limits<std::size_t>::max() - output->size()) {
+    return ReplicationMemoryExhausted("replication buffer");
+  }
+  absl::Status reserved =
+      ReserveReplicationString(output, output->size() + value.size());
+  if (!reserved.ok()) return reserved;
+  try {
+    output->append(value);
+  } catch (const std::bad_alloc&) {
+    return ReplicationMemoryExhausted("replication buffer allocation");
+  }
+  return absl::OkStatus();
+}
+
 class DataReader {
  public:
   explicit DataReader(std::string_view input) : input_(input) {}
@@ -194,11 +243,21 @@ class DataReader {
     *value = result;
     return true;
   }
-  bool String(std::uint32_t size, std::string* value) {
-    if (remaining() < size) return false;
-    value->assign(input_.data() + position_, size);
+  absl::Status String(std::uint32_t size, std::string* value) {
+    if (remaining() < size) {
+      return absl::InvalidArgumentError(
+          "malformed replication record payload");
+    }
+    absl::Status reserved = ReserveReplicationString(value, size);
+    if (!reserved.ok()) return reserved;
+    try {
+      value->assign(input_.data() + position_, size);
+    } catch (const std::bad_alloc&) {
+      return ReplicationMemoryExhausted(
+          "replication record string allocation");
+    }
     position_ += size;
-    return true;
+    return absl::OkStatus();
   }
   std::size_t remaining() const { return input_.size() - position_; }
 
@@ -212,20 +271,22 @@ std::size_t EncodedRecordBytes(const SnapshotRecord& record) {
          record.value_.size();
 }
 
-bool EncodeRecords(std::uint16_t partition_id,
-                   std::span<const SnapshotRecord> records,
-                   std::string* output) {
+absl::Status EncodeRecords(std::uint16_t partition_id,
+                           std::span<const SnapshotRecord> records,
+                           std::string* output) {
   std::size_t bytes = 2 + 4;
   for (const SnapshotRecord& record : records) {
     if (record.key_.size() > std::numeric_limits<std::uint32_t>::max() ||
         record.value_.size() > std::numeric_limits<std::uint32_t>::max() ||
         bytes > kMaxDataFrame - EncodedRecordBytes(record)) {
-      return false;
+      return absl::ResourceExhaustedError(
+          "replication records exceed the frame limit");
     }
     bytes += EncodedRecordBytes(record);
   }
   output->clear();
-  output->reserve(bytes);
+  absl::Status reserved = ReserveReplicationString(output, bytes);
+  if (!reserved.ok()) return reserved;
   PutU16(*output, partition_id);
   PutU32(*output, static_cast<std::uint32_t>(records.size()));
   for (const SnapshotRecord& record : records) {
@@ -243,7 +304,7 @@ bool EncodeRecords(std::uint16_t partition_id,
     PutString(*output, record.key_);
     PutString(*output, record.value_);
   }
-  return true;
+  return absl::OkStatus();
 }
 
 absl::StatusOr<std::pair<std::uint16_t, std::vector<SnapshotRecord>>>
@@ -256,7 +317,19 @@ DecodeRecords(std::string_view payload) {
     return absl::InvalidArgumentError("malformed replication records frame");
   }
   std::vector<SnapshotRecord> records;
-  records.reserve(count);
+  const std::size_t records_bytes =
+      static_cast<std::size_t>(count) * sizeof(SnapshotRecord);
+  auto records_reservation = TryReserveMemoryAllocation(records_bytes);
+  if (!records_reservation.has_value()) {
+    return ReplicationMemoryExhausted("replication record index");
+  }
+  try {
+    records.reserve(count);
+  } catch (const std::bad_alloc&) {
+    return ReplicationMemoryExhausted(
+        "replication record index allocation");
+  }
+  records_reservation.reset();
   for (std::uint32_t i = 0; i < count; ++i) {
     SnapshotRecord record;
     std::uint8_t kind = 0, value_type = 0;
@@ -272,11 +345,13 @@ DecodeRecords(std::string_view payload) {
         kind < static_cast<std::uint8_t>(SnapshotRecord::Kind::kValue) ||
         kind > static_cast<std::uint8_t>(SnapshotRecord::Kind::kValueCommit) ||
         record.db_id_ >= storage::kLogicalDatabaseCount ||
-        value_type > static_cast<std::uint8_t>(storage::ValueType::kStream) ||
-        !reader.String(key_size, &record.key_) ||
-        !reader.String(value_size, &record.value_)) {
+        value_type > static_cast<std::uint8_t>(storage::ValueType::kStream)) {
       return absl::InvalidArgumentError("malformed replication record payload");
     }
+    absl::Status key = reader.String(key_size, &record.key_);
+    if (!key.ok()) return key;
+    absl::Status value = reader.String(value_size, &record.value_);
+    if (!value.ok()) return value;
     record.kind_ = static_cast<SnapshotRecord::Kind>(kind);
     record.value_type_ = static_cast<storage::ValueType>(value_type);
     records.push_back(std::move(record));
@@ -355,7 +430,12 @@ absl::Status AppendDataFrame(std::string* output, DataFrameKind kind,
 Task<absl::Status> WriteDataFrame(TcpStream& stream, DataFrameKind kind,
                                   std::string_view payload) {
   std::string frame;
-  frame.reserve(5 + payload.size());
+  if (payload.size() > std::numeric_limits<std::size_t>::max() - 5) {
+    co_return ReplicationMemoryExhausted("replication frame");
+  }
+  absl::Status reserved =
+      ReserveReplicationString(&frame, 5 + payload.size());
+  if (!reserved.ok()) co_return reserved;
   absl::Status appended = AppendDataFrame(&frame, kind, payload);
   if (!appended.ok()) co_return appended;
   co_return co_await WriteText(stream, frame);
@@ -363,7 +443,17 @@ Task<absl::Status> WriteDataFrame(TcpStream& stream, DataFrameKind kind,
 
 Task<absl::StatusOr<std::string>> ReadExact(TcpStream& stream,
                                             std::size_t size) {
-  std::string result(size, '\0');
+  std::string result;
+  absl::Status reserved = ReserveReplicationString(&result, size);
+  if (!reserved.ok()) co_return reserved;
+  try {
+    result.resize(size);
+  } catch (const std::bad_alloc&) {
+    co_return ReplicationMemoryExhausted(
+        "replication read buffer allocation");
+  }
+  // ReserveReplicationString releases its worker-local permit after the
+  // allocator hook publishes the usable bytes and before socket suspension.
   std::size_t offset = 0;
   while (offset < size) {
     auto read = co_await stream.ReadSome(std::span<std::byte>(
@@ -1113,7 +1203,8 @@ Task<absl::StatusOr<std::optional<RedisExportEvent>>> ReadLocalRedisExportEvent(
       co_return absl::InternalError(
           "Redis export replication fragments are out of order");
     }
-    encoded.append(frame.payload_);
+    absl::Status appended = AppendReplicationString(&encoded, frame.payload_);
+    if (!appended.ok()) co_return appended;
     cursor = batch->next_;
     ++next_fragment;
     if (!last) continue;
@@ -4594,7 +4685,13 @@ class ReplicationManager::Impl {
             "replication command fragment is out of order");
         break;
       }
-      staged_command.append(frame->second.data() + 13, reader.remaining());
+      absl::Status appended = AppendReplicationString(
+          &staged_command,
+          std::string_view(frame->second.data() + 13, reader.remaining()));
+      if (!appended.ok()) {
+        receiver_status = appended;
+        break;
+      }
       ++next_command_fragment;
       if (!last) continue;
       auto command = DecodeReplicationCommand(staged_command);
@@ -4784,7 +4881,10 @@ class ReplicationManager::Impl {
           co_return absl::InvalidArgumentError(
               "full-sync command fragment is out of order");
         }
-        staged_command.append(frame->second.data() + 31, reader.remaining());
+        absl::Status appended = AppendReplicationString(
+            &staged_command,
+            std::string_view(frame->second.data() + 31, reader.remaining()));
+        if (!appended.ok()) co_return appended;
         ++next_command_fragment;
         if (last) {
           auto command = DecodeReplicationCommand(staged_command);
@@ -5039,10 +5139,8 @@ class ReplicationManager::Impl {
       auto send_batch =
           [&](std::span<const SnapshotRecord> batch) -> Task<absl::Status> {
         std::string payload;
-        if (!EncodeRecords(partition_id, batch, &payload)) {
-          co_return absl::ResourceExhaustedError(
-              "replication records batch exceeds frame limit");
-        }
+        absl::Status encoded = EncodeRecords(partition_id, batch, &payload);
+        if (!encoded.ok()) co_return encoded;
         absl::Status sent = co_await WriteFullSyncFrameAndWaitAck(
             stream, DataFrameKind::kRecords, payload, partition_id,
             fullsync_sequence);
