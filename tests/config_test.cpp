@@ -95,6 +95,8 @@ TEST(RedisConfigTest, AppliesSupportedDirectives) {
                   .ok());
   ASSERT_TRUE(ApplyRedisConfigDirective({"port", "6380"}, &options).ok());
   ASSERT_TRUE(ApplyRedisConfigDirective({"io-threads", "4"}, &options).ok());
+  ASSERT_TRUE(
+      ApplyRedisConfigDirective({"maxclients", "12000"}, &options).ok());
   ASSERT_TRUE(ApplyRedisConfigDirective({"replicaof", "redis.internal", "6379"},
                                         &options)
                   .ok());
@@ -157,6 +159,7 @@ TEST(RedisConfigTest, AppliesSupportedDirectives) {
             (std::vector<std::string>{"0.0.0.0", "::1", "redis.internal"}));
   EXPECT_EQ(options.port_, 6380);
   EXPECT_EQ(options.thread_count_, 4u);
+  EXPECT_EQ(options.max_clients_, 12000u);
   ASSERT_TRUE(options.replicaof_.has_value());
   EXPECT_EQ(options.replicaof_->host_, "redis.internal");
   EXPECT_EQ(options.replicaof_->port_, 6379);
@@ -238,6 +241,9 @@ TEST(RedisConfigTest, RejectsInvalidLoggingConfiguration) {
 
 TEST(RedisConfigTest, RejectsInvalidAndUnsupportedDirectives) {
   ServerOptions options;
+  options.max_clients_ = 0;
+  EXPECT_FALSE(ValidateServerOptions(options).ok());
+  options.max_clients_ = keylane::kDefaultMaxClients;
   EXPECT_FALSE(ApplyRedisConfigDirective({"port", "70000"}, &options).ok());
   EXPECT_FALSE(
       ApplyRedisConfigDirective({"replicaof", "host", "zero"}, &options).ok());
@@ -282,6 +288,9 @@ TEST(RedisConfigTest, RejectsInvalidAndUnsupportedDirectives) {
           .ok());
   EXPECT_FALSE(
       ApplyRedisConfigDirective({"slowlog-max-len", "-1"}, &options).ok());
+  EXPECT_FALSE(ApplyRedisConfigDirective({"maxclients", "0"}, &options).ok());
+  EXPECT_FALSE(
+      ApplyRedisConfigDirective({"maxclients", "many"}, &options).ok());
   EXPECT_FALSE(ApplyRedisConfigDirective({"appendonly", "yes"}, &options).ok());
 }
 
