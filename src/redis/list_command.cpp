@@ -997,6 +997,10 @@ Task<CommandReply> ExecuteBlockingListCommand(const CommandRequest& request,
     co_return completed;
   };
   auto status_reply = [&](const absl::Status& status) {
+    if (absl::IsAborted(status)) {
+      return BuiltReply(
+          reply_builder.AppendError("TRYAGAIN ", status.message()));
+    }
     return BuiltReply(reply_builder.AppendError("ERR ", status.message()));
   };
   auto unblock_error_reply = [&] {
@@ -1004,7 +1008,7 @@ Task<CommandReply> ExecuteBlockingListCommand(const CommandRequest& request,
         "UNBLOCKED client unblocked via CLIENT UNBLOCK"));
   };
   co_return co_await ExecuteBlockingWaitLoop(
-      client_id, request.db_id_, std::move(specs), *wait_deadline,
+      client_id, request, std::move(specs), *wait_deadline,
       "blocking List wait cancelled", std::move(attempt), timeout_reply,
       unblock_error_reply, status_reply,
       request.kind_ == CommandKind::kBLMove ||
