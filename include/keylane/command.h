@@ -301,6 +301,7 @@ enum class CommandKind {
   kConfig,
   kInfo,
   kRole,
+  kWait,
   kCluster,
   kCommand,
   kReadOnly,
