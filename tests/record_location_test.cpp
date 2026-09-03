@@ -297,7 +297,8 @@ TEST(RecordLocationTest, TxUndoLogRetargetsSharedHandleInConstantTime) {
       ComputeDigest("other"), "other", RecordLocation(5, 6, 7, 0, 8, metadata));
 
   TxUndoLog undo;
-  const std::uint32_t key_handle = undo.Track(expiring);
+  const std::optional<std::uint32_t> key_handle = undo.Track(expiring);
+  ASSERT_TRUE(key_handle.has_value());
   EXPECT_EQ(undo.Track(expiring), key_handle);
   EXPECT_NE(undo.Track(other), key_handle);
 
@@ -309,7 +310,7 @@ TEST(RecordLocationTest, TxUndoLogRetargetsSharedHandleInConstantTime) {
   undo.Replace(replaced, ordinary);
   index.DestroyDetached(replaced);
 
-  EXPECT_EQ(undo.Current(key_handle), ordinary);
+  EXPECT_EQ(undo.Current(*key_handle), ordinary);
   EXPECT_EQ(undo.Track(ordinary), key_handle);
 }
 

@@ -237,10 +237,6 @@ ReplicationCommandPayloadSource::Create(
     source.size_ += arg.size();
   }
   return source;
-} catch (const std::bad_alloc&) {
-  RecordMemoryRejection();
-  return absl::ResourceExhaustedError(
-      "replication command source allocation failed");
 } catch (const std::length_error&) {
   return absl::ResourceExhaustedError("replication command is too large");
 }
@@ -252,10 +248,6 @@ ReplicationCommandPayloadSource::Create(std::uint8_t db_id,
   views.reserve(args.size());
   for (const std::string& arg : args) views.push_back(arg);
   return Create(db_id, views);
-} catch (const std::bad_alloc&) {
-  RecordMemoryRejection();
-  return absl::ResourceExhaustedError(
-      "replication command view allocation failed");
 } catch (const std::length_error&) {
   return absl::ResourceExhaustedError("replication command is too large");
 }
@@ -331,9 +323,6 @@ absl::StatusOr<ReplicatedCommand> DecodeReplicationCommand(
     offset += length;
   }
   return command;
-} catch (const std::bad_alloc&) {
-  RecordMemoryRejection();
-  return absl::ResourceExhaustedError("replication command allocation failed");
 } catch (const std::length_error&) {
   return absl::ResourceExhaustedError("replication command is too large");
 }

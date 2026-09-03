@@ -48,9 +48,6 @@ absl::Status AppendArgument(std::string* output, std::string_view value) {
   }
   try {
     output->append(value);
-  } catch (const std::bad_alloc&) {
-    RecordMemoryRejection();
-    return absl::ResourceExhaustedError("client argument allocation failed");
   } catch (const std::length_error&) {
     return absl::ResourceExhaustedError("client argument is too large");
   }
@@ -74,10 +71,6 @@ absl::Status ReserveArguments(std::vector<std::string>* output,
     // Keep argument-index growth geometric. Reserving only `desired` here
     // makes every argument after the initial 1024 move the complete vector.
     output->reserve(allocation_capacity);
-  } catch (const std::bad_alloc&) {
-    RecordMemoryRejection();
-    return absl::ResourceExhaustedError(
-        "client argument index allocation failed");
   } catch (const std::length_error&) {
     return absl::ResourceExhaustedError("too many client arguments");
   }
@@ -88,13 +81,7 @@ absl::Status PushArgument(std::vector<std::string>* output,
                           std::string argument) {
   absl::Status reserved = ReserveArguments(output, output->size() + 1);
   if (!reserved.ok()) return reserved;
-  try {
-    output->push_back(std::move(argument));
-  } catch (const std::bad_alloc&) {
-    RecordMemoryRejection();
-    return absl::ResourceExhaustedError(
-        "client argument index allocation failed");
-  }
+  output->push_back(std::move(argument));
   return absl::OkStatus();
 }
 
