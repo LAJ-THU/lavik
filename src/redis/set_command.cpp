@@ -33,6 +33,7 @@
 #include "absl/strings/str_cat.h"
 #include "celer/runtime/cross_core.h"
 #include "celer/runtime/worker.h"
+#include "cluster_gate.h"
 #include "keylane/command_table.h"
 #include "keylane/resp.h"
 #include "keylane/storage/engine.h"
@@ -573,6 +574,16 @@ Task<CommandReply> ExecuteSetMultiKey(const CommandRequest& request,
                        static_cast<std::uint32_t>(i), lock_mode);
   }
   transaction.Seal();
+  // Cluster owner-side re-check: the admission was captured at
+  // dispatch time; a SIGHUP topology reload may have fenced it since.
+  // Single-shard executions (the only shape cluster admission allows) mutate
+  // inside the one callback hop, so the pre-callback validator is airtight
+  // there; multi-shard flows validate per hop and clear the hook before the
+  // settle hop below.
+  ClusterShardValidatorContext cluster_validator;
+  if (write) {
+    InstallClusterShardValidator(transaction, request, cluster_validator);
+  }
   ReplicationTransactionGuard replication(request, &transaction);
   if (!replication.status().ok()) {
     co_return BuiltReply(
@@ -627,6 +638,17 @@ Task<CommandReply> ExecuteSetMultiKey(const CommandRequest& request,
                                           release_after_read);
   }
   if (!status.ok()) {
+    if (cluster_validator.tripped_.load(std::memory_order_relaxed)) {
+      // A multi-shard read hop retains its holds on failure; drop them before
+      // answering. Single-shard hops already released in-band (the failing
+      // hop itself was armed with release=true).
+      if (write && !context.single_shard_ && !transaction.releasing()) {
+        (void)co_await transaction.Release();
+      }
+      co_return ClusterValidatorFailureReply(transaction, cluster_validator,
+                                             request.connection_tls_,
+                                             reply_builder);
+    }
     if (write && !context.single_shard_) {
       (void)co_await transaction.Release();
     }
@@ -648,6 +670,12 @@ Task<CommandReply> ExecuteSetMultiKey(const CommandRequest& request,
       status =
           co_await transaction.Execute(&SetReadShardCallback, &context, false);
       if (!status.ok()) {
+        if (cluster_validator.tripped_.load(std::memory_order_relaxed)) {
+          (void)co_await transaction.Release();
+          co_return ClusterValidatorFailureReply(transaction, cluster_validator,
+                                                 request.connection_tls_,
+                                                 reply_builder);
+        }
         (void)co_await transaction.Release();
         co_return BuiltReply(AppendStorageError(reply_builder, status));
       }
@@ -658,6 +686,9 @@ Task<CommandReply> ExecuteSetMultiKey(const CommandRequest& request,
       status =
           co_await transaction.Execute(&SetWriteShardCallback, &context, false);
       context.rollback_ = !status.ok();
+      // The finish hop settles (or rolls back) what the write hop did; it must
+      // not be fenced off by an authority change the write hop already beat.
+      transaction.SetShardValidator(nullptr, nullptr);
       absl::Status finished =
           co_await transaction.Execute(&SetFinishShardCallback, &context, true);
       if (status.ok() && !finished.ok()) status = finished;
@@ -671,6 +702,7 @@ Task<CommandReply> ExecuteSetMultiKey(const CommandRequest& request,
       status =
           co_await transaction.Execute(&SetWriteShardCallback, &context, false);
       context.rollback_ = !status.ok();
+      transaction.SetShardValidator(nullptr, nullptr);
       absl::Status finished =
           co_await transaction.Execute(&SetFinishShardCallback, &context, true);
       if (status.ok() && !finished.ok()) status = finished;
@@ -679,6 +711,11 @@ Task<CommandReply> ExecuteSetMultiKey(const CommandRequest& request,
     ComputeAggregate(&context);
   }
   if (!status.ok()) {
+    if (cluster_validator.tripped_.load(std::memory_order_relaxed)) {
+      co_return ClusterValidatorFailureReply(transaction, cluster_validator,
+                                             request.connection_tls_,
+                                             reply_builder);
+    }
     co_return BuiltReply(AppendStorageError(reply_builder, status));
   }
 
