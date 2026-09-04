@@ -769,7 +769,7 @@ bool ClusterRequestIsWrite(const CommandRequest& request) {
 // Redis getNodeByQuery returning myself for zero keys and matching the
 // ReplicaMovedError precedent.
 void PopulateClusterSlots(CommandRequest& request) {
-  request.cluster_slots_.clear();
+  request.ClearClusterSlots();
   if (request.spec_ == nullptr || (request.spec_->flags_ & kCmdNoKeys) != 0) {
     return;
   }
@@ -780,16 +780,13 @@ void PopulateClusterSlots(CommandRequest& request) {
   // routed_partition_id_; reuse it instead of computing CRC16 twice.
   if (keys->count() == 1 && request.routed_partition_id_.has_value() &&
       request.routed_key_argument_ == keys->first_) {
-    request.cluster_slots_.push_back(*request.routed_partition_id_);
+    request.AddClusterSlot(*request.routed_partition_id_);
     return;
   }
   for (std::uint32_t index = keys->first_; index <= keys->last_;
        index += keys->step_) {
     const std::uint16_t slot = storage::RedisSlot(request.args_[index]);
-    if (std::find(request.cluster_slots_.begin(), request.cluster_slots_.end(),
-                  slot) == request.cluster_slots_.end()) {
-      request.cluster_slots_.push_back(slot);
-    }
+    request.AddClusterSlot(slot);
   }
 }
 
@@ -856,7 +853,7 @@ bool ClusterGateReject(ConnectionContext& ctx, CommandRequest& request,
                                         &gate_snapshot_version);
   const bool is_write = ClusterRequestIsWrite(request);
   const cluster::RequestView view{
-      .slots_ = request.cluster_slots_,
+      .slots_ = request.ClusterSlots(),
       .is_write_ = is_write,
       .connection_readonly_ = ctx.cluster_readonly_,
       .loading_allowed_ = LoadingAllowedCommandKind(request.kind_),
@@ -915,7 +912,7 @@ std::optional<CommandReply> RecheckClusterWriteAuthority(
     absl::InlinedVector<cluster::InFlightGuard, 4>* in_flights) {
   if (!cluster::ClusterEnabled() || request.replication_origin_ ||
       request.cluster_admitted_state_ == nullptr ||
-      request.cluster_slots_.empty() || !ClusterRequestIsWrite(request)) {
+      request.ClusterSlots().empty() || !ClusterRequestIsWrite(request)) {
     return std::nullopt;
   }
   cluster::TopologyCache& cache =
@@ -930,14 +927,14 @@ std::optional<CommandReply> RecheckClusterWriteAuthority(
                                           &publication_before);
     if (!cluster::AuthorityUnchanged(*request.cluster_admitted_state_,
                                      current.get(),
-                                     request.cluster_slots_)) {
+                                     request.ClusterSlots())) {
       // Nothing has executed yet, so the request can safely be re-admitted
       // against the current snapshot. Writes are never on the loading
       // whitelist, so a current snapshot that lost readiness answers LOADING
       // honestly rather than serving through the authority change that
       // carried it.
       const cluster::RequestView view{
-          .slots_ = request.cluster_slots_,
+          .slots_ = request.ClusterSlots(),
           .is_write_ = true,
           .connection_readonly_ = false,
           .loading_allowed_ = false,
@@ -965,7 +962,7 @@ std::optional<CommandReply> RecheckClusterWriteAuthority(
     // raw pointers; token-equal snapshots share the same stripe allocations,
     // so the publisher's drain sees these guards regardless.
     RegisterClusterInFlight(*request.cluster_admitted_state_,
-                            request.cluster_slots_, in_flights);
+                            request.ClusterSlots(), in_flights);
     if (cache.publication_sequence() == publication_before) {
       return std::nullopt;
     }
@@ -7024,9 +7021,10 @@ Task<std::string> ExecuteLuaRedisCall(
     for (const ExecKey& key : command_keys) {
       const std::uint16_t key_slot =
           storage::RedisSlot(command.args_[key.arg_]);
-      if (std::find(eval_request.cluster_slots_.begin(),
-                    eval_request.cluster_slots_.end(),
-                    key_slot) == eval_request.cluster_slots_.end()) {
+      const std::span<const std::uint16_t> admitted_slots =
+          eval_request.ClusterSlots();
+      if (std::find(admitted_slots.begin(), admitted_slots.end(), key_slot) ==
+          admitted_slots.end()) {
         co_return EncodeError(
             "ERR Script attempted to access a non local key in a cluster "
             "node");
@@ -7069,7 +7067,7 @@ Task<std::string> ExecuteLuaRedisCall(
         cluster::GetClusterRuntime()->topology_cache_.Current();
     if (!cluster::AuthorityUnchanged(*eval_request.cluster_admitted_state_,
                                      current.get(),
-                                     eval_request.cluster_slots_)) {
+                                     eval_request.ClusterSlots())) {
       co_return EncodeError(
           "ERR Script attempted to access a non local key in a cluster node");
     }
@@ -7124,7 +7122,7 @@ Task<std::string> ExecuteLuaRedisCall(
               cluster::GetClusterRuntime()->topology_cache_.Current();
           if (!cluster::AuthorityUnchanged(
                   *eval_request.cluster_admitted_state_, current.get(),
-                  eval_request.cluster_slots_)) {
+                  eval_request.ClusterSlots())) {
             co_return ClusterAuthorityChangedStatus();
           }
         }
@@ -10818,24 +10816,24 @@ void InstallClusterShardValidator(tx::Transaction& transaction,
                                   ClusterShardValidatorContext& context) {
   if (!cluster::ClusterEnabled() || request.replication_origin_ ||
       request.cluster_admitted_state_ == nullptr ||
-      request.cluster_slots_.empty()) {
+      request.ClusterSlots().empty()) {
     return;
   }
   context.admitted_ = request.cluster_admitted_state_;
-  context.slots_ = request.cluster_slots_;
+  context.slots_ = request.ClusterSlots();
   transaction.SetShardValidator(&ValidateClusterShardAuthority, &context);
 }
 
 absl::Status RecheckClusterRequestAuthority(const CommandRequest& request) {
   if (!cluster::ClusterEnabled() || request.replication_origin_ ||
       request.cluster_admitted_state_ == nullptr ||
-      request.cluster_slots_.empty()) {
+      request.ClusterSlots().empty()) {
     return absl::OkStatus();
   }
   const std::shared_ptr<const cluster::ServingState> current =
       cluster::GetClusterRuntime()->topology_cache_.Current();
   if (cluster::AuthorityUnchanged(*request.cluster_admitted_state_,
-                                  current.get(), request.cluster_slots_)) {
+                                  current.get(), request.ClusterSlots())) {
     return absl::OkStatus();
   }
   return ClusterAuthorityChangedStatus();
