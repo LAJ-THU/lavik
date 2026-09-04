@@ -966,6 +966,8 @@ constexpr std::string_view kSnapshotReadConcurrencyConfig =
 constexpr std::string_view kSnapshotBatchSizeConfig =
     "replication-snapshot-batch-size";
 constexpr std::string_view kReplicationBacklogSizeConfig = "repl-backlog-size";
+constexpr std::string_view kReplicationBacklogBackpressureConfig =
+    "replication-backlog-backpressure";
 constexpr std::string_view kReplicationPublishQueueConfig =
     "replication-publish-queue-mb-per-worker";
 constexpr std::string_view kReplicaPriorityConfig = "replica-priority";
@@ -1002,6 +1004,7 @@ enum class RuntimeConfigKey : std::uint8_t {
   kSnapshotReadConcurrency,
   kSnapshotBatchSize,
   kReplicationBacklogSize,
+  kReplicationBacklogBackpressure,
   kReplicationPublishQueue,
   kReplicaPriority,
   kDefragPaused,
@@ -1040,6 +1043,8 @@ constexpr std::array kRuntimeConfigs{
                             RuntimeConfigKey::kSnapshotBatchSize},
     RuntimeConfigDescriptor{kReplicationBacklogSizeConfig,
                             RuntimeConfigKey::kReplicationBacklogSize},
+    RuntimeConfigDescriptor{kReplicationBacklogBackpressureConfig,
+                            RuntimeConfigKey::kReplicationBacklogBackpressure},
     RuntimeConfigDescriptor{kReplicationPublishQueueConfig,
                             RuntimeConfigKey::kReplicationPublishQueue},
     RuntimeConfigDescriptor{kReplicaPriorityConfig,
@@ -1168,6 +1173,7 @@ Task<CommandReply> ExecuteConfig(const CommandRequest& request,
       if ((config.key_ == RuntimeConfigKey::kSnapshotReadConcurrency ||
            config.key_ == RuntimeConfigKey::kSnapshotBatchSize ||
            config.key_ == RuntimeConfigKey::kReplicationBacklogSize ||
+           config.key_ == RuntimeConfigKey::kReplicationBacklogBackpressure ||
            config.key_ == RuntimeConfigKey::kReplicationPublishQueue ||
            config.key_ == RuntimeConfigKey::kReplicaPriority) &&
           g_replication == nullptr) {
@@ -1187,6 +1193,8 @@ Task<CommandReply> ExecuteConfig(const CommandRequest& request,
           return std::to_string(g_replication->snapshot_batch_size());
         case RuntimeConfigKey::kReplicationBacklogSize:
           return std::to_string(g_replication->backlog_size_bytes());
+        case RuntimeConfigKey::kReplicationBacklogBackpressure:
+          return g_replication->backlog_backpressure() ? "yes" : "no";
         case RuntimeConfigKey::kReplicationPublishQueue:
           return std::to_string(
               g_replication->publish_queue_bytes_per_worker() /
@@ -1318,6 +1326,23 @@ Task<CommandReply> ExecuteConfig(const CommandRequest& request,
                   .value_ = *bytes,
               });
         }
+      }
+    } else if (config->key_ ==
+               RuntimeConfigKey::kReplicationBacklogBackpressure) {
+      const std::optional<bool> enabled = ParseConfigYesNo(args[3]);
+      if (g_replication == nullptr) {
+        configured =
+            absl::FailedPreconditionError("replication backend is unavailable");
+      } else if (!enabled.has_value()) {
+        configured = absl::InvalidArgumentError("value must be 'yes' or 'no'");
+      } else {
+        configured =
+            co_await g_replication->ApplyDirective(ReplicationDirective{
+                .kind_ =
+                    ReplicationDirective::Kind::kBacklogBackpressure,
+                .upstream_ = std::nullopt,
+                .value_ = *enabled ? 1ULL : 0ULL,
+            });
       }
     } else if (config->key_ == RuntimeConfigKey::kReplicationPublishQueue) {
       constexpr std::uint64_t kMiB = 1024ULL * 1024;
