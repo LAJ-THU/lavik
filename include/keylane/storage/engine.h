@@ -152,6 +152,8 @@ struct RecoveredFunctionCatalog {
 struct DurabilityFrontier {
   std::string history_context_;
   std::vector<std::uint64_t> flow_cursors_;
+
+  bool operator==(const DurabilityFrontier&) const = default;
 };
 
 struct PopulationToken {
