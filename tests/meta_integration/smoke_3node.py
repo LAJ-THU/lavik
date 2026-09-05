@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""3-node smoke test for the keylane_meta Raft driver (issue #19).
+"""3-node smoke test for the keylane_meta Raft driver.
 
 Usage: smoke_3node.py /path/to/keylane_meta [workdir]
 

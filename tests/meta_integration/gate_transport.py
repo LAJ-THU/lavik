@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Transport connect/cancel/timeout behavior at cluster level (issue #19).
+"""Transport connect/cancel/timeout behavior at cluster level.
 
 Single 3-node cluster on the proxy mesh, continuous propose load
 throughout:

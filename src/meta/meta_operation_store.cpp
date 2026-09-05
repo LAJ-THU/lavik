@@ -78,7 +78,7 @@ absl::StatusOr<MetaSubmitResult> MetaOperationStore::SubmitOperation(
     }
   }
   // Permanent idempotency on the client-provided id, across live records and
-  // archive tombstones (plan §2).
+  // archive tombstones.
   if (const auto it = live_.find(command.operation_id_); it != live_.end()) {
     if (it->second.intent_hash_ != command.intent_hash_) {
       return MetaDomainRejectError(
@@ -106,7 +106,7 @@ absl::StatusOr<MetaSubmitResult> MetaOperationStore::SubmitOperation(
   }
   // Terminal records stay live until archived, so the live set alone could
   // grow without bound; the joint bound keeps every collection bounded
-  // (plan §2 硬上限) and ArchiveOperations is the escape valve.
+  // and ArchiveOperations is the escape valve.
   if (live_.size() >= static_cast<std::uint64_t>(max_active_) + max_archived_) {
     return MetaDomainRejectError(
         "live operation record bound reached; archive terminal operations");
@@ -329,7 +329,7 @@ absl::Status MetaOperationStore::ArchiveOperations(
     to_archive.push_back(live_it->second);
   }
   if (archived_.size() + to_archive.size() > max_archived_) {
-    // The operator must export (ctl) before more summaries fit (plan §2).
+    // The operator must export (ctl) before more summaries fit.
     return MetaDomainRejectError("archive summary cap reached");
   }
   for (const MetaOperationId& id : to_archive) {
@@ -567,7 +567,7 @@ absl::StatusOr<MetaOperationArchiveSummary> ReadSummary(MetaReader& r) {
       !status.ok()) {
     return status;
   }
-  // Tombstones are terminal by construction (plan §2 归档摘要).
+  // Tombstones are terminal by construction.
   if (!IsTerminal(summary.terminal_lifecycle_)) {
     return MetaFailStopError("archive summary is not terminal");
   }

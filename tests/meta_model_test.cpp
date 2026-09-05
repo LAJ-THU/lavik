@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
-// Model-layer tests for the issue #19 formal implementation: encoding
+// Model-layer tests for encoding
 // primitives (src/meta/meta_encoding) and the committed command schema
-// (src/meta/meta_commands). See
-// docs/plans/issue-19-metadata-raft-implementation.md §2.
+// (src/meta/meta_commands).
 //
 // The tests exercise only the public surface: encode/decode round-trips and
 // rejection behavior (truncation, corruption, unknown version/command,
-// over-cap fields, trailing bytes). Decode failures are the plan's fail-stop
+// over-cap fields, trailing bytes). Decode failures are the fail-stop
 // class; domain validation rejections are the other class — the two must stay
 // distinguishable.
 
@@ -243,7 +242,7 @@ TEST(MetaModelEncoding, FixedArrayRoundTrip) {
 }
 
 // ---------------------------------------------------------------------------
-// Failure classification (plan §2): fail-stop decode failures vs domain
+// Failure classification: fail-stop decode failures vs domain
 // rejections must be distinguishable at the type/enum level.
 // ---------------------------------------------------------------------------
 
@@ -293,8 +292,8 @@ std::string MustEncode(const MetaCommand& cmd) {
   return encoded.value_or("");
 }
 
-// Decode must fail, and the failure must be the fail-stop class (plan §2:
-// the same bytes fail identically on every node).
+// Decode must fail with the fail-stop class because the same bytes must fail
+// identically on every node.
 void ExpectDecodeFailStop(std::string_view bytes) {
   const auto decoded = DecodeMetaCommand(bytes);
   ASSERT_FALSE(decoded.ok())
@@ -389,11 +388,9 @@ TEST(MetaModelCommands, TruncatedCommandFails) {
 TEST(MetaModelCommands, ActorContextRoundTripsOnTheWire) {
   // The raft-log encoding carries the trusted-entry-injected ActorContext as
   // ordinary bounded fields, so a follower's apply can persist the real actor
-  // into audit/journal (plan §2 审计模型: 可读时间由可信入口在 propose 前写入
-  // command,apply 只复制). Unforgeability is the entry layer's property —
-  // only the trusted ctl/coordinator entries construct commands; the "外部
-  // codec 不接受 actor 字段" defense lives at the ctl text-protocol entry
-  // server, not in this internal encoding.
+  // into audit/journal. Unforgeability is the entry layer's property: only
+  // trusted ctl/coordinator entries construct commands, and the ctl protocol
+  // never accepts actor fields from external callers.
   keylane::meta::RegisterNode cmd = MakeRegisterNode();
   cmd.actor_.principal_ = "keylane://operator/alice";
   cmd.actor_.readable_time_ = "2026-09-04T01:02:03Z";
@@ -476,8 +473,8 @@ TEST(MetaModelCommands, UpdateNodeRoundTrip) {
   ExpectRoundTrip(cmd);
 }
 
-// UpdateNode must not be able to modify the principal binding (plan §2/§6:
-// rotation unimplemented) — this is a schema-level guarantee, so assert it
+// UpdateNode must not be able to modify the principal binding because rotation
+// is unimplemented. This is a schema-level guarantee, so assert it
 // structurally. (The indirection through a template makes the member access
 // dependent, so the requires-expression can fail softly.)
 template <typename T>
@@ -500,7 +497,7 @@ TEST(MetaModelCommands, CreateGroupRoundTrip) {
   keylane::meta::CreateGroup cmd;
   cmd.request_id_ = MakeRequestId(0x30);
   cmd.group_id_ = "0123456789abcdef0123456789abcdef01234567";
-  cmd.new_topology_epoch_ = 100;  // absolute value (§2)
+  cmd.new_topology_epoch_ = 100;  // absolute value
   ExpectRoundTrip(cmd);
 }
 
@@ -531,7 +528,7 @@ TEST(MetaModelCommands, SetSlotMapRoundTrip) {
       {5461, 10922, "89abcdef0123456789abcdef0123456789abcdef"},
       {10923, 16383, "456789abcdef0123456789abcdef0123456789ab"},
   };
-  cmd.new_topology_epoch_ = 101;  // absolute value (§2)
+  cmd.new_topology_epoch_ = 101;  // absolute value
   cmd.config_epochs_ = {
       {"0123456789abcdef0123456789abcdef01234567", 11},
       {"89abcdef0123456789abcdef0123456789abcdef", 22},
@@ -540,10 +537,10 @@ TEST(MetaModelCommands, SetSlotMapRoundTrip) {
 }
 
 TEST(MetaModelCommands, GroupRecordRoundTrip) {
-  // The per-group committed record (§2 GroupRecord): owner, group_term,
+  // The per-group committed record contains owner, group_term,
   // authority_version, population_manifest_id, partition_replication_epoch.
-  // replication_history_id is deliberately absent (data-plane boot-scoped,
-  // #14). The record codec is defined here.
+  // replication_history_id is deliberately absent because it is scoped to a
+  // data-plane boot. The record codec is defined here.
   keylane::meta::MetaGroupRecord record;
   record.owner_ = "0123456789abcdef0123456789abcdef01234567";
   record.group_term_ = 9;
@@ -569,7 +566,7 @@ TEST(MetaModelCommands, GroupRecordRoundTrip) {
 }
 
 // ---------------------------------------------------------------------------
-// term/grant (§2: term 只升一次,激活不再动 term).
+// Term and grant commands.
 // ---------------------------------------------------------------------------
 
 TEST(MetaModelCommands, BeginGroupTermRoundTrip) {
@@ -610,7 +607,7 @@ TEST(MetaModelCommands, ActivateAuthorityRoundTrip) {
 }
 
 // ActivateAuthority is the failover/migration atomic commit point and must
-// NOT move the term (plan §2: term 只升一次,激活不再动 term) — it validates
+// NOT move the term; it validates
 // expected_term but carries no new term. Schema-level guarantee, asserted
 // structurally.
 template <typename T>
@@ -640,7 +637,7 @@ TEST(MetaModelCommands, FenceGroupRoundTrip) {
 }
 
 // ---------------------------------------------------------------------------
-// policy (§2 PolicyStore: versioned documents, content-hash addressed).
+// Policy documents are versioned and content-hash addressed.
 // ---------------------------------------------------------------------------
 
 keylane::meta::MetaHash256 MakeHash(std::uint8_t seed) {
@@ -662,7 +659,7 @@ TEST(MetaModelCommands, PutPolicyRoundTrip) {
 }
 
 TEST(MetaModelCommands, RetirePolicyRoundTrip) {
-  // §2: apply refuses to retire a version still referenced by an active
+  // Apply refuses to retire a version still referenced by an active
   // grant or a non-terminal operation — domain validation, not the codec.
   keylane::meta::RetirePolicy cmd;
   cmd.request_id_ = MakeRequestId(0x51);
@@ -672,9 +669,9 @@ TEST(MetaModelCommands, RetirePolicyRoundTrip) {
 }
 
 // ---------------------------------------------------------------------------
-// operation journal (§2 通用生命周期). operation_id is the client-provided
+// operation journal. operation_id is the client-provided
 // stable UUID and permanent idempotency key; operation_seq = the raft log
-// index of the SubmitOperation command (assigned by apply, §3) and appears
+// index of the SubmitOperation command, assigned by apply, and appears
 // in commands only as an archive reference.
 // ---------------------------------------------------------------------------
 
@@ -740,7 +737,7 @@ TEST(MetaModelCommands, AbortOperationRoundTrip) {
 }
 
 TEST(MetaModelCommands, ArchiveOperationsRoundTrip) {
-  // Non-contiguous archival of terminal operations (§2 归档去卡死); apply
+  // Non-contiguous archival of terminal operations; apply
   // rejects references to non-terminal or unknown operations.
   keylane::meta::ArchiveOperations cmd;
   cmd.request_id_ = MakeRequestId(0x64);
@@ -749,7 +746,7 @@ TEST(MetaModelCommands, ArchiveOperationsRoundTrip) {
 }
 
 // ---------------------------------------------------------------------------
-// upgrade (§2/§3 升级契约).
+// upgrade.
 // ---------------------------------------------------------------------------
 
 TEST(MetaModelCommands, ReadsNMinusOneAndWritesRequestedActiveSchema) {
@@ -782,7 +779,7 @@ TEST(MetaModelCommands, SetSchemaVersionRoundTrip) {
 
 TEST(MetaModelCommands, SetSchemaVersionUsesFrozenV1Layout) {
   // SetSchemaVersion must stay decodable by the oldest binary in the
-  // readable window (§2: 自身以最旧可读格式编码), so its envelope pins
+  // readable window, so its envelope pins
   // schema_version to v1 regardless of the current write schema, and its
   // body layout is part of the permanently frozen v1 subset.
   keylane::meta::SetSchemaVersion cmd;
@@ -882,7 +879,7 @@ TEST(MetaModelCommands, SetSchemaVersionFrozenLayoutRejectsPreActorBytes) {
 }
 
 // ---------------------------------------------------------------------------
-// Cap enforcement (§2: 超限一律 fail-safe,不静默截断). Encode-side violations
+// Cap enforcement fails safely without truncation. Encode-side violations
 // are proposal-validation failures (kDomainReject); over-cap bytes on the
 // wire are decode failures (kFailStop).
 // ---------------------------------------------------------------------------
@@ -1043,7 +1040,8 @@ std::string MustSerialize(const MetaStores& stores) {
 
 // The committed DOMAIN state (everything but the audit window): a rejected
 // command must leave this unchanged, while the audit trail still grows by the
-// rejection record (§2: 消费 index + 写 audit record,状态不变).
+// rejection record; the index is consumed and state otherwise remains
+// unchanged.
 std::string DomainStateBytes(const MetaStores& stores) {
   std::string out = stores.identity_.Serialize();
   out += stores.topology_.Serialize();
@@ -1062,8 +1060,7 @@ TEST(MetaStateApply, RegisterNodeAcceptedAndAudited) {
   EXPECT_TRUE(stores.identity_.IsActiveNode(cmd.node_id_));
 
   // Every privileged command appends exactly one audit record keyed by its
-  // raft log index; the injected actor fields are copied verbatim (§2 审计
-  // 模型).
+  // raft log index; the injected actor fields are copied verbatim.
   ASSERT_EQ(stores.audit_.size(), 1u);
   const auto entry = stores.audit_.Find(1);
   ASSERT_TRUE(entry.has_value());
@@ -1084,7 +1081,7 @@ TEST(MetaStateApply, ReplaySameIndexProducesSameVerdictStateAndAudit) {
   const auto record_after_first = stores.audit_.Find(1);
   ASSERT_TRUE(record_after_first.has_value());
 
-  // §2 replay 幂等定义 + §3 apply 可能重复: same (index, command) -> same
+  // Replay contract: same (index, command) -> same
   // verdict, same state, same audit record (the window does not grow).
   const MetaApplyResult second = ApplyOk(stores, 1, cmd);
   EXPECT_EQ(second, first);
@@ -1096,8 +1093,8 @@ TEST(MetaStateApply, ReplaySameIndexProducesSameVerdictStateAndAudit) {
 TEST(MetaStateApply, RejectedCommandIsAuditedAndLeavesStateUnchanged) {
   MetaStores stores;
   ApplyOk(stores, 1, MakeRegisterFor(1));
-  // Same principal bound to a second node_id: domain rejection (§6 global
-  // one-to-one binding).
+  // Same principal bound to a second node_id: domain rejection because the
+  // binding is globally one-to-one.
   keylane::meta::RegisterNode conflict = MakeRegisterFor(2);
   conflict.principal_ = "keylane://node/" + MakeNodeId(1);
   const std::string domain_before = DomainStateBytes(stores);
@@ -1133,7 +1130,7 @@ TEST(MetaStateApply, UpdateAndRetireNodeThroughDispatcher) {
   ApplyOk(stores, 2, update);
   EXPECT_EQ(stores.identity_.FindNode(node_id)->revision_, 2u);
 
-  // Re-applying the identical command is a replay: idempotent accept (§2).
+  // Re-applying the identical command is a replay: idempotent accept.
   ApplyOk(stores, 2, update);
 
   // CAS conflict: a DIFFERENT update carrying the stale expected_revision is
@@ -1488,8 +1485,7 @@ TEST(MetaStateApply, GrantAuthorityRenewsLeaseWithCommittedPolicy) {
   EXPECT_EQ(stores.grant_.GroupState("g1")->grant_->spec_.lease_duration_ms_,
             9000u);
 
-  // Renewal referencing an uncommitted policy version: rejected (§2: grant
-  // 引用的 policy 版本必须已 committed).
+  // Renewal referencing an uncommitted policy version is rejected.
   renew.grant_.policy_version_ = 99;
   ApplyRejected(stores, 8, renew);
   renew.grant_.policy_version_ = 1;
@@ -1516,7 +1512,7 @@ TEST(MetaStateApply, RetirePolicyRejectedWhileReferencedByActiveGrant) {
   retire.policy_id_ = "p";
   retire.version_ = 1;
 
-  // §2: a version referenced by an active grant cannot retire. Non-terminal
+  // A version referenced by an active grant cannot retire. Non-terminal
   // operation references are covered separately through their structured
   // dependency list.
   ApplyRejected(stores, 7, retire);
@@ -1677,7 +1673,7 @@ TEST(MetaStateApply, SetSlotMapThroughDispatcher) {
 }
 
 // ---------------------------------------------------------------------------
-// ActivateAuthority: the atomic failover/migration commit point (plan §2).
+// ActivateAuthority: the atomic failover/migration commit point.
 // ---------------------------------------------------------------------------
 
 // Asserts the pre-activation state of both halves: grant store fenced and
@@ -1767,7 +1763,7 @@ TEST(MetaStateApply, ActivateAuthorityReplaySameIndexIsIdempotent) {
   const MetaApplyResult first = ApplyOk(stores, 6, MetaCommand{cmd});
   const std::string state_after_first = MustSerialize(stores);
 
-  // §3 apply 可能重复: re-committing the same index must not bump the epoch
+  // Re-committing the same index must not bump the epoch
   // a second time or change any verdict/state/audit.
   const MetaApplyResult second = ApplyOk(stores, 6, MetaCommand{cmd});
   EXPECT_EQ(second, first);
@@ -1791,7 +1787,7 @@ TEST(MetaStateApply, ActivateAuthorityReplaySameIndexIsIdempotent) {
 }
 
 // ---------------------------------------------------------------------------
-// operation journal + upgrade (plan §2). operation_seq is the raft log index
+// operation journal + upgrade. operation_seq is the raft log index
 // of the SubmitOperation; the journal persists the injected ActorContext.
 // ---------------------------------------------------------------------------
 
@@ -1915,8 +1911,8 @@ TEST(MetaStateApply, SetSchemaVersionThroughDispatcher) {
             keylane::meta::kMetaCurrentSchemaVersion);
 
   // 0 is not a schema version; beyond-current is a schema this binary cannot
-  // write (§3: upgrade binaries first — the leader gate keeps such commands
-  // off the log in a correct deployment).
+  // write. Binaries must be upgraded first; the leader gate keeps such
+  // commands off the log in a correct deployment.
   cmd.new_active_write_schema_ = 0;
   ApplyRejected(stores, 2, MetaCommand{cmd});
   cmd.new_active_write_schema_ = keylane::meta::kMetaCurrentSchemaVersion + 1;
@@ -1952,7 +1948,7 @@ TEST(MetaStateApply, AuditPruneIsReplicatedAndAudited) {
 }
 
 // ---------------------------------------------------------------------------
-// Full-matrix replay (plan §2 replay 幂等定义, §3 apply 可能重复): a scripted
+// Full-matrix replay: a scripted
 // log mixing all 20 command types, accepted and rejected. The apply layer
 // locks the semantics the recovery path relies on.
 // ---------------------------------------------------------------------------
@@ -1980,7 +1976,7 @@ std::vector<ScriptedCommand> MakeCommandScript() {
   {
     keylane::meta::RegisterNode conflict = MakeRegisterFor(3);
     conflict.principal_ = "keylane://node/" + MakeNodeId(1);
-    push(std::move(conflict), reject);  // principal 1:1 (§6)
+    push(std::move(conflict), reject);  // principal 1:1
   }
   // topology: groups
   push(MakeCreateGroup("g1", 1), accept);
@@ -2157,7 +2153,7 @@ TEST(MetaStateApply, CommandMatrixConsecutiveReplayLocksVerdictStateAudit) {
     const auto audit_after_first = stores.audit_.Find(index);
     ASSERT_TRUE(audit_after_first.has_value()) << "index " << index;
 
-    // §3: commit() may be delivered again for the same index. Same verdict,
+    // commit() may be delivered again for the same index. Same verdict,
     // same detail, domain state unchanged, audit window unchanged.
     const MetaApplyResult duplicate = ApplyCommitted(
         stores, index, step.command, kActorPrincipal, kReadableTime);

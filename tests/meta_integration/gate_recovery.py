@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Integration gate: WAL / snapshot recovery matrix for keylane_meta (issue #19).
+"""Integration gate: WAL / snapshot recovery matrix for keylane_meta.
 
 Four serial scenarios, each on a fresh 3-node cluster with plain direct
 connections (faults are process-level: SIGKILL / SIGSTOP / SIGTERM):

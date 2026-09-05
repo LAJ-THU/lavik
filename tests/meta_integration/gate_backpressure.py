@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Integration gate: slow-peer backpressure for keylane_meta (issue #19).
+"""Integration gate: slow-peer backpressure for keylane_meta.
 
 Two scenarios on 3-node proxy-meshed clusters:
 
