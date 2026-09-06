@@ -2830,9 +2830,9 @@ Task<CommandReply> ExecuteFlush(const CommandRequest& request,
       co_return BuiltReply(reply_builder.AppendError(
           "TRYAGAIN replication role changed; retry command"));
     }
-    if (const auto error = CommandServingGenerationError(request);
-        error.has_value()) {
-      co_return BuiltReply(reply_builder.AppendError(*error));
+    if (const char* error = CommandServingGenerationError(request);
+        error != nullptr) [[unlikely]] {
+      co_return BuiltReply(reply_builder.AppendError(error));
     }
 
     if (request.kind_ == CommandKind::kFlushAll) {
@@ -3211,9 +3211,9 @@ Task<CommandReply> ExecuteKeys(const CommandRequest& request,
   // us, but this request may have slept before winning that exclusivity. Bind
   // the scan to the generation admitted at dispatch before committing a RESP
   // array header that cannot subsequently be replaced with an error.
-  if (const auto error = CommandServingGenerationError(request);
-      error.has_value()) {
-    co_return BuiltReply(reply_builder.AppendError(*error));
+  if (const char* error = CommandServingGenerationError(request);
+      error != nullptr) [[unlikely]] {
+    co_return BuiltReply(reply_builder.AppendError(error));
   }
   absl::Status quiesced = co_await g_storage->QuiesceExpiration();
   if (!quiesced.ok()) {
@@ -3434,9 +3434,9 @@ Task<CommandReply> ExecuteNegativeRandomStream(
         AppendTryAgainError(reply_builder, "database flush is in progress"));
   }
   DbOperationGuard initial_db_guard(db);
-  if (const auto error = CommandServingGenerationError(request);
-      error.has_value()) {
-    co_return BuiltReply(reply_builder.AppendError(*error));
+  if (const char* error = CommandServingGenerationError(request);
+      error != nullptr) [[unlikely]] {
+    co_return BuiltReply(reply_builder.AppendError(error));
   }
   state->now_ms_ = RedisUnixTimeMillis();
   absl::StatusOr<storage::HashResult> length =
@@ -5401,9 +5401,9 @@ Task<CommandReply> ExecuteCopy(const CommandRequest& request,
     co_return BuiltReply(reply_builder.AppendError(
         "TRYAGAIN replication role changed; retry command"));
   }
-  if (const auto error = CommandServingGenerationError(request);
-      error.has_value()) {
-    co_return BuiltReply(reply_builder.AppendError(*error));
+  if (const char* error = CommandServingGenerationError(request);
+      error != nullptr) [[unlikely]] {
+    co_return BuiltReply(reply_builder.AppendError(error));
   }
 
   tx::Transaction transaction;
@@ -8308,9 +8308,9 @@ Task<CommandReply> ExecuteWatch(ConnectionContext& ctx,
     }
   }
   DbOperationGuard db_guard(request.db_id_);
-  if (const auto error = CommandServingGenerationError(request);
-      error.has_value()) {
-    co_return BuiltReply(reply_builder.AppendError(*error));
+  if (const char* error = CommandServingGenerationError(request);
+      error != nullptr) [[unlikely]] {
+    co_return BuiltReply(reply_builder.AppendError(error));
   }
   for (std::size_t i = keys->first_; i <= keys->last_; i += keys->step_) {
     const std::uint8_t db = request.db_id_;
@@ -8993,11 +8993,11 @@ Task<CommandReply> ExecuteExecBody(
         "TRYAGAIN replication role changed; retry command")));
   }
   for (const CommandRequest& command : queued) {
-    if (const auto error = CommandServingGenerationError(command);
-        error.has_value()) {
+    if (const char* error = CommandServingGenerationError(command);
+        error != nullptr) [[unlikely]] {
       co_await DropWatches(ctx);
       co_return finalize_exec_reply(
-          BuiltReply(reply_builder.AppendError(*error)));
+          BuiltReply(reply_builder.AppendError(error)));
     }
   }
 
@@ -10934,21 +10934,19 @@ CommandReply ClusterValidatorFailureReply(
                                       reply_builder);
 }
 
-std::optional<std::string_view> CommandServingGenerationError(
+const char* CommandServingGenerationError(
     const CommandRequest& request) noexcept {
   if (request.replication_origin_ || !request.serving_generation_valid_ ||
       g_replication == nullptr) {
-    return std::nullopt;
+    return nullptr;
   }
   if (g_replication->ServingGenerationMatches(request.serving_generation_)) {
-    return std::nullopt;
+    return nullptr;
   }
   return g_replication->is_loading()
-             ? std::string_view(
-                   "LOADING Keylane is loading the dataset from the primary")
-             : std::string_view(
-                   "TRYAGAIN Keylane dataset changed while the command was "
-                   "queued or blocked");
+             ? "LOADING Keylane is loading the dataset from the primary"
+             : "TRYAGAIN Keylane dataset changed while the command was queued "
+               "or blocked";
 }
 
 Task<CommandReply> DispatchCommandImpl(ConnectionContext& ctx,
@@ -11307,9 +11305,9 @@ Task<CommandReply> ExecuteCommandBody(
       co_return BuiltReply(reply_builder.AppendError(
           "TRYAGAIN replication role changed; retry command"));
     }
-    if (const auto error = CommandServingGenerationError(request);
-        error.has_value()) {
-      co_return BuiltReply(reply_builder.AppendError(*error));
+    if (const char* error = CommandServingGenerationError(request);
+        error != nullptr) [[unlikely]] {
+      co_return BuiltReply(reply_builder.AppendError(error));
     }
   }
 
