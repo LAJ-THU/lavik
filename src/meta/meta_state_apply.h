@@ -79,8 +79,8 @@
 //
 // MetaStores is the committed aggregate that snapshots serialize as one
 // versioned envelope: per-store length-prefixed versioned blobs in a fixed
-// order plus the committed active_write_schema. Deserialize is
-// strict; every failure is MetaFailureClass::kFailStop — the same bytes fail
+// order. Deserialize is strict; every failure is
+// MetaFailureClass::kFailStop — the same bytes fail
 // identically on every node.
 
 #include <cstdint>
@@ -98,10 +98,8 @@
 
 namespace keylane::meta {
 
-// The six committed stores plus the committed active_write_schema — the only
-// committed state without a store of its own. SetSchemaVersion rewrites
-// it as an absolute value. Store constructor knobs (audit window capacity,
-// group/operation caps) are v1 deployment constants: snapshots do not carry
+// The six committed stores. Store constructor knobs (audit window capacity,
+// group/operation caps) are deployment constants: snapshots do not carry
 // them and Deserialize restores defaults.
 struct MetaStores {
   MetaIdentityStore identity_;
@@ -110,16 +108,14 @@ struct MetaStores {
   MetaGrantStore grant_;
   MetaOperationStore operation_;
   MetaAuditStore audit_;
-  std::uint16_t active_write_schema_ = kMetaSchemaVersionV1;
 
   // One versioned envelope for snapshots: u16 schema_version, then a u32
-  // length prefix + the store's own versioned blob per store in member order,
-  // then u16 active_write_schema. Fails with MetaFailureClass::kDomainReject
+  // length prefix + the store's own versioned blob per store in member order.
+  // Fails with MetaFailureClass::kDomainReject
   // when the total exceeds kMaxMetaSnapshotBytes; create_snapshot must fail
   // and alert, never silently truncate.
   absl::StatusOr<std::string> Serialize() const;
-  // Strict decode of the Serialize envelope; every failure is fail-stop,
-  // including an active_write_schema this binary cannot write.
+  // Strict decode of the Serialize envelope; every failure is fail-stop.
   static absl::StatusOr<MetaStores> Deserialize(std::string_view bytes);
 };
 
@@ -135,6 +131,12 @@ struct MetaApplyResult {
   MetaCommandTag command_tag_ = MetaCommandTag::kRegisterNode;
   bool operator==(const MetaApplyResult&) const = default;
 };
+
+// Process-local NuRaft completion payload. It is not part of the durable WAL
+// or snapshot format; carrying the apply verdict in cmd_result avoids racing
+// a later audit rotation/prune when the proposer resumes.
+std::string EncodeMetaApplyResult(const MetaApplyResult& result);
+absl::StatusOr<MetaApplyResult> DecodeMetaApplyResult(std::string_view bytes);
 
 // Applies one committed command to the aggregate state. See the file header
 // for the full contract. `actor_principal`/`readable_time` are the trusted

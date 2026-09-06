@@ -378,7 +378,7 @@ TEST(MetaIdentityStore, SerializationRoundTrip) {
   ASSERT_GE(bytes.size(), 2u);
   const auto* p = reinterpret_cast<const unsigned char*>(bytes.data());
   EXPECT_EQ(static_cast<std::uint16_t>(p[0] | (p[1] << 8)),
-            keylane::meta::kMetaCurrentSchemaVersion);
+            keylane::meta::kMetaFormatVersion);
 
   const auto loaded = MetaIdentityStore::Deserialize(bytes);
   ASSERT_TRUE(loaded.ok()) << loaded.status();
@@ -455,7 +455,7 @@ TEST(MetaIdentityStore, DeserializeRejectsInvariantViolations) {
   };
   auto make_blob = [&](auto write_body) {
     MetaWriter w;
-    w.WriteU16(keylane::meta::kMetaCurrentSchemaVersion);
+    w.WriteU16(keylane::meta::kMetaFormatVersion);
     write_body(w);
     return w.buffer();
   };
@@ -1065,7 +1065,7 @@ TEST(MetaTopologyStore, SerializationRoundTrip) {
   ASSERT_GE(bytes.size(), 2u);
   const auto* p = reinterpret_cast<const unsigned char*>(bytes.data());
   EXPECT_EQ(static_cast<std::uint16_t>(p[0] | (p[1] << 8)),
-            keylane::meta::kMetaCurrentSchemaVersion);
+            keylane::meta::kMetaFormatVersion);
 
   const auto loaded = MetaTopologyStore::Deserialize(bytes);
   ASSERT_TRUE(loaded.ok()) << loaded.status();
@@ -1131,7 +1131,7 @@ std::string MakeTopologyBlob(
     std::uint64_t topology_epoch, const std::vector<TopologyBlobGroup>& groups,
     const std::vector<keylane::meta::MetaSlotAssignment>& runs) {
   keylane::meta::MetaWriter w;
-  w.WriteU16(keylane::meta::kMetaCurrentSchemaVersion);
+  w.WriteU16(keylane::meta::kMetaFormatVersion);
   w.WriteU64(topology_epoch);
   w.WriteCount(static_cast<std::uint32_t>(groups.size()));
   for (const TopologyBlobGroup& group : groups) {
@@ -1499,7 +1499,7 @@ TEST(MetaPolicyStore, SerializationRoundTrip) {
   ASSERT_GE(bytes.size(), 2u);
   const auto* p = reinterpret_cast<const unsigned char*>(bytes.data());
   EXPECT_EQ(static_cast<std::uint16_t>(p[0] | (p[1] << 8)),
-            keylane::meta::kMetaCurrentSchemaVersion);
+            keylane::meta::kMetaFormatVersion);
 
   const auto loaded = MetaPolicyStore::Deserialize(bytes);
   ASSERT_TRUE(loaded.ok()) << loaded.status();
@@ -1566,7 +1566,7 @@ std::string MakePolicyBlob(
     const std::vector<std::pair<std::string, std::vector<PolicyBlobVersion>>>&
         policies) {
   keylane::meta::MetaWriter w;
-  w.WriteU16(keylane::meta::kMetaCurrentSchemaVersion);
+  w.WriteU16(keylane::meta::kMetaFormatVersion);
   w.WriteCount(static_cast<std::uint32_t>(policies.size()));
   for (const auto& [policy_id, versions] : policies) {
     w.WriteString(policy_id);
@@ -1613,7 +1613,7 @@ TEST(MetaPolicyStore, DeserializeRejectsInvariantViolations) {
   // Retired tag other than 0/1: hand-encode (the blob helper writes 0/1).
   {
     keylane::meta::MetaWriter w;
-    w.WriteU16(keylane::meta::kMetaCurrentSchemaVersion);
+    w.WriteU16(keylane::meta::kMetaFormatVersion);
     w.WriteCount(1);
     w.WriteString("p");
     w.WriteCount(1);
