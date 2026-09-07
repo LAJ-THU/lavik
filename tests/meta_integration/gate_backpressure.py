@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Integration gate: slow-peer backpressure for keylane_meta.
+"""Integration gate: slow-peer backpressure for keylane-meta.
 
 Two scenarios on 3-node proxy-meshed clusters:
 
@@ -38,7 +38,7 @@ Cluster runs with reserved_log_items=500 so a healed slow follower can
 close the post-snapshot gap via appends; see gate_transport.py for the
 snapshot-chase rationale.
 
-Usage: gate_backpressure.py /path/to/keylane_meta [workdir]
+Usage: gate_backpressure.py /path/to/keylane-meta [workdir]
 """
 
 import os

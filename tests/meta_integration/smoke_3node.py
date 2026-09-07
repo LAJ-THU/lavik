@@ -13,9 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""3-node smoke test for the keylane_meta Raft driver.
+"""3-node smoke test for the keylane-meta Raft driver.
 
-Usage: smoke_3node.py /path/to/keylane_meta [workdir]
+Usage: smoke_3node.py /path/to/keylane-meta [workdir]
 
 Scenario: bootstrap node1, add node2/node3 through the ctl surface,
 replicate committed writes (real SubmitOperation/CompleteOperation

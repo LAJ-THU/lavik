@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Integration gate: mTLS transport for keylane_meta.
+"""Integration gate: mTLS transport for keylane-meta.
 
 The gate creates one CA and a distinct leaf per member. Every leaf covers the
 numeric endpoint and carries exactly one canonical URI SAN
@@ -50,7 +50,7 @@ working ctl surface (a crash would itself be a finding) and that the
 cluster's writes never stop. Handshake and URI-binding evidence is taken from
 NuRaft's native Asio and Keylane peer-verification log paths.
 
-Usage: gate_mtls.py /path/to/keylane_meta [workdir]
+Usage: gate_mtls.py /path/to/keylane-meta [workdir]
 """
 
 import os
