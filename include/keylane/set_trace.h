@@ -16,8 +16,8 @@
 
 #pragma once
 
-#include <cstddef>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 
 #ifndef KEYLANE_ENABLE_SET_LATENCY_TRACE
