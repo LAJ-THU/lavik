@@ -61,9 +61,11 @@
 #include "celer/runtime/worker.h"
 #include "keylane/command.h"
 #include "keylane/command_table.h"
+#include "keylane/fault_injection.h"
 #include "keylane/memory.h"
 #include "keylane/metrics.h"
 #include "keylane/rdb.h"
+#include "keylane/rdb_collection.h"
 #include "keylane/replication_command.h"
 #include "keylane/replication_group.h"
 #include "keylane/resp.h"
@@ -447,8 +449,8 @@ Task<absl::Status> WriteDataFrame(TcpStream& stream, DataFrameKind kind,
   if (!reserved.ok()) co_return reserved;
   absl::Status appended = AppendDataFrame(&frame, kind, payload);
   if (!appended.ok()) co_return appended;
-#if !defined(NDEBUG) || KEYLANE_ENABLE_TEST_FAULTS
-  if (kind == DataFrameKind::kRecords && !payload.empty()) {
+  KEYLANE_FAULT_INJECT(if (kind == DataFrameKind::kRecords &&
+                           !payload.empty()) {
     const char* corrupt_record =
         std::getenv("KEYLANE_REPLICATION_CORRUPT_FULLSYNC_RECORD_FRAME_ONCE");
     static std::atomic<bool> corrupt_record_used{false};
@@ -460,8 +462,7 @@ Task<absl::Status> WriteDataFrame(TcpStream& stream, DataFrameKind kind,
       frame.back() ^= 0x01;
       spdlog::warn("injected corrupt full-sync record frame");
     }
-  }
-#endif
+  });
   co_return co_await WriteText(stream, frame);
 }
 
@@ -985,7 +986,7 @@ class RedisRdbStreamQueue
     : public std::enable_shared_from_this<RedisRdbStreamQueue> {
  public:
   RedisRdbStreamQueue(storage::StorageEngine* storage, std::uint64_t session_id)
-      : storage_(storage), session_id_(session_id) {}
+      : storage_(storage), session_id_(session_id), producer_(queue_) {}
 
   void Start() {
     remaining_.store(storage_->worker_count(), std::memory_order_release);
@@ -1043,7 +1044,14 @@ class RedisRdbStreamQueue
         RunOwned(shared_from_this(), worker_id));
   }
 
-  bool TryPush(std::string* fragment) {
+  bool TryBeginEntry(unsigned owner) {
+    unsigned available = std::numeric_limits<unsigned>::max();
+    return entry_owner_.compare_exchange_strong(
+        available, owner, std::memory_order_acquire, std::memory_order_relaxed);
+  }
+
+  bool TryPush(std::string* fragment, unsigned owner) {
+    assert(entry_owner_.load(std::memory_order_relaxed) == owner);
     if (aborted_.load(std::memory_order_relaxed)) return false;
     const std::size_t bytes = fragment->size();
     std::size_t occupied = queued_bytes_.load(std::memory_order_acquire);
@@ -1064,7 +1072,7 @@ class RedisRdbStreamQueue
       queued_bytes_.fetch_sub(bytes, std::memory_order_acq_rel);
       return false;
     }
-    if (!queue_.enqueue(std::move(*fragment))) {
+    if (!queue_.enqueue(producer_, std::move(*fragment))) {
       queued_bytes_.fetch_sub(bytes, std::memory_order_acq_rel);
       Fail(absl::ResourceExhaustedError(
           "failed to allocate Redis RDB stream queue entry"));
@@ -1074,44 +1082,117 @@ class RedisRdbStreamQueue
     return true;
   }
 
+  Task<absl::Status> PushEntrySpan(unsigned owner, std::string_view bytes) {
+    while (!bytes.empty()) {
+      const auto piece = bytes.substr(0, 1024 * 1024);
+      std::string fragment(piece);
+      while (!TryPush(&fragment, owner)) {
+        if (aborted_.load(std::memory_order_acquire))
+          co_return absl::CancelledError("Redis RDB export cancelled");
+        auto status = co_await celer::SleepFor(*celer::ThisWorker().self_,
+                                               std::chrono::milliseconds(1));
+        if (!status.ok()) co_return status;
+      }
+      bytes.remove_prefix(piece.size());
+    }
+    co_return absl::OkStatus();
+  }
+
+  Task<absl::Status> WriteCollection(unsigned owner,
+                                     const storage::RdbSnapshotValue& value) {
+    auto encoder = rdb::CollectionFileEncoder::Create(
+        value.db_id_, value.key_, value.value_.value_type_,
+        value.value_.logical_size_, value.value_.expire_at_ms_);
+    if (!encoder.ok()) co_return encoder.status();
+    auto drain = [&]() -> Task<absl::Status> {
+      while (auto span = encoder->Next()) {
+        auto status = co_await PushEntrySpan(owner, *span);
+        if (!status.ok()) co_return status;
+      }
+      co_return absl::OkStatus();
+    };
+    auto status = co_await drain();
+    if (!status.ok()) co_return status;
+    std::uint64_t cursor = 0;
+    for (;;) {
+      if (aborted_.load(std::memory_order_acquire))
+        co_return absl::CancelledError("Redis RDB export cancelled");
+      auto page = co_await storage_->ReadRdbCollectionPage(
+          session_id_, value.collection_token_, cursor);
+      if (!page.ok()) co_return page.status();
+      status = encoder->StartPage(*page);
+      if (!status.ok()) co_return status;
+      // The admitted page owns all borrowed strings until network queue
+      // backpressure has accepted every span; no whole-object copy is made.
+      status = co_await drain();
+      if (!status.ok()) co_return status;
+      cursor = page->next_cursor_;
+      if (page->done_) break;
+    }
+    status = encoder->Finish();
+    if (!status.ok()) co_return status;
+    co_return co_await storage_->FinishRdbCollection(session_id_,
+                                                     value.collection_token_);
+  }
+
   Task<absl::Status> ScanWorker(unsigned worker_id) {
-    (void)worker_id;
     absl::Status status;
     storage::RdbSnapshotCursor cursor;
     unsigned reads_since_yield = 0;
-    while (status.ok() && !aborted_.load(std::memory_order_acquire)) {
-      auto batch = co_await storage_->ReadRdbSnapshotBatch(
-          session_id_, cursor, 1, 8ULL * 1024 * 1024);
-      if (!batch.ok()) {
-        status = batch.status();
-        break;
-      }
-      cursor = batch->cursor_;
-      for (storage::RdbSnapshotValue& value : batch->values_) {
-        auto fragment =
-            rdb::EncodeFileEntry(value.db_id_, value.key_, value.value_);
-        std::string().swap(value.value_.encoded_);
-        std::string().swap(value.key_);
-        if (!fragment.ok()) {
-          status = fragment.status();
+    try {
+      while (status.ok() && !aborted_.load(std::memory_order_acquire)) {
+        auto batch = co_await storage_->ReadRdbSnapshotBatch(
+            session_id_, cursor, 1, 8ULL * 1024 * 1024);
+        if (!batch.ok()) {
+          status = batch.status();
           break;
         }
-        while (!TryPush(&*fragment)) {
-          if (aborted_.load(std::memory_order_acquire)) break;
-          absl::Status yielded = co_await celer::SleepFor(
-              *celer::ThisWorker().self_, std::chrono::milliseconds(1));
-          if (!yielded.ok()) {
-            status = yielded;
+        cursor = batch->cursor_;
+        for (storage::RdbSnapshotValue& value : batch->values_) {
+          while (!TryBeginEntry(worker_id)) {
+            if (aborted_.load(std::memory_order_acquire)) {
+              status = absl::CancelledError("Redis RDB export cancelled");
+              break;
+            }
+            status = co_await celer::SleepFor(*celer::ThisWorker().self_,
+                                              std::chrono::milliseconds(1));
+            if (!status.ok()) break;
+          }
+          if (!status.ok()) break;
+          struct EntryLease {
+            std::atomic<unsigned>* owner;
+            ~EntryLease() {
+              owner->store(std::numeric_limits<unsigned>::max(),
+                           std::memory_order_release);
+            }
+          } lease{&entry_owner_};
+          if (value.collection_token_ != 0) {
+            status = co_await WriteCollection(worker_id, value);
+            if (!status.ok()) break;
+            continue;
+          }
+          auto fragment =
+              rdb::EncodeFileEntry(value.db_id_, value.key_, value.value_);
+          std::string().swap(value.value_.encoded_);
+          std::string().swap(value.key_);
+          if (!fragment.ok()) {
+            status = fragment.status();
             break;
           }
+          status = co_await PushEntrySpan(worker_id, *fragment);
+          if (!status.ok() || aborted_.load(std::memory_order_acquire)) break;
         }
-        if (!status.ok() || aborted_.load(std::memory_order_acquire)) break;
+        if (!status.ok() || batch->done_) break;
+        if (++reads_since_yield == 64) {
+          reads_since_yield = 0;
+          co_await celer::Yield(*celer::ThisWorker().self_);
+        }
       }
-      if (!status.ok() || batch->done_) break;
-      if (++reads_since_yield == 64) {
-        reads_since_yield = 0;
-        co_await celer::Yield(*celer::ThisWorker().self_);
-      }
+    } catch (const std::bad_alloc&) {
+      // Entry leases and admitted pages unwind before cancelling the retained
+      // snapshot. Never let a background allocation failure strand its pins.
+      RecordMemoryRejection();
+      status = absl::ResourceExhaustedError("OOM Redis RDB export");
     }
     absl::Status ended = co_await storage_->EndRdbSnapshot(session_id_);
     if (status.ok() && !aborted_.load(std::memory_order_acquire)) {
@@ -1136,6 +1217,12 @@ class RedisRdbStreamQueue
   storage::StorageEngine* storage_;
   std::uint64_t session_id_;
   moodycamel::ConcurrentQueue<std::string> queue_;
+  // ConcurrentQueue orders within one producer, not between producers. A
+  // whole-key lease serializes this shared token across workers, preserving
+  // contiguous entry fragments even when another worker acquires the lease
+  // before the consumer has drained the previous key.
+  moodycamel::ProducerToken producer_;
+  std::atomic<unsigned> entry_owner_{std::numeric_limits<unsigned>::max()};
   std::atomic<std::size_t> queued_bytes_{0};
   moodycamel::ConcurrentQueue<absl::Status> failures_;
   std::atomic<unsigned> remaining_{0};
@@ -3375,12 +3462,42 @@ class ReplicationManager::ReplicationGroup {
       }
     }
 
+    // A coordinator may already own automatic teardown. Do not race its
+    // candidate abort with the explicit transition's cancellation and join.
+    for (;;) {
+      bool teardown_running = false;
+      {
+        std::lock_guard lock(state_mutex_);
+        if (replica_reconfiguration_running_) {
+          co_return absl::FailedPreconditionError(
+              "another replication role transition is active");
+        }
+        teardown_running = replica_session_teardown_running_;
+        if (!teardown_running) replica_reconfiguration_running_ = true;
+      }
+      if (!teardown_running) break;
+      absl::Status waited = co_await celer::SleepFor(
+          *celer::ThisWorker().self_, std::chrono::milliseconds(1));
+      if (!waited.ok()) co_return waited;
+    }
+    struct ReconfigurationGuard {
+      std::mutex& mutex_;
+      bool& running_;
+      ~ReconfigurationGuard() {
+        std::lock_guard lock(mutex_);
+        running_ = false;
+      }
+    } reconfiguration_guard{state_mutex_, replica_reconfiguration_running_};
+
     // Stop old upstream ingress while database admission is still open. A
     // command that already crossed the apply-FIFO boundary may be waiting for
     // that admission; closing it first would deadlock role transition against
     // the flow that must publish the final applied cursor. Complete read-ahead
     // events that have not started apply remain unacknowledged and are outside
-    // the frozen promotion frontier.
+    // the frozen promotion frontier. The reconfiguration gate must already
+    // be closed before moving the session: changing role_epoch alone cannot
+    // stop the coordinator from retrying with that new epoch while join
+    // suspends. Such a retry could invalidate the population being promoted.
     std::optional<std::uint64_t> detached_role_epoch;
     std::vector<std::shared_ptr<ReplicaSession>> draining_sessions;
     bool retire_source_before_gates = false;
@@ -3502,7 +3619,6 @@ class ReplicationManager::ReplicationGroup {
         co_return absl::FailedPreconditionError(absl::StrCat(
             "replication is failed-stopped until restart: ", failure_reason_));
       }
-      replica_reconfiguration_running_ = true;
       const bool had_upstream = upstream_.has_value();
       const bool retry_promotion =
           !upstream.has_value() && pending_promotion_.has_value();
@@ -4379,7 +4495,8 @@ class ReplicationManager::ReplicationGroup {
       if (!status.ok()) co_return status;
     }
 
-    status = co_await MaybePauseBeforeRedisExportDbAdmission();
+    KEYLANE_FAULT_INJECT(
+        status = co_await MaybePauseBeforeRedisExportDbAdmission(););
     if (!status.ok()) co_return status;
     while (!CloseAllCommandDbGates()) {
       if (role_epoch_.load(std::memory_order_acquire) != source_role_epoch ||
@@ -5262,9 +5379,11 @@ class ReplicationManager::ReplicationGroup {
     std::uint64_t skipped = 0;
     std::vector<std::string> function_libraries;
     while (true) {
-      auto next = reader->Next();
+      auto next = reader->NextStreaming();
       if (!next.ok()) co_return next.status();
       if (!next->has_value()) break;
+      auto drained = reader->DrainCollection();
+      if (!drained.ok()) co_return drained;
       if ((**next).kind_ == rdb::FileEntryKind::kValue) {
         ++entries;
       } else if ((**next).kind_ == rdb::FileEntryKind::kFunctionLibrary) {
@@ -5312,7 +5431,7 @@ class ReplicationManager::ReplicationGroup {
     std::uint64_t imported = 0;
     std::uint64_t expired = 0;
     while (true) {
-      auto next = reader->Next();
+      auto next = reader->NextStreaming();
       if (!next.ok()) {
         (void)co_await storage_->ResetPartitionsDetach(slots);
         co_return next.status();
@@ -5339,18 +5458,7 @@ class ReplicationManager::ReplicationGroup {
             absl::StrCat("Redis RDB key belongs to slot ", slot,
                          " outside source ownership"));
       }
-      const unsigned owner = storage_->OwnerForKey(entry.key_);
-      auto apply = [this, entry = std::move(entry)]() mutable
-          -> Task<absl::StatusOr<storage::RestoreRawResult>> {
-        co_return co_await storage_->RestoreRawValue(
-            entry.db_id_, entry.key_, entry.value_, /*replace=*/false, nullptr);
-      };
-      absl::StatusOr<storage::RestoreRawResult> result;
-      if (owner == celer::ThisWorker().id_) {
-        result = co_await apply();
-      } else {
-        result = co_await celer::SubmitTaskTo(owner, std::move(apply));
-      }
+      auto result = co_await rdb::RestoreFileEntry(storage_, &*reader, entry);
       if (!result.ok() || result->busy_) {
         const absl::Status failure =
             result.ok() ? absl::AlreadyExistsError("duplicate key in Redis RDB")
@@ -6400,8 +6508,9 @@ class ReplicationManager::ReplicationGroup {
     // active_transaction_applies_. Transport cancellation discards only
     // incomplete arrivals; this task must publish its cursor into the frozen
     // frontier before the role transition can continue.
-    if (status.ok())
-      status = co_await MaybePauseBeforeReplicaTransactionApply();
+    KEYLANE_FAULT_INJECT(
+        if (status.ok()) status =
+            co_await MaybePauseBeforeReplicaTransactionApply(););
     if (status.ok()) status = co_await ApplyReplicatedCommand(command);
 
     arrival->status_ = std::move(status);
@@ -6632,7 +6741,9 @@ class ReplicationManager::ReplicationGroup {
     }
 
     if (apply_here) {
-      absl::Status status = co_await MaybePauseBeforeReplicaControlApply();
+      absl::Status status = absl::OkStatus();
+      KEYLANE_FAULT_INJECT(status =
+                               co_await MaybePauseBeforeReplicaControlApply(););
       if (status.ok()) {
         status = co_await ApplyReplicatedCommand(apply_command);
       }
@@ -6695,7 +6806,7 @@ class ReplicationManager::ReplicationGroup {
     bool ack_done_ = false;
   };
 
-#if !defined(NDEBUG) || KEYLANE_ENABLE_TEST_FAULTS
+#if KEYLANE_FAULTS_ENABLED
   void InjectPeerFlowCancelAfterCommandApply(
       const std::shared_ptr<ReplicaSession>& session, unsigned flow_id,
       const ReplicatedCommand& command) {
@@ -6776,16 +6887,15 @@ class ReplicationManager::ReplicationGroup {
           applied = co_await ApplyReplicaControl(session, flow_id, pending.lsn_,
                                                  std::move(pending.command_));
         } else if (applied.ok()) {
-          applied = co_await MaybePauseBeforeReplicaCommandApply();
+          KEYLANE_FAULT_INJECT(
+              applied = co_await MaybePauseBeforeReplicaCommandApply(););
           if (applied.ok()) {
             applied = co_await ApplyReplicatedCommand(pending.command_);
           }
-#if !defined(NDEBUG) || KEYLANE_ENABLE_TEST_FAULTS
-          if (applied.ok()) {
+          KEYLANE_FAULT_INJECT(if (applied.ok()) {
             InjectPeerFlowCancelAfterCommandApply(session, flow_id,
                                                   pending.command_);
-          }
-#endif
+          });
         }
       }
       if (!applied.ok()) {
@@ -7368,22 +7478,21 @@ class ReplicationManager::ReplicationGroup {
                              promoted.message()));
             spdlog::warn(
                 "replica session entered fail-stop before coordinator latch");
-#if !defined(NDEBUG) || KEYLANE_ENABLE_TEST_FAULTS
-            if (const char* configured =
-                    std::getenv("KEYLANE_REPLICATION_PAUSE_AFTER_FAIL_STOP_MS");
-                configured != nullptr) {
-              std::uint64_t pause_ms = 0;
-              const std::size_t length = std::strlen(configured);
-              const auto parsed =
-                  std::from_chars(configured, configured + length, pause_ms);
-              if (parsed.ec == std::errc{} &&
-                  parsed.ptr == configured + length && pause_ms != 0) {
-                (void)co_await celer::SleepFor(
-                    *celer::ThisWorker().self_,
-                    std::chrono::milliseconds(pause_ms));
-              }
-            }
-#endif
+            KEYLANE_FAULT_INJECT(
+                if (const char* configured = std::getenv(
+                        "KEYLANE_REPLICATION_PAUSE_AFTER_FAIL_STOP_MS");
+                    configured != nullptr) {
+                  std::uint64_t pause_ms = 0;
+                  const std::size_t length = std::strlen(configured);
+                  const auto parsed = std::from_chars(
+                      configured, configured + length, pause_ms);
+                  if (parsed.ec == std::errc{} &&
+                      parsed.ptr == configured + length && pause_ms != 0) {
+                    (void)co_await celer::SleepFor(
+                        *celer::ThisWorker().self_,
+                        std::chrono::milliseconds(pause_ms));
+                  }
+                });
             session->promotion_complete_->Abort(promoted);
             co_return promoted;
           }
@@ -7544,107 +7653,105 @@ class ReplicationManager::ReplicationGroup {
   }
 
   bool ShouldInjectFlowDrop(unsigned flow_id) {
-    const char* configured = replication_drop_flow_after_command_;
-    if (configured == nullptr) return false;
-    unsigned target = 0;
-    const std::size_t length = std::strlen(configured);
-    const auto parsed =
-        std::from_chars(configured, configured + length, target);
-    if (parsed.ec != std::errc{} || parsed.ptr != configured + length ||
-        target != flow_id) {
-      return false;
-    }
-    return !replication_fault_drop_used_.exchange(true,
-                                                  std::memory_order_acq_rel);
+    KEYLANE_FAULT_INJECT({
+      const char* configured = replication_drop_flow_after_command_;
+      if (configured == nullptr) return false;
+      unsigned target = 0;
+      const std::size_t length = std::strlen(configured);
+      const auto parsed =
+          std::from_chars(configured, configured + length, target);
+      if (parsed.ec != std::errc{} || parsed.ptr != configured + length ||
+          target != flow_id) {
+        return false;
+      }
+      return !replication_fault_drop_used_.exchange(true,
+                                                    std::memory_order_acq_rel);
+    });
+    (void)flow_id;
+    return false;
   }
 
   bool ShouldInjectControlDropAfterResponse() {
-    const char* configured = replication_drop_after_control_response_once_;
-    if (configured == nullptr || std::string_view(configured) != "1") {
-      return false;
-    }
-    bool expected = false;
-    return replication_control_response_fault_drop_used_
-        .compare_exchange_strong(expected, true, std::memory_order_acq_rel);
+    KEYLANE_FAULT_INJECT({
+      const char* configured = replication_drop_after_control_response_once_;
+      if (configured == nullptr || std::string_view(configured) != "1") {
+        return false;
+      }
+      bool expected = false;
+      return replication_control_response_fault_drop_used_
+          .compare_exchange_strong(expected, true, std::memory_order_acq_rel);
+    });
+    return false;
   }
 
   bool ShouldInjectFullSyncCutDrop(unsigned flow_id) {
-#if !defined(NDEBUG) || KEYLANE_ENABLE_TEST_FAULTS
-    if (flow_id != 0) return false;
-    const char* configured =
-        std::getenv("KEYLANE_REPLICATION_DROP_AFTER_FULLSYNC_CUT");
-    if (configured == nullptr) return false;
-    unsigned occurrence = 0;
-    const std::size_t length = std::strlen(configured);
-    const auto parsed =
-        std::from_chars(configured, configured + length, occurrence);
-    if (parsed.ec != std::errc{} || parsed.ptr != configured + length ||
-        occurrence == 0) {
-      return false;
-    }
-    return replication_fullsync_cut_ack_count_.fetch_add(
-               1, std::memory_order_acq_rel) +
-               1 ==
-           occurrence;
-#else
+    KEYLANE_FAULT_INJECT({
+      if (flow_id != 0) return false;
+      const char* configured =
+          std::getenv("KEYLANE_REPLICATION_DROP_AFTER_FULLSYNC_CUT");
+      if (configured == nullptr) return false;
+      unsigned occurrence = 0;
+      const std::size_t length = std::strlen(configured);
+      const auto parsed =
+          std::from_chars(configured, configured + length, occurrence);
+      if (parsed.ec != std::errc{} || parsed.ptr != configured + length ||
+          occurrence == 0) {
+        return false;
+      }
+      return replication_fullsync_cut_ack_count_.fetch_add(
+                 1, std::memory_order_acq_rel) +
+                 1 ==
+             occurrence;
+    });
     (void)flow_id;
     return false;
-#endif
   }
 
   bool ShouldInjectReplicaPromotionFailure() {
-#if !defined(NDEBUG) || KEYLANE_ENABLE_TEST_FAULTS
-    const char* configured =
-        std::getenv("KEYLANE_REPLICATION_FAIL_PROMOTE_ONCE");
-    if (configured == nullptr || std::string_view(configured) != "1") {
-      return false;
-    }
-    return !replication_promotion_fault_used_.exchange(
-        true, std::memory_order_acq_rel);
-#else
+    KEYLANE_FAULT_INJECT({
+      const char* configured =
+          std::getenv("KEYLANE_REPLICATION_FAIL_PROMOTE_ONCE");
+      if (configured == nullptr || std::string_view(configured) != "1") {
+        return false;
+      }
+      return !replication_promotion_fault_used_.exchange(
+          true, std::memory_order_acq_rel);
+    });
     return false;
-#endif
   }
 
   bool ShouldInjectEarlyOnline() const {
-#if !defined(NDEBUG) || KEYLANE_ENABLE_TEST_FAULTS
-    const char* configured = std::getenv("KEYLANE_REPLICATION_EARLY_ONLINE");
-    return configured != nullptr && std::string_view(configured) == "1";
-#else
-    return false;
-#endif
+    return KEYLANE_FAULT_MATCHES("KEYLANE_REPLICATION_EARLY_ONLINE", "1");
   }
 
   bool ShouldInjectPostCutReset(unsigned flow_id) {
-#if !defined(NDEBUG) || KEYLANE_ENABLE_TEST_FAULTS
-    if (flow_id != 0) return false;
-    const char* configured =
-        std::getenv("KEYLANE_REPLICATION_POST_CUT_RESET_ONCE");
-    if (configured == nullptr || std::string_view(configured) != "1") {
-      return false;
-    }
-    return !replication_post_cut_reset_fault_used_.exchange(
-        true, std::memory_order_acq_rel);
-#else
+    KEYLANE_FAULT_INJECT({
+      if (flow_id != 0) return false;
+      const char* configured =
+          std::getenv("KEYLANE_REPLICATION_POST_CUT_RESET_ONCE");
+      if (configured == nullptr || std::string_view(configured) != "1") {
+        return false;
+      }
+      return !replication_post_cut_reset_fault_used_.exchange(
+          true, std::memory_order_acq_rel);
+    });
     (void)flow_id;
     return false;
-#endif
   }
 
   bool ShouldInjectDivergentTail(unsigned flow_id) {
-#if !defined(NDEBUG) || KEYLANE_ENABLE_TEST_FAULTS
-    if (flow_id != 0) return false;
-    const char* configured =
-        std::getenv("KEYLANE_REPLICATION_DIVERGENT_TAIL_ONCE");
-    if (configured == nullptr || std::string_view(configured) != "1") {
-      return false;
-    }
-    return !replication_divergent_tail_fault_used_.exchange(
-        true, std::memory_order_acq_rel);
-#else
+    KEYLANE_FAULT_INJECT({
+      if (flow_id != 0) return false;
+      const char* configured =
+          std::getenv("KEYLANE_REPLICATION_DIVERGENT_TAIL_ONCE");
+      if (configured == nullptr || std::string_view(configured) != "1") {
+        return false;
+      }
+      return !replication_divergent_tail_fault_used_.exchange(
+          true, std::memory_order_acq_rel);
+    });
     (void)flow_id;
     return false;
-#endif
   }
 
   void InvalidateReplicaContinuation(
@@ -7693,35 +7800,46 @@ class ReplicationManager::ReplicationGroup {
   }
 
   bool ShouldInjectFlowDropAfterTransaction(unsigned flow_id) {
-    const char* configured = replication_drop_flow_after_transaction_apply_;
-    if (configured == nullptr) return false;
-    unsigned target = 0;
-    const std::size_t length = std::strlen(configured);
-    const auto parsed =
-        std::from_chars(configured, configured + length, target);
-    if (parsed.ec != std::errc{} || parsed.ptr != configured + length ||
-        target != flow_id) {
-      return false;
-    }
-    return !replication_transaction_fault_drop_used_.exchange(
-        true, std::memory_order_acq_rel);
+    KEYLANE_FAULT_INJECT({
+      const char* configured = replication_drop_flow_after_transaction_apply_;
+      if (configured == nullptr) return false;
+      unsigned target = 0;
+      const std::size_t length = std::strlen(configured);
+      const auto parsed =
+          std::from_chars(configured, configured + length, target);
+      if (parsed.ec != std::errc{} || parsed.ptr != configured + length ||
+          target != flow_id) {
+        return false;
+      }
+      return !replication_transaction_fault_drop_used_.exchange(
+          true, std::memory_order_acq_rel);
+    });
+    (void)flow_id;
+    return false;
   }
 
   bool ShouldInjectFlowDropAfterCommandApply(unsigned flow_id) {
-    const char* configured = replication_drop_flow_after_command_apply_;
-    if (configured == nullptr) return false;
-    unsigned target = 0;
-    const std::size_t length = std::strlen(configured);
-    const auto parsed =
-        std::from_chars(configured, configured + length, target);
-    if (parsed.ec != std::errc{} || parsed.ptr != configured + length ||
-        target != flow_id) {
-      return false;
-    }
-    return !replication_command_apply_fault_drop_used_.exchange(
-        true, std::memory_order_acq_rel);
+    KEYLANE_FAULT_INJECT({
+      const char* configured = replication_drop_flow_after_command_apply_;
+      if (configured == nullptr) return false;
+      unsigned target = 0;
+      const std::size_t length = std::strlen(configured);
+      const auto parsed =
+          std::from_chars(configured, configured + length, target);
+      if (parsed.ec != std::errc{} || parsed.ptr != configured + length ||
+          target != flow_id) {
+        return false;
+      }
+      return !replication_command_apply_fault_drop_used_.exchange(
+          true, std::memory_order_acq_rel);
+    });
+    (void)flow_id;
+    return false;
   }
 
+#if KEYLANE_FAULTS_ENABLED
+  // These coroutines and their call sites are test-only, so ordinary builds
+  // do not allocate an empty pause task on each ONLINE mutation or barrier.
   Task<absl::Status> MaybePauseBeforeReplicaCommandApply() {
     const char* configured = replication_pause_before_command_apply_ms_;
     if (configured == nullptr) co_return absl::OkStatus();
@@ -7780,7 +7898,6 @@ class ReplicationManager::ReplicationGroup {
   }
 
   Task<absl::Status> MaybePauseBeforeRedisExportDbAdmission() {
-#ifndef NDEBUG
     const char* configured =
         std::getenv("KEYLANE_REPLICATION_PAUSE_REDIS_EXPORT_BEFORE_GATES_MS");
     if (configured != nullptr) {
@@ -7798,9 +7915,9 @@ class ReplicationManager::ReplicationGroup {
             std::chrono::milliseconds(milliseconds));
       }
     }
-#endif
     co_return absl::OkStatus();
   }
+#endif
 
   Task<absl::Status> RunMasterFlowData(
       TcpStream& stream, const std::shared_ptr<MasterSession>& session,
@@ -8159,36 +8276,35 @@ class ReplicationManager::ReplicationGroup {
     // exact even when earlier FUNCTION mutations were also captured while the
     // key snapshot was being scanned.
     auto send_function_catalog = [&]() -> Task<absl::Status> {
-#ifndef NDEBUG
-      if (const char* configured = std::getenv(
-              "KEYLANE_REPLICATION_PAUSE_FULLSYNC_BEFORE_CATALOG_ACK_MS");
-          configured != nullptr &&
-          !replication_fullsync_catalog_pause_used_.exchange(
-              true, std::memory_order_acq_rel)) {
-        std::uint64_t pause_ms = 0;
-        const std::size_t length = std::strlen(configured);
-        const auto parsed =
-            std::from_chars(configured, configured + length, pause_ms);
-        if (parsed.ec == std::errc{} && parsed.ptr == configured + length &&
-            pause_ms != 0 && pause_ms <= 60000) {
-          spdlog::info(
-              "native full sync holds command gates before catalog "
-              "acknowledgement");
-          const auto deadline = std::chrono::steady_clock::now() +
-                                std::chrono::milliseconds(pause_ms);
-          while (!session->cancelled() &&
-                 std::chrono::steady_clock::now() < deadline) {
-            absl::Status paused = co_await celer::SleepFor(
-                *celer::ThisWorker().self_, std::chrono::milliseconds(1));
-            if (!paused.ok()) co_return paused;
-          }
-          if (session->cancelled()) {
-            co_return absl::CancelledError(
-                "replication session ended before catalog acknowledgement");
-          }
-        }
-      }
-#endif
+      KEYLANE_FAULT_INJECT(
+          if (const char* configured = std::getenv(
+                  "KEYLANE_REPLICATION_PAUSE_FULLSYNC_BEFORE_CATALOG_ACK_MS");
+              configured != nullptr &&
+              !replication_fullsync_catalog_pause_used_.exchange(
+                  true, std::memory_order_acq_rel)) {
+            std::uint64_t pause_ms = 0;
+            const std::size_t length = std::strlen(configured);
+            const auto parsed =
+                std::from_chars(configured, configured + length, pause_ms);
+            if (parsed.ec == std::errc{} && parsed.ptr == configured + length &&
+                pause_ms != 0 && pause_ms <= 60000) {
+              spdlog::info(
+                  "native full sync holds command gates before catalog "
+                  "acknowledgement");
+              const auto deadline = std::chrono::steady_clock::now() +
+                                    std::chrono::milliseconds(pause_ms);
+              while (!session->cancelled() &&
+                     std::chrono::steady_clock::now() < deadline) {
+                absl::Status paused = co_await celer::SleepFor(
+                    *celer::ThisWorker().self_, std::chrono::milliseconds(1));
+                if (!paused.ok()) co_return paused;
+              }
+              if (session->cancelled()) {
+                co_return absl::CancelledError(
+                    "replication session ended before catalog acknowledgement");
+              }
+            }
+          });
       auto catalog_operation = co_await AcquireFunctionCatalogOperation();
       std::vector<std::string> args{"FUNCTION", "RESTORE",
                                     GlobalFunctionCatalog().SnapshotDump(),
@@ -8337,7 +8453,8 @@ class ReplicationManager::ReplicationGroup {
           fullsync_sequence);
       if (!sent.ok()) co_return sent;
       ++fullsync_sequence;
-      if (const char* configured = std::getenv(
+      KEYLANE_FAULT_INJECT(if (
+          const char* configured = std::getenv(
               "KEYLANE_REPLICATION_PAUSE_FULLSYNC_AFTER_HANDOFF_MS");
           configured != nullptr &&
           !replication_fullsync_handoff_pause_used_.exchange(
@@ -8355,7 +8472,7 @@ class ReplicationManager::ReplicationGroup {
           sent = co_await celer::SleepFor(*celer::ThisWorker().self_,
                                           std::chrono::milliseconds(pause_ms));
         }
-      }
+      });
       co_return sent;
     };
 
@@ -8435,24 +8552,27 @@ class ReplicationManager::ReplicationGroup {
         cleanup();
         co_return sent;
       }
-      if (const char* configured =
-              std::getenv("KEYLANE_REPLICATION_PAUSE_FULLSYNC_AFTER_RESET_MS");
-          configured != nullptr && !replication_fullsync_pause_used_.exchange(
-                                       true, std::memory_order_acq_rel)) {
-        std::uint64_t pause_ms = 0;
-        const std::size_t length = std::strlen(configured);
-        const auto parsed =
-            std::from_chars(configured, configured + length, pause_ms);
-        if (parsed.ec == std::errc{} && parsed.ptr == configured + length &&
-            pause_ms != 0) {
-          absl::Status paused = co_await celer::SleepFor(
-              *celer::ThisWorker().self_, std::chrono::milliseconds(pause_ms));
-          if (!paused.ok()) {
-            cleanup();
-            co_return paused;
-          }
-        }
-      }
+      KEYLANE_FAULT_INJECT(
+          if (const char* configured = std::getenv(
+                  "KEYLANE_REPLICATION_PAUSE_FULLSYNC_AFTER_RESET_MS");
+              configured != nullptr &&
+              !replication_fullsync_pause_used_.exchange(
+                  true, std::memory_order_acq_rel)) {
+            std::uint64_t pause_ms = 0;
+            const std::size_t length = std::strlen(configured);
+            const auto parsed =
+                std::from_chars(configured, configured + length, pause_ms);
+            if (parsed.ec == std::errc{} && parsed.ptr == configured + length &&
+                pause_ms != 0) {
+              absl::Status paused =
+                  co_await celer::SleepFor(*celer::ThisWorker().self_,
+                                           std::chrono::milliseconds(pause_ms));
+              if (!paused.ok()) {
+                cleanup();
+                co_return paused;
+              }
+            }
+          });
 
       for (const std::uint16_t partition_id : reset_partitions) {
         // Reset and handoff cover every physical partition so stale keys cannot
@@ -8787,20 +8907,22 @@ class ReplicationManager::ReplicationGroup {
     if (flow_id == 0) {
       gate_reopen.Open();
       command_gate_reopen.Open();
-      if (const char* configured =
-              std::getenv("KEYLANE_REPLICATION_PAUSE_FULLSYNC_BEFORE_CUT_MS");
-          configured != nullptr) {
-        std::uint64_t pause_ms = 0;
-        const std::size_t length = std::strlen(configured);
-        const auto parsed =
-            std::from_chars(configured, configured + length, pause_ms);
-        if (parsed.ec == std::errc{} && parsed.ptr == configured + length &&
-            pause_ms != 0) {
-          absl::Status paused = co_await celer::SleepFor(
-              *celer::ThisWorker().self_, std::chrono::milliseconds(pause_ms));
-          if (!paused.ok()) co_return paused;
-        }
-      }
+      KEYLANE_FAULT_INJECT(
+          if (const char* configured = std::getenv(
+                  "KEYLANE_REPLICATION_PAUSE_FULLSYNC_BEFORE_CUT_MS");
+              configured != nullptr) {
+            std::uint64_t pause_ms = 0;
+            const std::size_t length = std::strlen(configured);
+            const auto parsed =
+                std::from_chars(configured, configured + length, pause_ms);
+            if (parsed.ec == std::errc{} && parsed.ptr == configured + length &&
+                pause_ms != 0) {
+              absl::Status paused =
+                  co_await celer::SleepFor(*celer::ThisWorker().self_,
+                                           std::chrono::milliseconds(pause_ms));
+              if (!paused.ok()) co_return paused;
+            }
+          });
     }
     // The fence fixed this flow's stable ONLINE cursor. Source admission is
     // already open again; a slow target can delay only this session while
@@ -9829,8 +9951,10 @@ class ReplicationManager::ReplicationGroup {
   std::optional<std::string> upstream_node_id_;
   std::optional<std::string> upstream_history_id_;
   std::string failure_reason_;  // guarded by state_mutex_
-  // Fault-injection settings are process-startup inputs. Cache their pointers
-  // before workers launch so the ONLINE command and ACK paths do not enter
+#if KEYLANE_FAULTS_ENABLED
+  // Fault-injection settings are process-startup inputs in fault-enabled
+  // binaries only. Ordinary releases neither read them nor keep fault state.
+  // Cache their pointers before workers launch so ONLINE/ACK paths do not enter
   // libc getenv for every replicated mutation. Runtime setenv is unsupported;
   // the environment owns these strings for the process lifetime.
   const char* const replication_drop_flow_after_command_ =
@@ -9863,6 +9987,7 @@ class ReplicationManager::ReplicationGroup {
   std::atomic<bool> replication_fullsync_pause_used_{false};
   std::atomic<bool> replication_fullsync_handoff_pause_used_{false};
   std::atomic<bool> replication_fullsync_catalog_pause_used_{false};
+#endif
   std::atomic<unsigned> snapshot_read_concurrency_{
       kDefaultReplicationSnapshotReadConcurrency};
   std::atomic<std::size_t> snapshot_batch_size_{kSnapshotKeysPerBatch};

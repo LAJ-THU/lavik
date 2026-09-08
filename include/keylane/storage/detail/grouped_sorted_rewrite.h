@@ -1,0 +1,34 @@
+/*
+ * Copyright (C) 2026 EloqData Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#pragma once
+
+#include "keylane/storage/detail/grouped_collection.h"
+
+namespace keylane::storage {
+
+// Bridges a complete logical Sorted Set callback result to changed physical
+// pages. Old page upper bounds remain routing fences for this mutation, so a
+// member moving from one end to the other changes its source/destination
+// pages, not the intervening collection. Empty pages are durably retired and
+// split/link updates share the caller's one root/batch publication boundary.
+absl::StatusOr<OrderedCollectionMutationPlan> PlanSortedSetRewrite(
+    const OrderedGroupDirectory& directory,
+    std::span<const OrderedCollectionEntry> before,
+    std::vector<OrderedCollectionEntry> after,
+    std::size_t target_bytes = kOrderedGroupTargetBytes);
+
+}  // namespace keylane::storage
