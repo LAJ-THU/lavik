@@ -206,6 +206,7 @@ bool MayGrowMemory(const CommandRequest& request) noexcept {
     case CommandKind::kLInsert:
     case CommandKind::kHSet:
     case CommandKind::kHMSet:
+    case CommandKind::kHReplace:
     case CommandKind::kHSetNx:
     case CommandKind::kHIncrBy:
     case CommandKind::kHIncrByFloat:
@@ -4194,6 +4195,7 @@ Task<CommandReply> ExecuteStorageCommand(const CommandRequest& request,
 
     case CommandKind::kHSet:
     case CommandKind::kHMSet:
+    case CommandKind::kHReplace:
     case CommandKind::kHSetNx:
     case CommandKind::kHGet:
     case CommandKind::kHMGet:
@@ -5004,6 +5006,7 @@ Task<std::string> RunSingleKeyLocked(std::uint8_t db_id,
 
     case CommandKind::kHSet:
     case CommandKind::kHMSet:
+    case CommandKind::kHReplace:
     case CommandKind::kHSetNx:
     case CommandKind::kHGet:
     case CommandKind::kHMGet:
@@ -12027,6 +12030,7 @@ Task<CommandReply> ExecuteCommandBody(
     case CommandKind::kLPos:
     case CommandKind::kHSet:
     case CommandKind::kHMSet:
+    case CommandKind::kHReplace:
     case CommandKind::kHSetNx:
     case CommandKind::kHGet:
     case CommandKind::kHMGet:
