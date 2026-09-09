@@ -38,4 +38,8 @@ void WriteMetaEvidenceSummary(MetaWriter& writer,
                               const MetaEvidenceSummary& evidence);
 absl::StatusOr<MetaEvidenceSummary> ReadMetaEvidenceSummary(MetaReader& reader);
 
+void WriteMetaDirectiveSpec(MetaWriter& writer,
+                            const MetaDirectiveSpec& directive);
+absl::StatusOr<MetaDirectiveSpec> ReadMetaDirectiveSpec(MetaReader& reader);
+
 }  // namespace keylane::meta

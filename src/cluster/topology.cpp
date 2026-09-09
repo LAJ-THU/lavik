@@ -113,6 +113,12 @@ void HashNodeId(std::uint64_t& hash, const NodeId& node_id) {
   for (std::uint8_t byte : node_id.bytes()) HashByte(hash, byte);
 }
 
+void HashAssignmentId(std::uint64_t& hash, const AssignmentId& assignment_id) {
+  HashBool(hash, !assignment_id.empty());
+  if (assignment_id.empty()) return;
+  for (std::uint8_t byte : assignment_id.bytes()) HashByte(hash, byte);
+}
+
 const NodeDescriptor* NodeAt(const std::vector<NodeDescriptor>& nodes,
                              NodeIndex node_index) {
   if (node_index == kNoNodeIndex || node_index >= nodes.size()) return nullptr;
@@ -139,7 +145,11 @@ std::uint64_t ComputeGroupToken(const GroupView& group,
                                 const std::vector<NodeDescriptor>& nodes) {
   std::uint64_t hash = kFnv1aOffsetBasis;
   HashNodeReference(hash, nodes, group.primary_node_index_);
+  HashAssignmentId(hash, group.assignment_id_);
   HashU64(hash, group.group_term_);
+  HashU64(hash, group.authority_version_);
+  HashU64(hash, group.grant_revision_);
+  HashU64(hash, group.manifest_revision_);
   HashBool(hash, group.granted_);
   HashBool(hash, group.population_ready_);
   HashBool(hash, group.storage_ready_);
@@ -193,6 +203,7 @@ std::uint64_t ComputeContentHash(
   for (const GroupView* group : sorted_groups) {
     HashString(hash, group->group_id_);
     HashNodeReference(hash, nodes, group->primary_node_index_);
+    HashAssignmentId(hash, group->assignment_id_);
     std::vector<NodeId> replicas;
     replicas.reserve(group->replica_node_indices_.size());
     for (NodeIndex replica_index : group->replica_node_indices_) {
@@ -202,6 +213,9 @@ std::uint64_t ComputeContentHash(
     HashU64(hash, replicas.size());
     for (const NodeId& replica : replicas) HashNodeId(hash, replica);
     HashU64(hash, group->group_term_);
+    HashU64(hash, group->authority_version_);
+    HashU64(hash, group->grant_revision_);
+    HashU64(hash, group->manifest_revision_);
     HashBool(hash, group->granted_);
     HashBool(hash, group->population_ready_);
     HashBool(hash, group->storage_ready_);
@@ -470,6 +484,7 @@ absl::StatusOr<std::shared_ptr<const ServingState>> ServingStateBuilder::Build()
   state->groups_ = groups_;
   state->slot_to_group_ = slot_to_group;
   state->covered_slots_ = covered_slots;
+  state->in_flight_stripe_count_ = in_flight_stripe_count_;
   state->group_tokens_.reserve(state->groups_.size());
   for (const GroupView& group : state->groups_) {
     state->group_tokens_.push_back(ComputeGroupToken(group, state->nodes_));

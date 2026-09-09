@@ -177,7 +177,8 @@ struct SingleShardListOutcome {
 Task<SingleShardListOutcome> ExecuteSingleShardListMulti(
     std::uint8_t db_id, std::vector<std::string> keys, bool move,
     bool source_left, bool destination_left, bool pop_left,
-    std::uint64_t pop_count, ReplicationTransactionGuard* replication) {
+    std::uint64_t pop_count, ReplicationTransactionGuard* replication,
+    storage::MutationPrecondition mutation_precondition) {
   std::vector<tx::KeyRef> locks;
   locks.reserve(keys.size());
   for (const std::string& key : keys) {
@@ -205,7 +206,8 @@ Task<SingleShardListOutcome> ExecuteSingleShardListMulti(
       pop.count_ = pop_count;
       pop.count_provided_ = true;
       auto result = co_await g_storage->ExecuteListLocked(
-          db_id, key, storage::ComputeDigest(key), pop);
+          db_id, key, storage::ComputeDigest(key), pop, nullptr, nullptr,
+          &mutation_precondition);
       if (!result.ok()) {
         co_return SingleShardListOutcome(result.status());
       }
@@ -222,7 +224,8 @@ Task<SingleShardListOutcome> ExecuteSingleShardListMulti(
   if (source == destination) {
     const std::uint64_t txid = storage::StorageEngine::AllocateWriteTxid();
     storage::TxShardWrites writes;
-    g_storage->InitializeTxWrites(txid, std::span(&writes, 1));
+    g_storage->InitializeTxWrites(txid, std::span(&writes, 1),
+                                  mutation_precondition);
     writes.collect_undo_ = true;
     storage::ListOperation operation;
     operation.kind_ = storage::ListOperationKind::kMoveWithin;
@@ -257,7 +260,8 @@ Task<SingleShardListOutcome> ExecuteSingleShardListMulti(
 
   const std::uint64_t txid = storage::StorageEngine::AllocateWriteTxid();
   storage::TxShardWrites writes;
-  g_storage->InitializeTxWrites(txid, std::span(&writes, 1));
+  g_storage->InitializeTxWrites(txid, std::span(&writes, 1),
+                                mutation_precondition);
   writes.collect_undo_ = true;
   storage::ListOperation pop;
   pop.kind_ = source_left ? storage::ListOperationKind::kPopLeft
@@ -447,8 +451,11 @@ Task<CommandReply> ExecuteSingleListCommandImpl(const CommandRequest& request,
   auto replication =
       tx == nullptr ? PrepareReplicationCommand(request) : std::nullopt;
   if (digest == nullptr) {
+    const storage::MutationPrecondition mutation_precondition =
+        ClusterMutationPrecondition(request);
     result = co_await g_storage->ExecuteList(
-        request.db_id_, args[1], op, replication ? &*replication : nullptr);
+        request.db_id_, args[1], op, replication ? &*replication : nullptr,
+        &mutation_precondition);
   } else {
     result = co_await g_storage->ExecuteListLocked(
         request.db_id_, args[1], *digest, op, tx,
@@ -547,6 +554,8 @@ Task<CommandReply> ExecuteListMultiKey(const CommandRequest& request,
                                        bool* unavailable) {
   if (unavailable != nullptr) *unavailable = false;
   const auto& args = request.args_;
+  const storage::MutationPrecondition mutation_precondition =
+      ClusterMutationPrecondition(request);
   const bool move = request.kind_ == CommandKind::kLMove ||
                     request.kind_ == CommandKind::kRPopLPush;
   std::vector<std::size_t> key_args;
@@ -646,6 +655,7 @@ Task<CommandReply> ExecuteListMultiKey(const CommandRequest& request,
         first_owner,
         [&request, db_id = request.db_id_, keys = std::move(keys), move,
          source_left, destination_left, pop_left, pop_count,
+         mutation_precondition,
          replication = &replication]() mutable -> Task<SingleShardListOutcome> {
           // Choke point 2 for the transaction-free single-shard path: re-check
           // the cluster admission on the owner right before mutating. Cluster
@@ -657,7 +667,7 @@ Task<CommandReply> ExecuteListMultiKey(const CommandRequest& request,
           }
           co_return co_await ExecuteSingleShardListMulti(
               db_id, std::move(keys), move, source_left, destination_left,
-              pop_left, pop_count, replication);
+              pop_left, pop_count, replication, mutation_precondition);
         });
     if (!outcome.status_.ok()) {
       if (IsClusterAuthorityChanged(outcome.status_)) {
@@ -737,9 +747,11 @@ Task<CommandReply> ExecuteListMultiKey(const CommandRequest& request,
       const storage::Digest digest = storage::ComputeDigest(args[arg]);
       auto popped = co_await celer::SubmitTaskTo(
           ShardForKey(args[arg]),
-          [db = request.db_id_, key = std::string(args[arg]), digest,
-           op]() mutable {
-            return g_storage->ExecuteListLocked(db, key, digest, op);
+          [db = request.db_id_, key = std::string(args[arg]), digest, op,
+           mutation_precondition]() mutable
+          -> Task<absl::StatusOr<storage::ListResult>> {
+            co_return co_await g_storage->ExecuteListLocked(
+                db, key, digest, op, nullptr, nullptr, &mutation_precondition);
           });
       if (!popped.ok()) {
         (void)co_await release();
@@ -779,8 +791,11 @@ Task<CommandReply> ExecuteListMultiKey(const CommandRequest& request,
     const storage::Digest digest = storage::ComputeDigest(source_key);
     auto moved = co_await celer::SubmitTaskTo(
         ShardForKey(source_key),
-        [db = request.db_id_, key = std::string(source_key), digest, op] {
-          return g_storage->ExecuteListLocked(db, key, digest, op);
+        [db = request.db_id_, key = std::string(source_key), digest, op,
+         mutation_precondition]() mutable
+        -> Task<absl::StatusOr<storage::ListResult>> {
+          co_return co_await g_storage->ExecuteListLocked(
+              db, key, digest, op, nullptr, nullptr, &mutation_precondition);
         });
     (void)co_await release();
     if (!moved.ok()) {
@@ -796,7 +811,7 @@ Task<CommandReply> ExecuteListMultiKey(const CommandRequest& request,
 
   const std::uint64_t txid = storage::StorageEngine::AllocateWriteTxid();
   std::vector<storage::TxShardWrites> writes(g_storage->worker_count());
-  g_storage->InitializeTxWrites(txid, writes);
+  g_storage->InitializeTxWrites(txid, writes, mutation_precondition);
   for (auto& write : writes) {
     write.collect_undo_ = true;
   }
@@ -1010,6 +1025,11 @@ Task<CommandReply> ExecuteBlockingListCommand(const CommandRequest& request,
 
   auto attempt =
       [&](BlockingWakeCascade* cascade) -> Task<BlockingAttemptResult> {
+    // ExecuteBlockingWaitLoop may have re-armed the original request after an
+    // authority publication. The rewritten non-blocking form must carry that
+    // exact protected proof into its transaction validators.
+    nonblocking.cluster_authority_admission_ =
+        request.cluster_authority_admission_;
     nonblocking.blocking_wake_cascade_ = cascade;
     ReplyBuilder attempt_builder(nonblocking.resp_version_);
     bool unavailable = false;

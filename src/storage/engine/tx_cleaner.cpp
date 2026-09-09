@@ -31,8 +31,9 @@ std::int64_t MonotonicMillis() noexcept {
 
 }  // namespace
 
-void StorageEngine::Impl::InitializeTxWrites(std::uint64_t txid,
-                                             std::span<TxShardWrites> writes) {
+void StorageEngine::Impl::InitializeTxWrites(
+    std::uint64_t txid, std::span<TxShardWrites> writes,
+    MutationPrecondition precondition) {
   if (writes.empty()) return;
 
   const std::uint64_t generation =
@@ -56,6 +57,7 @@ void StorageEngine::Impl::InitializeTxWrites(std::uint64_t txid,
     shard.txid_ = txid;
     shard.generation_ = generation;
     shard.generation_lease_ = lease;
+    shard.mutation_precondition_ = precondition;
   }
 }
 
