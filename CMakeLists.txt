@@ -433,6 +433,7 @@ add_library(keylane_module
   src/memory.cpp
   src/metrics.cpp
   src/replication/command.cpp
+  src/replication/replica_applied_frontier.cpp
   src/replication/replication_group.cpp
   src/replication/replication.cpp
   src/redis/resp.cpp
@@ -585,6 +586,7 @@ if (KEYLANE_BUILD_META)
   # peer transport and timers.
   set(KEYLANE_META_CORE_SOURCES
     src/meta/audit_store.cpp
+    src/meta/candidate_plan.cpp
     src/meta/commands.cpp
     src/meta/control_projector.cpp
     src/meta/coordinator.cpp
@@ -778,6 +780,7 @@ if (BUILD_TESTING)
     # for explicit Meta-projection-to-Data-validation contract tests.
     add_executable(keylane_meta_tests
       tests/meta_coordinator_test.cpp
+      tests/meta_candidate_plan_test.cpp
       tests/meta_control_projector_test.cpp
       tests/meta_data_control_server_test.cpp
       tests/meta_journal_test.cpp
@@ -1094,6 +1097,7 @@ if (BUILD_TESTING)
     tests/request_gate_test.cpp
     tests/replication_command_test.cpp
     tests/replication_group_test.cpp
+    tests/replica_applied_frontier_test.cpp
     tests/ring_buffer_test.cpp
     tests/tx_lock_test.cpp
     tests/storage_format_test.cpp
@@ -1106,6 +1110,7 @@ if (BUILD_TESTING)
   )
   target_include_directories(keylane_unit_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/redis
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/replication
   )
   gtest_discover_tests(keylane_unit_tests)
 

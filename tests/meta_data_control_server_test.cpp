@@ -186,6 +186,10 @@ class HeartbeatFacts : public MetaCommittedFacts {
       std::string_view group_id) const override {
     return group_id == "group-a" ? 9 : 0;
   }
+  keylane::meta::MetaHash256 CurrentPopulationManifestDigest(
+      std::string_view) const override {
+    return {};
+  }
   std::uint64_t CurrentPartitionReplicationEpoch(
       std::string_view group_id) const override {
     return group_id == "group-a" ? 4 : 0;
@@ -195,6 +199,11 @@ class HeartbeatFacts : public MetaCommittedFacts {
       const keylane::meta::MetaAssignmentId& assignment_id) const override {
     return group_id == "group-a" && node_id == Identity('1') &&
            assignment_id == Bytes<16>(0x22);
+  }
+  bool IsOwnerAssignment(
+      std::string_view, std::string_view,
+      const keylane::meta::MetaAssignmentId&) const override {
+    return false;
   }
   bool OperationNonTerminal(
       const keylane::meta::MetaOperationId&) const override {
@@ -849,7 +858,7 @@ TEST(MetaDataControlFenceTest,
 }
 
 TEST(MetaHeartbeatObservationTest,
-     CandidateHistoryMismatchPreservesAcceptedBootAndHealth) {
+     ReporterHistoryIsIndependentAndRoleReplacementClearsCandidate) {
   MetaObservationStore observations;
   HeartbeatFacts facts;
   const auto boot = Bytes<20>(0x22);
@@ -862,11 +871,13 @@ TEST(MetaHeartbeatObservationTest,
       .assignment_id = Bytes<16>(0x22),
       .group_term = 7,
       .manifest_revision = 9,
+      .manifest_digest = {},
       .partition_replication_epoch = 4,
-      .replication_history_id = Identity('5'),
-      .applied_flow_vector = "flow-10",
-      .backlog_coverage = "through-9",
-      .readiness = "ready",
+      .source_node_id = Identity('3'),
+      .source_assignment_id = Bytes<16>(0x33),
+      .source_boot_id = Identity('4'),
+      .source_history_id = Identity('5'),
+      .applied_next_lsns = {10},
   };
   const control::HeartbeatHealth health{
       .storage_ready = true,
@@ -875,23 +886,24 @@ TEST(MetaHeartbeatObservationTest,
       .summary = "ok",
   };
 
-  const auto rejected =
+  const auto first =
       IngestHeartbeatObservations(observations, facts, Identity('1'), boot,
-                                  Bytes<20>(0x66), 1, health, candidate,
+                                  Bytes<20>(0x66), 1, health,
+                                  control::ReplicaCandidate{candidate},
                                   /*now_unix_ms=*/1001);
-  EXPECT_EQ(rejected.status, control::ObservationStatus::kRejected);
-  EXPECT_EQ(rejected.detail,
-            "candidate: replication history does not match ClientHello");
-  EXPECT_EQ(observations.size(), 2u);
-  EXPECT_TRUE(observations.CandidateProgressFor("group-a", facts).empty());
+  EXPECT_EQ(first.status, control::ObservationStatus::kAccepted);
+  EXPECT_EQ(observations.size(), 3u);
   const auto latest = observations.LatestForNode(Identity('1'), facts);
   ASSERT_TRUE(latest.has_value());
-  ASSERT_TRUE(std::holds_alternative<MetaNodeHealthObs>(latest->payload_));
+  ASSERT_TRUE(
+      std::holds_alternative<keylane::meta::MetaCandidateProgressObs>(
+          latest->payload_));
 
   candidate.partition_replication_epoch = 3;
   const auto stale_population =
       IngestHeartbeatObservations(observations, facts, Identity('1'), boot,
-                                  Bytes<20>(0x55), 1, health, candidate,
+                                  Bytes<20>(0x55), 1, health,
+                                  control::ReplicaCandidate{candidate},
                                   /*now_unix_ms=*/1002);
   EXPECT_EQ(stale_population.status, control::ObservationStatus::kRejected);
   EXPECT_EQ(stale_population.detail,
@@ -902,7 +914,8 @@ TEST(MetaHeartbeatObservationTest,
   candidate.assignment_id = Bytes<16>(0x23);
   const auto stale_assignment =
       IngestHeartbeatObservations(observations, facts, Identity('1'), boot,
-                                  Bytes<20>(0x55), 1, health, candidate,
+                                  Bytes<20>(0x55), 1, health,
+                                  control::ReplicaCandidate{candidate},
                                   /*now_unix_ms=*/1003);
   EXPECT_EQ(stale_assignment.status, control::ObservationStatus::kRejected);
   EXPECT_EQ(stale_assignment.detail, "candidate: assignment-mismatch");
@@ -911,7 +924,8 @@ TEST(MetaHeartbeatObservationTest,
   candidate.assignment_id = Bytes<16>(0x22);
   const auto accepted =
       IngestHeartbeatObservations(observations, facts, Identity('1'), boot,
-                                  Bytes<20>(0x55), 1, health, candidate,
+                                  Bytes<20>(0x55), 1, health,
+                                  control::ReplicaCandidate{candidate},
                                   /*now_unix_ms=*/1004);
   EXPECT_EQ(accepted.status, control::ObservationStatus::kAccepted);
   EXPECT_TRUE(accepted.detail.empty());
@@ -922,7 +936,17 @@ TEST(MetaHeartbeatObservationTest,
   EXPECT_EQ(progress.front().assignment_id_, Bytes<16>(0x22));
   EXPECT_EQ(progress.front().partition_replication_epoch_, 4u);
   EXPECT_EQ(progress.front().replication_history_id_, Bytes<20>(0x55));
-  EXPECT_EQ(progress.front().applied_flow_vector_, "flow-10");
+  EXPECT_EQ(progress.front().source_replication_history_id_, Bytes<20>(0x55));
+  EXPECT_EQ(progress.front().applied_next_lsns_,
+            (std::vector<std::uint64_t>{10}));
+  EXPECT_EQ(progress.front().applied_flow_vector_, "1:10");
+
+  const auto authority = IngestHeartbeatObservations(
+      observations, facts, Identity('1'), boot, Bytes<20>(0x55), 1, health,
+      control::AuthorityLeaseRequest{.challenge = Challenge()},
+      /*now_unix_ms=*/1005);
+  EXPECT_EQ(authority.status, control::ObservationStatus::kAccepted);
+  EXPECT_TRUE(observations.CandidateProgressFor("group-a", facts).empty());
 }
 
 TEST(MetaOperationEvidenceTest,
