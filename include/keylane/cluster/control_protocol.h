@@ -545,6 +545,9 @@ enum class WireDirectiveKind : std::uint8_t {
   kRebuild = 1,
   kAuthorizeSource = 2,
   kRevokeSources = 3,
+  // Source-less destructive initialization of the target's first committed
+  // population. Existing values are wire-stable; new kinds append only.
+  kInitializeEmptyPopulation = 4,
 };
 
 struct Directive {
@@ -565,12 +568,12 @@ struct Directive {
   WireHash256 manifest_digest{};
   std::uint64_t partition_replication_epoch = 0;
   WireDirectiveKind kind = WireDirectiveKind::kRebuild;
-  // Reserved in v1: codecs preserve these strings, but admission requires both
-  // empty until their execution semantics exist.
+  // V1 uses payload only for initialize-empty-population's target history id;
+  // every other kind requires it empty. Preconditions remain reserved.
   std::string payload;
   std::string preconditions;
-  // Active V1 classification: rebuild must set it; source authorization and
-  // revocation must not. Data admission enforces the distinction.
+  // Active V1 classification: population mutations set it; source
+  // authorization and revocation do not. Data admission enforces the split.
   bool storage_mutating = false;
   // Reserved execution override; Data admission requires false in V1.
   bool force = false;
@@ -736,12 +739,12 @@ struct WireProjectedDirective {
   WireHash256 manifest_digest{};
   std::uint64_t partition_replication_epoch = 0;
   WireDirectiveKind kind = WireDirectiveKind::kRebuild;
-  // Reserved in v1: codecs preserve these strings, but admission requires both
-  // empty until their execution semantics exist.
+  // V1 uses payload only for initialize-empty-population's target history id;
+  // every other kind requires it empty. Preconditions remain reserved.
   std::string payload;
   std::string preconditions;
-  // Active V1 classification: rebuild must set it; source authorization and
-  // revocation must not. Data admission enforces the distinction.
+  // Active V1 classification: population mutations set it; source
+  // authorization and revocation do not. Data admission enforces the split.
   bool storage_mutating = false;
   // Reserved execution override; Data admission requires false in V1.
   bool force = false;
