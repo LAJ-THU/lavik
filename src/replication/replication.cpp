@@ -20,16 +20,16 @@
 #include <fcntl.h>
 #include <netdb.h>
 #include <netinet/tcp.h>
+#include <openssl/crypto.h>
 #include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
-
-#include <openssl/crypto.h>
 
 #include <algorithm>
 #include <array>
 #include <atomic>
 #include <bitset>
+#include <cassert>
 #include <charconv>
 #include <chrono>
 #include <cstddef>
@@ -1849,6 +1849,22 @@ Task<absl::Status> WaitForClose(TcpStream& stream) {
 
 class SocketSet {
  public:
+  // A target session also registers its sockets with the process shutdown
+  // set. Main can close ingress without inspecting worker-owned sessions.
+  // Registration/removal always lock child before parent; cancellation never
+  // takes a child lock while holding its parent's lock.
+  explicit SocketSet(SocketSet* shutdown_parent = nullptr)
+      : shutdown_parent_(shutdown_parent) {}
+
+  ~SocketSet() {
+    // Destruction follows session/flow join. Do not leave a retired session's
+    // descriptor numbers in the process set, where a reused fd could later
+    // identify an unrelated connection.
+    if (shutdown_parent_ != nullptr) {
+      for (int fd : fds_) shutdown_parent_->Remove(fd);
+    }
+  }
+
   bool Add(int fd) {
     std::lock_guard lock(mutex_);
     if (cancelled_) {
@@ -1856,13 +1872,20 @@ class SocketSet {
       return false;
     }
     fds_.push_back(fd);
+    if (shutdown_parent_ != nullptr && !shutdown_parent_->Add(fd)) {
+      fds_.pop_back();
+      return false;
+    }
     return true;
   }
 
   void Remove(int fd) {
     std::lock_guard lock(mutex_);
     const auto found = std::find(fds_.begin(), fds_.end(), fd);
-    if (found != fds_.end()) fds_.erase(found);
+    if (found != fds_.end()) {
+      if (shutdown_parent_ != nullptr) shutdown_parent_->Remove(fd);
+      fds_.erase(found);
+    }
   }
 
   void Cancel() {
@@ -1874,13 +1897,15 @@ class SocketSet {
 
   bool cancelled() const {
     std::lock_guard lock(mutex_);
-    return cancelled_;
+    return cancelled_ ||
+           (shutdown_parent_ != nullptr && shutdown_parent_->cancelled());
   }
 
  private:
   mutable std::mutex mutex_;
   std::vector<int> fds_;
   bool cancelled_ = false;
+  SocketSet* const shutdown_parent_;
 };
 
 class ScopedSocketSetMembership {
@@ -2297,8 +2322,8 @@ struct ReplicaTransactionOwner {
 
 // Immutable directive/manifest data is shared by the flow workers, while the
 // ReplicationGroup itself remains owned by coordinator worker zero. The atomic
-// state communicates its lifecycle to flow workers; ReadyToken publication is
-// protected by ReplicationManager::Impl::state_mutex_.
+// state communicates its lifecycle to flow workers; only worker zero reads
+// or publishes ReadyToken and changes the manager's current attempt.
 struct ClusterRebuildContext {
   ClusterRebuildContext(RebuildDirective directive, PopulationManifest manifest,
                         DestructiveResetAuthorization authorization)
@@ -2317,6 +2342,9 @@ struct ClusterRebuildContext {
 };
 
 struct ReplicaSession {
+  explicit ReplicaSession(SocketSet* shutdown_sockets)
+      : sockets_(shutdown_sockets) {}
+
   enum class FlowProtocolPhase : std::uint8_t {
     kAwaitMode,
     kFullRebuild,
@@ -3038,7 +3066,7 @@ struct RedisSource {
   std::optional<std::string> replid_;
   std::atomic<std::uint64_t> offset_{0};
   std::uint64_t role_epoch_ = 0;
-  // Guarded by ReplicationGroup::state_mutex_. A nonzero value means this
+  // Owned by coordinator worker zero. A nonzero value means this
   // source installed its RDB for the active whole-group replacement.
   std::uint64_t full_sync_session_id_ = 0;
   std::atomic<bool> dataset_valid_{false};
@@ -3072,6 +3100,8 @@ class ReplicationManager::ReplicationGroup {
         cluster_population_managed_(options.cluster_population_managed_),
         upstream_(cluster_enabled_ ? std::nullopt
                                    : std::move(initial_upstream)),
+        upstream_caches_(
+            std::make_unique<UpstreamSnapshot[]>(storage->worker_count())),
         applied_frontier_(std::make_shared<detail::ReplicaAppliedFrontier>(
             storage->worker_count(), storage->worker_count())),
         replica_priority_(options.replica_priority_),
@@ -3142,6 +3172,7 @@ class ReplicationManager::ReplicationGroup {
         initial_protocol_probe_pending_ = true;
       }
     }
+    PublishUpstreamSnapshot();
   }
 
   void StorageReady(celer::Worker& worker) {
@@ -3187,7 +3218,7 @@ class ReplicationManager::ReplicationGroup {
     for (;;) {
       bool teardown_running = false;
       {
-        std::lock_guard lock(state_mutex_);
+        AssertStateOwner();
         teardown_running = replica_session_teardown_running_;
       }
       if (!teardown_running) break;
@@ -3206,7 +3237,7 @@ class ReplicationManager::ReplicationGroup {
     std::shared_ptr<ClusterRebuildContext> previous_context;
     bool superseding = false;
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       if (failed_stopped_.load(std::memory_order_relaxed)) {
         co_return absl::FailedPreconditionError(absl::StrCat(
             "replication is failed-stopped until restart: ", failure_reason_));
@@ -3263,7 +3294,7 @@ class ReplicationManager::ReplicationGroup {
 
     std::shared_ptr<ReplicaSession> previous_session;
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       if (replica_reconfiguration_running_ ||
           cluster_rebuild_ != previous_context ||
           failed_stopped_.load(std::memory_order_relaxed)) {
@@ -3279,7 +3310,7 @@ class ReplicationManager::ReplicationGroup {
                                        std::memory_order_release);
         source_authorizations_.RevokeAll();
         previous_session = std::move(active_replica_session_);
-        upstream_.reset();
+        SetDesiredUpstream(std::nullopt);
         applied_frontier_.reset();
         upstream_node_id_.reset();
         upstream_history_id_.reset();
@@ -3363,11 +3394,11 @@ class ReplicationManager::ReplicationGroup {
       previous_context->completion_->Resolve(absl::CancelledError(
           "cluster rebuild attempt was superseded after cleanup"));
       if (cluster_control_stopping_) {
-        std::lock_guard lock(state_mutex_);
+        AssertStateOwner();
         replica_reconfiguration_running_ = false;
         if (cluster_rebuild_ == previous_context) {
           cluster_rebuild_.reset();
-          upstream_.reset();
+          SetDesiredUpstream(std::nullopt);
           upstream_node_id_.reset();
           upstream_history_id_.reset();
         }
@@ -3388,7 +3419,7 @@ class ReplicationManager::ReplicationGroup {
         std::move(directive), std::move(manifest), std::move(*authorization));
     bool installed = false;
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       installed = replica_reconfiguration_running_ &&
                   cluster_rebuild_ == previous_context &&
                   active_replica_session_ == nullptr &&
@@ -3396,7 +3427,7 @@ class ReplicationManager::ReplicationGroup {
                   !failed_stopped_.load(std::memory_order_relaxed);
       if (installed) {
         cluster_rebuild_ = context;
-        upstream_ = std::move(upstream);
+        SetDesiredUpstream(std::move(upstream));
         applied_frontier_.reset();
         upstream_node_id_.reset();
         upstream_history_id_.reset();
@@ -3466,7 +3497,7 @@ class ReplicationManager::ReplicationGroup {
 
     RebuildDirective directive{.identity_ = std::move(identity)};
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       if (failed_stopped_.load(std::memory_order_relaxed)) {
         co_return absl::FailedPreconditionError(absl::StrCat(
             "replication is failed-stopped until restart: ", failure_reason_));
@@ -3511,7 +3542,7 @@ class ReplicationManager::ReplicationGroup {
     auto authorization =
         cluster_group_->BeginEmptyPopulation(directive.identity_, manifest);
     if (!authorization.ok()) {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       replica_reconfiguration_running_ = false;
       co_return authorization.status();
     }
@@ -3520,7 +3551,7 @@ class ReplicationManager::ReplicationGroup {
         std::move(*authorization));
     bool install_failed = false;
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       if (!replica_reconfiguration_running_ || cluster_rebuild_ != nullptr ||
           failed_stopped_.load(std::memory_order_relaxed) ||
           cluster_control_stopping_) {
@@ -3571,7 +3602,7 @@ class ReplicationManager::ReplicationGroup {
     for (;;) {
       bool teardown_running = false;
       {
-        std::lock_guard lock(state_mutex_);
+        AssertStateOwner();
         teardown_running = replica_session_teardown_running_;
       }
       if (!teardown_running) break;
@@ -3583,7 +3614,7 @@ class ReplicationManager::ReplicationGroup {
     std::shared_ptr<ClusterRebuildContext> context;
     std::shared_ptr<ReplicaSession> session;
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       if (failed_stopped_.load(std::memory_order_relaxed)) {
         co_return absl::FailedPreconditionError(absl::StrCat(
             "replication is failed-stopped until restart: ", failure_reason_));
@@ -3632,7 +3663,7 @@ class ReplicationManager::ReplicationGroup {
       source_authorizations_.RevokeAll();
       replica_reconfiguration_running_ = true;
       session = std::move(active_replica_session_);
-      upstream_.reset();
+      SetDesiredUpstream(std::nullopt);
       applied_frontier_.reset();
       upstream_node_id_.reset();
       upstream_history_id_.reset();
@@ -3712,7 +3743,7 @@ class ReplicationManager::ReplicationGroup {
       }
     }
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       if (cluster_rebuild_ == context) cluster_rebuild_.reset();
       replica_reconfiguration_running_ = false;
     }
@@ -3750,26 +3781,13 @@ class ReplicationManager::ReplicationGroup {
 
   void RequestShutdown() noexcept {
     replication_shutdown_requested_.store(true, std::memory_order_release);
-    discovery_sockets_.Cancel();
+    // These transport-only sets cover connecting/TLS sockets too. Closing
+    // them wakes the owner coordinator, which cancels barriers and joins its
+    // flows. Main never reads the mutable session registry or partially
+    // initialized session proof/barrier fields. Late socket registration
+    // observes cancellation and cannot escape this one-way shutdown fence.
+    outbound_sockets_.Cancel();
     source_sockets_.Cancel();
-
-    // Target session socket sets are independently thread-safe. Snapshot their
-    // shared owners under the state mutex, then cancel without holding it.
-    // Native/Redis source sockets use source_sockets_ because their registry
-    // is guarded by a worker-affine mutex that the process main thread cannot
-    // acquire. Closing both directions wakes transport awaits and lets source
-    // flow teardown release any backlog retention blocking an admitted write.
-    std::vector<std::shared_ptr<ReplicaSession>> sessions;
-    {
-      std::lock_guard lock(state_mutex_);
-      if (active_replica_session_ != nullptr) {
-        sessions.push_back(active_replica_session_);
-      }
-      for (const auto& source : redis_sources_) {
-        if (source->session_ != nullptr) sessions.push_back(source->session_);
-      }
-    }
-    for (const auto& session : sessions) session->Cancel();
   }
 
   Task<absl::Status> QuiesceForShutdown() {
@@ -3787,7 +3805,7 @@ class ReplicationManager::ReplicationGroup {
       std::vector<std::shared_ptr<ReplicaSession>> sessions;
       std::uint64_t redis_full_sync_session = 0;
       {
-        std::lock_guard lock(state_mutex_);
+        AssertStateOwner();
         role_epoch_.fetch_add(1, std::memory_order_acq_rel);
         initial_protocol_probe_pending_ = false;
         replica_reconfiguration_running_ = true;
@@ -3849,7 +3867,7 @@ class ReplicationManager::ReplicationGroup {
 
   std::shared_ptr<detail::ClusterRebuildCompletionState>
   FindCompletedClusterPopulation(const RebuildDirective& directive) const {
-    std::lock_guard lock(state_mutex_);
+    AssertStateOwner();
     if (failed_stopped_.load(std::memory_order_relaxed) ||
         replica_reconfiguration_running_ || cluster_rebuild_ == nullptr ||
         cluster_rebuild_->directive_ != directive ||
@@ -3861,13 +3879,16 @@ class ReplicationManager::ReplicationGroup {
   }
 
   Task<ClusterPopulationStatus> cluster_population_status() const {
+    if (celer::ThisWorker().id_ != 0) {
+      co_return co_await celer::SubmitTaskTo(
+          0, [this] { return cluster_population_status(); });
+    }
     ClusterPopulationStatus result;
     result.local_node_id_ = node_id_;
     result.local_boot_id_ = boot_id_;
-    std::shared_ptr<ClusterRebuildContext> context;
     std::shared_ptr<detail::ReplicaAppliedFrontier> frontier;
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       result.state_ =
           failed_stopped_.load(std::memory_order_relaxed)
               ? ReplicationGroupState::kFailedStopped
@@ -3877,15 +3898,14 @@ class ReplicationManager::ReplicationGroup {
       if (result.state_ == ReplicationGroupState::kReady &&
           cluster_rebuild_ != nullptr &&
           cluster_rebuild_->ready_token_.has_value()) {
-        context = cluster_rebuild_;
         result.ready_token_ = cluster_rebuild_->ready_token_;
         frontier = applied_frontier_;
       }
       result.failure_reason_ = failure_reason_;
     }
-    // Frontier lifetime is shared with in-flight apply work. Sampling outside
-    // state_mutex_ keeps heartbeat observation off the replication hot path.
-    std::optional<std::vector<std::uint64_t>> live_snapshot;
+    // Flow workers publish frontier cells independently. This owner-local
+    // sample never suspends, so the population proof cannot change beneath
+    // it; only the frontier's own concurrent publication needs validation.
     if (frontier != nullptr && result.ready_token_.has_value()) {
       // A missing vector withdraws the node's previous Meta candidate, so
       // preserve bounded retries for short publication races.
@@ -3897,32 +3917,7 @@ class ReplicationManager::ReplicationGroup {
                      [](std::uint64_t live, std::uint64_t cut) {
                        return live >= cut;
                      })) {
-        live_snapshot = std::move(*snapshot);
-      }
-    }
-    {
-      std::lock_guard lock(state_mutex_);
-      const bool still_current =
-          context != nullptr && cluster_rebuild_ == context &&
-          applied_frontier_ == frontier &&
-          context->state_.load(std::memory_order_relaxed) ==
-              ReplicationGroupState::kReady &&
-          context->ready_token_.has_value();
-      if (still_current) {
-        result.applied_next_lsns_ = std::move(live_snapshot);
-      } else if (context != nullptr) {
-        // The snapshot raced proof withdrawal or replacement. Return no
-        // Ready token/vector from the obsolete context; the next heartbeat
-        // will sample the replacement after its own readiness transition.
-        result.state_ =
-            failed_stopped_.load(std::memory_order_relaxed)
-                ? ReplicationGroupState::kFailedStopped
-            : cluster_rebuild_ == nullptr
-                ? ReplicationGroupState::kNotReady
-                : cluster_rebuild_->state_.load(std::memory_order_relaxed);
-        result.ready_token_.reset();
-        result.applied_next_lsns_.reset();
-        result.failure_reason_ = failure_reason_;
+        result.applied_next_lsns_ = std::move(*snapshot);
       }
     }
     co_return result;
@@ -3965,7 +3960,7 @@ class ReplicationManager::ReplicationGroup {
           co_return absl::FailedPreconditionError(
               "cluster source authorization uses stale source history");
         }
-        std::lock_guard lock(state_mutex_);
+        AssertStateOwner();
         if (cluster_source_revocations_in_flight_ != 0) {
           co_return absl::FailedPreconditionError(
               "cluster source authorization is being revoked");
@@ -4041,22 +4036,21 @@ class ReplicationManager::ReplicationGroup {
           "cluster source revocation requires Meta-managed population mode");
     }
     struct RevocationGuard {
-      std::mutex* state_mutex_ = nullptr;
       unsigned* in_flight_ = nullptr;
       bool active_ = false;
       ~RevocationGuard() {
         if (!active_) return;
-        std::lock_guard lock(*state_mutex_);
+        AssertStateOwner();
         assert(*in_flight_ != 0);
         --*in_flight_;
       }
-    } revocation_guard{&state_mutex_, &cluster_source_revocations_in_flight_};
+    } revocation_guard{&cluster_source_revocations_in_flight_};
     std::vector<std::shared_ptr<MasterSession>> sessions;
     {
       co_await master_mutex_.Lock(*celer::ThisWorker().self_);
       celer::CrossWorkerMutex::Guard lock(&master_mutex_);
       {
-        std::lock_guard state_lock(state_mutex_);
+        AssertStateOwner();
         ++cluster_source_revocations_in_flight_;
         revocation_guard.active_ = true;
         if (allow_same_revision_replay) {
@@ -4127,7 +4121,7 @@ class ReplicationManager::ReplicationGroup {
           "replication reconfiguration stopped for process shutdown");
     }
     if (failed_stopped_.load(std::memory_order_acquire)) {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       co_return absl::FailedPreconditionError(absl::StrCat(
           "replication is failed-stopped until restart: ", failure_reason_));
     }
@@ -4157,7 +4151,7 @@ class ReplicationManager::ReplicationGroup {
     for (;;) {
       bool teardown_running = false;
       {
-        std::lock_guard lock(state_mutex_);
+        AssertStateOwner();
         if (replica_reconfiguration_running_) {
           co_return absl::FailedPreconditionError(
               "another replication role transition is active");
@@ -4171,13 +4165,12 @@ class ReplicationManager::ReplicationGroup {
       if (!waited.ok()) co_return waited;
     }
     struct ReconfigurationGuard {
-      std::mutex& mutex_;
       bool& running_;
       ~ReconfigurationGuard() {
-        std::lock_guard lock(mutex_);
+        AssertStateOwner();
         running_ = false;
       }
-    } reconfiguration_guard{state_mutex_, replica_reconfiguration_running_};
+    } reconfiguration_guard{replica_reconfiguration_running_};
 
     // Stop old upstream ingress while database admission is still open. A
     // command that already crossed the apply-FIFO boundary may be waiting for
@@ -4192,7 +4185,7 @@ class ReplicationManager::ReplicationGroup {
     std::vector<std::shared_ptr<ReplicaSession>> draining_sessions;
     bool retire_source_before_gates = false;
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       const bool had_upstream = upstream_.has_value();
       if (had_upstream || upstream.has_value()) {
         detached_role_epoch =
@@ -4293,7 +4286,7 @@ class ReplicationManager::ReplicationGroup {
     }
 
     if (failed_stopped_.load(std::memory_order_acquire)) {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       co_return absl::FailedPreconditionError(absl::StrCat(
           "replication is failed-stopped until restart: ", failure_reason_));
     }
@@ -4304,7 +4297,7 @@ class ReplicationManager::ReplicationGroup {
     bool promotion_required = false;
     storage::PromotionBase promotion_base;
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       if (failed_stopped_.load(std::memory_order_relaxed)) {
         co_return absl::FailedPreconditionError(absl::StrCat(
             "replication is failed-stopped until restart: ", failure_reason_));
@@ -4355,7 +4348,7 @@ class ReplicationManager::ReplicationGroup {
         pending_promotion_ = promotion_base;
       }
       if (upstream.has_value()) pending_promotion_.reset();
-      upstream_ = upstream;
+      SetDesiredUpstream(upstream);
       if (upstream.has_value()) {
         native_dataset_valid_.store(false, std::memory_order_release);
       }
@@ -4499,7 +4492,7 @@ class ReplicationManager::ReplicationGroup {
         if (!enabled.ok()) co_return enabled;
       }
       {
-        std::lock_guard lock(state_mutex_);
+        AssertStateOwner();
         pending_promotion_.reset();
         StoreRole(ReplicationRole::kMaster, std::memory_order_release);
       }
@@ -4513,7 +4506,7 @@ class ReplicationManager::ReplicationGroup {
       expiration_quiesced = false;
     }
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       replica_reconfiguration_running_ = false;
       if (failed_stopped_.load(std::memory_order_relaxed)) {
         co_return absl::FailedPreconditionError(absl::StrCat(
@@ -4536,7 +4529,7 @@ class ReplicationManager::ReplicationGroup {
           "ADDREPLICAOF is unavailable in cluster mode");
     }
     if (failed_stopped_.load(std::memory_order_acquire)) {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       co_return absl::FailedPreconditionError(absl::StrCat(
           "replication is failed-stopped until restart: ", failure_reason_));
     }
@@ -4558,7 +4551,7 @@ class ReplicationManager::ReplicationGroup {
     }
     std::shared_ptr<RedisSource> source;
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       if (failed_stopped_.load(std::memory_order_relaxed)) {
         co_return absl::FailedPreconditionError(absl::StrCat(
             "replication is failed-stopped until restart: ", failure_reason_));
@@ -4681,11 +4674,24 @@ class ReplicationManager::ReplicationGroup {
   }
 
   std::optional<ReplicaOfConfig> upstream() const {
-    std::lock_guard lock(state_mutex_);
-    return upstream_;
+    if (celer::ThisWorker().self_ == nullptr) {
+      return published_upstream_.load(std::memory_order_acquire)->endpoint_;
+    }
+    assert(celer::ThisWorker().id_ < storage_->worker_count());
+    auto& cached = upstream_caches_[celer::ThisWorker().id_];
+    if (cached.version_ != upstream_version_.load(std::memory_order_acquire)) {
+      // Only a configuration change enters atomic shared_ptr's cold path.
+      // Normal MOVED replies copy their worker's cached endpoint after one
+      // read-only atomic version load, without a shared reference-count RMW.
+      cached = *published_upstream_.load(std::memory_order_acquire);
+    }
+    return cached.endpoint_;
   }
 
   Task<ReplicationStatus> status() const {
+    if (celer::ThisWorker().id_ != 0) {
+      co_return co_await celer::SubmitTaskTo(0, [this] { return status(); });
+    }
     ReplicationStatus result;
     result.role_ = role_.load(std::memory_order_acquire);
     result.role_epoch_ = role_epoch_.load(std::memory_order_acquire);
@@ -4693,7 +4699,7 @@ class ReplicationManager::ReplicationGroup {
     result.boot_id_ = boot_id_;
     result.replica_incarnation_ = replica_incarnation_;
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       result.group_id_ = group_id_;
       result.failed_stopped_ = failed_stopped_.load(std::memory_order_acquire);
       result.failure_reason_ = failure_reason_;
@@ -4800,11 +4806,12 @@ class ReplicationManager::ReplicationGroup {
              role == ReplicationRole::kOnline;
     };
 
-    // Role changes are cold control-plane events. Serialize their two atomic
-    // publications so readers retain a lock-free packed generation/open hot
-    // path without allowing a concurrent Redis source refresh to reopen an
-    // obsolete generation.
-    std::lock_guard transition_lock(serving_transition_mutex_);
+    // Construction precedes worker startup; afterwards only worker zero may
+    // publish a role. These two stores cannot interleave with another role
+    // transition because there is no suspension between them. Data-command
+    // admission still reads only the packed atomic generation/open token.
+    assert(celer::ThisWorker().self_ == nullptr ||
+           celer::ThisWorker().id_ == 0);
     const ReplicationRole previous = role_.load(std::memory_order_relaxed);
     if (previous == next) {
       if (next == ReplicationRole::kOnline) {
@@ -5419,9 +5426,33 @@ class ReplicationManager::ReplicationGroup {
   }
 
  private:
+  static void AssertStateOwner() noexcept {
+    assert(celer::ThisWorker().self_ != nullptr &&
+           celer::ThisWorker().id_ == 0);
+  }
+
+  void PublishUpstreamSnapshot() {
+    const auto version = upstream_version_.load(std::memory_order_relaxed);
+    if (version == std::numeric_limits<std::uint64_t>::max()) std::terminate();
+    auto snapshot = std::make_shared<const UpstreamSnapshot>(
+        UpstreamSnapshot{version + 1, upstream_});
+    // Publish the immutable value before notifying caches. A reader racing
+    // the notification may observe the newer snapshot early; its embedded
+    // version prevents labeling an old endpoint with a new version.
+    published_upstream_.store(std::move(snapshot), std::memory_order_release);
+    upstream_version_.store(version + 1, std::memory_order_release);
+  }
+
+  void SetDesiredUpstream(std::optional<ReplicaOfConfig> upstream) {
+    AssertStateOwner();
+    if (upstream_ == upstream) return;
+    upstream_ = std::move(upstream);
+    PublishUpstreamSnapshot();
+  }
+
   bool EmptyPopulationCurrent(
       const std::shared_ptr<ClusterRebuildContext>& context) {
-    std::lock_guard lock(state_mutex_);
+    AssertStateOwner();
     return cluster_rebuild_ == context && !replica_reconfiguration_running_ &&
            !cluster_control_stopping_ &&
            !failed_stopped_.load(std::memory_order_relaxed) &&
@@ -5458,7 +5489,7 @@ class ReplicationManager::ReplicationGroup {
       }
     }
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       if (cluster_rebuild_ == context &&
           !failed_stopped_.load(std::memory_order_relaxed)) {
         context->state_.store(ReplicationGroupState::kNotReady,
@@ -5669,7 +5700,7 @@ class ReplicationManager::ReplicationGroup {
 
     bool installed = false;
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       installed = cluster_rebuild_ == context &&
                   !replica_reconfiguration_running_ &&
                   !failed_stopped_.load(std::memory_order_relaxed);
@@ -5710,11 +5741,10 @@ class ReplicationManager::ReplicationGroup {
   Task<absl::StatusOr<std::optional<RedisClusterTopology>>>
   QueryRedisClusterTopology(const ReplicaOfConfig& upstream) {
     auto connected = co_await ConnectTcp(upstream.host_, upstream.port_,
-                                         tls_context_, &discovery_sockets_);
+                                         tls_context_, &outbound_sockets_);
     if (!connected.ok()) co_return connected.status();
     TcpStream stream = std::move(*connected);
-    ScopedSocketSetMembership membership(&discovery_sockets_,
-                                         stream.NativeFd());
+    ScopedSocketSetMembership membership(&outbound_sockets_, stream.NativeFd());
     absl::Status status =
         co_await AuthenticateUpstream(stream, masteruser_, masterauth_);
     if (!status.ok()) {
@@ -5768,11 +5798,10 @@ class ReplicationManager::ReplicationGroup {
   Task<absl::StatusOr<UpstreamDiscovery>> ProbeUpstream(
       const ReplicaOfConfig& upstream) {
     auto connected = co_await ConnectTcp(upstream.host_, upstream.port_,
-                                         tls_context_, &discovery_sockets_);
+                                         tls_context_, &outbound_sockets_);
     if (!connected.ok()) co_return connected.status();
     TcpStream stream = std::move(*connected);
-    ScopedSocketSetMembership membership(&discovery_sockets_,
-                                         stream.NativeFd());
+    ScopedSocketSetMembership membership(&outbound_sockets_, stream.NativeFd());
     absl::Status status =
         co_await AuthenticateUpstream(stream, masteruser_, masterauth_);
     if (!status.ok()) {
@@ -5826,7 +5855,7 @@ class ReplicationManager::ReplicationGroup {
     }
     if (failed_stopped_.load(std::memory_order_acquire)) return;
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       if (replica_reconfiguration_running_ ||
           failed_stopped_.load(std::memory_order_relaxed)) {
         return;
@@ -5841,7 +5870,7 @@ class ReplicationManager::ReplicationGroup {
     if (redis_psync_.load(std::memory_order_acquire)) {
       std::vector<std::shared_ptr<RedisSource>> sources;
       {
-        std::lock_guard lock(state_mutex_);
+        AssertStateOwner();
         sources = redis_sources_;
       }
       spdlog::info("starting {} Redis replication coordinator(s)",
@@ -5852,7 +5881,7 @@ class ReplicationManager::ReplicationGroup {
     }
     if (coordinator_started_) return;
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       if (!upstream_.has_value() || replica_reconfiguration_running_ ||
           failed_stopped_.load(std::memory_order_relaxed)) {
         return;
@@ -5867,7 +5896,7 @@ class ReplicationManager::ReplicationGroup {
       ReplicaOfConfig upstream;
       std::uint64_t role_epoch = 0;
       {
-        std::lock_guard lock(state_mutex_);
+        AssertStateOwner();
         if (replication_shutdown_requested_ || !upstream_.has_value() ||
             !initial_protocol_probe_pending_) {
           coordinator_started_ = false;
@@ -5890,7 +5919,7 @@ class ReplicationManager::ReplicationGroup {
         continue;
       }
       {
-        std::lock_guard lock(state_mutex_);
+        AssertStateOwner();
         if (replication_shutdown_requested_ || !upstream_.has_value() ||
             *upstream_ != upstream ||
             role_epoch_.load(std::memory_order_relaxed) != role_epoch ||
@@ -5950,7 +5979,7 @@ class ReplicationManager::ReplicationGroup {
       celer::UnlockGuard fullsync_unlock(&redis_fullsync_mutex_,
                                          celer::ThisWorker().self_);
       {
-        std::lock_guard lock(state_mutex_);
+        AssertStateOwner();
         if (replication_shutdown_requested_ ||
             !redis_psync_.load(std::memory_order_relaxed) ||
             !RedisSourceRegistered(source) || redis_topology_fault_ ||
@@ -5991,7 +6020,7 @@ class ReplicationManager::ReplicationGroup {
       const std::shared_ptr<RedisSource>& source) {
     while (storage_->ReplicaRecoveryFenced()) {
       {
-        std::lock_guard lock(state_mutex_);
+        AssertStateOwner();
         if (replication_shutdown_requested_ ||
             !RedisSourceRegistered(source) || redis_topology_fault_ ||
             source->role_epoch_ !=
@@ -6011,7 +6040,7 @@ class ReplicationManager::ReplicationGroup {
     bool ready = false;
     bool syncing = false;
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       if (!redis_psync_.load(std::memory_order_relaxed)) return;
       RedisSlotSet registered;
       bool valid = !redis_sources_.empty() && !redis_topology_fault_;
@@ -6046,7 +6075,7 @@ class ReplicationManager::ReplicationGroup {
   void FaultRedisTopology(std::string_view reason) {
     std::vector<std::shared_ptr<ReplicaSession>> sessions;
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       if (redis_topology_fault_) return;
       redis_topology_fault_ = true;
       for (const auto& source : redis_sources_) {
@@ -6066,7 +6095,7 @@ class ReplicationManager::ReplicationGroup {
   void ApplyStableRedisTopology(RedisClusterTopology topology) {
     std::vector<std::shared_ptr<ReplicaSession>> replaced;
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       for (const auto& source : redis_sources_) {
         auto current =
             std::find_if(topology.masters_.begin(), topology.masters_.end(),
@@ -6091,7 +6120,7 @@ class ReplicationManager::ReplicationGroup {
       }
       expected_redis_topology_ = std::move(topology);
       if (!redis_sources_.empty())
-        upstream_ = redis_sources_.front()->upstream_;
+        SetDesiredUpstream(redis_sources_.front()->upstream_);
     }
     for (const auto& session : replaced) session->Cancel();
   }
@@ -6104,7 +6133,7 @@ class ReplicationManager::ReplicationGroup {
       if (!slept.ok()) co_return slept;
       std::vector<ReplicaOfConfig> endpoints;
       {
-        std::lock_guard lock(state_mutex_);
+        AssertStateOwner();
         if (replication_shutdown_requested_ ||
             !redis_psync_.load(std::memory_order_relaxed) || !redis_cluster_ ||
             redis_topology_fault_ ||
@@ -6138,7 +6167,7 @@ class ReplicationManager::ReplicationGroup {
 
       bool compatible = false;
       if (observed.ok() && observed->has_value()) {
-        std::lock_guard lock(state_mutex_);
+        AssertStateOwner();
         compatible = expected_redis_topology_.has_value() &&
                      SameRedisSlotLayout(*expected_redis_topology_, **observed);
       }
@@ -6189,7 +6218,7 @@ class ReplicationManager::ReplicationGroup {
         co_return discovery.status();
       }
       {
-        std::lock_guard lock(state_mutex_);
+        AssertStateOwner();
         if (replication_shutdown_requested_ ||
             !RedisSourceRegistered(source) ||
             source->role_epoch_ !=
@@ -6212,9 +6241,9 @@ class ReplicationManager::ReplicationGroup {
     }
 
     while (true) {
-      auto session = std::make_shared<ReplicaSession>();
+      auto session = std::make_shared<ReplicaSession>(&outbound_sockets_);
       {
-        std::lock_guard lock(state_mutex_);
+        AssertStateOwner();
         if (replication_shutdown_requested_ ||
             !redis_psync_.load(std::memory_order_relaxed) ||
             !RedisSourceRegistered(source) || redis_topology_fault_ ||
@@ -6227,7 +6256,7 @@ class ReplicationManager::ReplicationGroup {
       absl::Status connected = co_await RunRedisReplicaSession(source, session);
       session->Cancel();
       {
-        std::lock_guard lock(state_mutex_);
+        AssertStateOwner();
         StoreRedisLink(source, false);
         source->syncing_ = false;
         if (source->session_ == session) source->session_.reset();
@@ -6236,7 +6265,7 @@ class ReplicationManager::ReplicationGroup {
 
       bool retry = false;
       {
-        std::lock_guard lock(state_mutex_);
+        AssertStateOwner();
         retry =
             !replication_shutdown_requested_ &&
             redis_psync_.load(std::memory_order_relaxed) &&
@@ -6262,7 +6291,7 @@ class ReplicationManager::ReplicationGroup {
     std::string latched_reason;
     std::shared_ptr<detail::ClusterRebuildCompletionState> completion;
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       if (!failed_stopped_.load(std::memory_order_relaxed)) {
         failure_reason_ = std::move(reason);
         failed_stopped_.store(true, std::memory_order_release);
@@ -6302,7 +6331,7 @@ class ReplicationManager::ReplicationGroup {
       std::uint64_t role_epoch = 0;
       std::shared_ptr<ReplicaSession> session;
       {
-        std::lock_guard lock(state_mutex_);
+        AssertStateOwner();
         if (replication_shutdown_requested_ || !upstream_.has_value() ||
             replica_reconfiguration_running_ ||
             failed_stopped_.load(std::memory_order_relaxed)) {
@@ -6310,7 +6339,7 @@ class ReplicationManager::ReplicationGroup {
         }
         upstream = *upstream_;
         role_epoch = role_epoch_.load(std::memory_order_relaxed);
-        session = std::make_shared<ReplicaSession>();
+        session = std::make_shared<ReplicaSession>(&outbound_sockets_);
         session->cluster_rebuild_ = cluster_rebuild_;
         active_replica_session_ = session;
       }
@@ -6318,7 +6347,7 @@ class ReplicationManager::ReplicationGroup {
       absl::Status connected =
           co_await RunReplicaSession(upstream, role_epoch, session);
       {
-        std::lock_guard lock(state_mutex_);
+        AssertStateOwner();
         if (active_replica_session_ != session) {
           // Explicit REPLICAOF reconfiguration moved this attempt to its own
           // node-level teardown. It owns abort and any failure latch; this
@@ -6387,7 +6416,7 @@ class ReplicationManager::ReplicationGroup {
 
       bool retry = false;
       {
-        std::lock_guard lock(state_mutex_);
+        AssertStateOwner();
         if (active_replica_session_ == session) {
           active_replica_session_.reset();
           replica_session_id_ = 0;
@@ -6396,7 +6425,7 @@ class ReplicationManager::ReplicationGroup {
         if (cluster_attempt_must_retire &&
             cluster_rebuild_ == cluster_context) {
           cluster_rebuild_.reset();
-          upstream_.reset();
+          SetDesiredUpstream(std::nullopt);
           upstream_node_id_.reset();
           upstream_history_id_.reset();
         }
@@ -6485,7 +6514,7 @@ class ReplicationManager::ReplicationGroup {
       if (!waited.ok()) co_return waited;
     }
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       if (!redis_psync_.load(std::memory_order_relaxed) ||
           source->role_epoch_ != role_epoch_.load(std::memory_order_relaxed) ||
           !RedisSourceRegistered(source) || redis_topology_fault_) {
@@ -6637,7 +6666,7 @@ class ReplicationManager::ReplicationGroup {
       if (!waited.ok()) co_return waited;
     }
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       if (!RedisSourceRegistered(source) || redis_topology_fault_) {
         co_return absl::CancelledError("Redis source was replaced");
       }
@@ -6786,7 +6815,7 @@ class ReplicationManager::ReplicationGroup {
 
     std::optional<std::string> replid;
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       if (redis_full_sync_session_id_ == 0 &&
           source->dataset_valid_.load(std::memory_order_acquire)) {
         replid = source->replid_;
@@ -6855,7 +6884,7 @@ class ReplicationManager::ReplicationGroup {
       bool population_complete = true;
       std::string population_accumulator;
       {
-        std::lock_guard lock(state_mutex_);
+        AssertStateOwner();
         if (redis_full_sync_session_id_ != *full_sync_session) {
           co_return absl::CancelledError(
               "Redis full sync attempt was superseded during import");
@@ -6900,7 +6929,7 @@ class ReplicationManager::ReplicationGroup {
                                     .digest_ = storage::Crc64(bytes),
                                 });
         if (!status.ok()) {
-          std::lock_guard lock(state_mutex_);
+          AssertStateOwner();
           if (redis_full_sync_session_id_ == *full_sync_session) {
             source->dataset_valid_.store(false, std::memory_order_release);
             source->full_sync_session_id_ = 0;
@@ -6909,7 +6938,7 @@ class ReplicationManager::ReplicationGroup {
           co_return status;
         }
         {
-          std::lock_guard lock(state_mutex_);
+          AssertStateOwner();
           if (redis_full_sync_session_id_ != *full_sync_session) {
             co_return absl::CancelledError(
                 "Redis full sync activation was superseded");
@@ -6956,7 +6985,7 @@ class ReplicationManager::ReplicationGroup {
     }
     bool valid_cursor = false;
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       valid_cursor = source->dataset_valid_.load(std::memory_order_acquire) &&
                      source->replid_.has_value();
     }
@@ -6965,7 +6994,7 @@ class ReplicationManager::ReplicationGroup {
           "Redis accepted partial sync without a valid local dataset");
     }
     if (reply->replid_.has_value()) {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       source->replid_ = std::move(reply->replid_);
     }
     spdlog::info("Redis partial resynchronization continued from offset {}",
@@ -7002,7 +7031,7 @@ class ReplicationManager::ReplicationGroup {
     unsigned requested_flow_count = 0;
     bool resume_proof_advertised = false;
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       requested_group = group_id_;
       // A durable full-sync fence means the old population and resume proof
       // have already been invalidated. Even if this boot still remembers a
@@ -7076,7 +7105,7 @@ class ReplicationManager::ReplicationGroup {
         !ParseUnsigned(words[6], &source_workers) || source_workers == 0 ||
         !IsReplicationId(words[7])) {
       if (session->cluster_rebuild_ != nullptr) {
-        InvalidateReplicaContinuation(session, false);
+        (void)co_await InvalidateReplicaContinuation(session, false);
       }
       session->sockets_.Remove(control_fd);
       control.Close().IgnoreError();
@@ -7095,7 +7124,7 @@ class ReplicationManager::ReplicationGroup {
           words[4] != directive.identity_.source_boot_id_ ||
           words[5] != directive.identity_.source_history_id_ ||
           source_workers != directive.flow_count_) {
-        InvalidateReplicaContinuation(session, false);
+        (void)co_await InvalidateReplicaContinuation(session, false);
         session->sockets_.Remove(control_fd);
         control.Close().IgnoreError();
         co_return absl::FailedPreconditionError(
@@ -7162,7 +7191,7 @@ class ReplicationManager::ReplicationGroup {
       co_return installed;
     }
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       applied_frontier_ = next_frontier;
       session->applied_frontier_ = std::move(next_frontier);
       session->InitializeFullSyncState(*initial_next_lsns);
@@ -7226,7 +7255,7 @@ class ReplicationManager::ReplicationGroup {
     }
     bool still_current = false;
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       still_current =
           active_replica_session_ == session &&
           role_epoch_.load(std::memory_order_relaxed) == role_epoch &&
@@ -7384,7 +7413,7 @@ class ReplicationManager::ReplicationGroup {
       const absl::Status fresh = absl::FailedPreconditionError(
           "cluster history cannot continue; a fresh rebuild attempt is "
           "required before destructive reset");
-      InvalidateReplicaContinuation(session);
+      (void)co_await InvalidateReplicaContinuation(session);
       session->fullsync_begin_complete_->Abort(fresh);
       co_return fresh;
     }
@@ -8008,7 +8037,7 @@ class ReplicationManager::ReplicationGroup {
         }
       }
       if (!applied.ok()) {
-        InvalidateReplicaContinuation(session);
+        (void)co_await InvalidateReplicaContinuation(session);
         co_return applied;
       }
       if (!transaction && !control) {
@@ -8018,7 +8047,7 @@ class ReplicationManager::ReplicationGroup {
         applied = session->applied_frontier_->AdvanceAfterApply(flow_id,
                                                                 pending.lsn_);
         if (!applied.ok()) {
-          InvalidateReplicaContinuation(session);
+          (void)co_await InvalidateReplicaContinuation(session);
           co_return applied;
         }
       }
@@ -8071,7 +8100,7 @@ class ReplicationManager::ReplicationGroup {
         applied = co_await WaitForReplicaTransaction(pending.transaction_);
       }
       if (!applied.ok()) {
-        InvalidateReplicaContinuation(session);
+        (void)co_await InvalidateReplicaContinuation(session);
         co_return applied;
       }
 
@@ -8258,7 +8287,7 @@ class ReplicationManager::ReplicationGroup {
       // last cursor: an unacknowledged prefix may already have mutated the
       // in-place dataset. Invalidate the whole continuation domain so every
       // flow in the replacement session selects FULL together.
-      InvalidateReplicaContinuation(session);
+      (void)co_await InvalidateReplicaContinuation(session);
     }
     state->receiver_status_ = receiver_status;
     state->receiver_done_ = true;
@@ -8612,7 +8641,7 @@ class ReplicationManager::ReplicationGroup {
           }
           bool still_current = false;
           {
-            std::lock_guard lock(state_mutex_);
+            AssertStateOwner();
             still_current = active_replica_session_ == session &&
                             !replica_reconfiguration_running_;
           }
@@ -8666,7 +8695,7 @@ class ReplicationManager::ReplicationGroup {
               co_return ready.status();
             }
             {
-              std::lock_guard lock(state_mutex_);
+              AssertStateOwner();
               if (active_replica_session_ == session &&
                   cluster_rebuild_ == session->cluster_rebuild_ &&
                   !replica_reconfiguration_running_ &&
@@ -8884,7 +8913,13 @@ class ReplicationManager::ReplicationGroup {
 
   bool ShouldInjectDivergentTail(unsigned flow_id) {
     KEYLANE_FAULT_INJECT({
-      if (flow_id != 0) return false;
+      unsigned target_flow = 0;
+      if (const char* target =
+              std::getenv("KEYLANE_REPLICATION_DIVERGENT_TAIL_FLOW");
+          target != nullptr && !ParseUnsigned(target, &target_flow)) {
+        return false;
+      }
+      if (flow_id != target_flow) return false;
       const char* configured =
           std::getenv("KEYLANE_REPLICATION_DIVERGENT_TAIL_ONCE");
       if (configured == nullptr || std::string_view(configured) != "1") {
@@ -8897,17 +8932,26 @@ class ReplicationManager::ReplicationGroup {
     return false;
   }
 
-  void InvalidateReplicaContinuation(
+  Task<absl::Status> InvalidateReplicaContinuation(
       const std::shared_ptr<ReplicaSession>& session,
       bool require_installed_cursor = true) {
+    if (celer::ThisWorker().id_ != 0) {
+      // This is an error path, never an online per-command owner hop. Join
+      // the owner's exact-session invalidation before allowing flow teardown
+      // to finish; otherwise promotion/reconnect could reuse the bad cursor.
+      co_return co_await celer::SubmitTaskTo(0, [this, session,
+                                                 require_installed_cursor] {
+        return InvalidateReplicaContinuation(session, require_installed_cursor);
+      });
+    }
     bool continuation_invalidated = false;
     bool cluster_population_invalidated = false;
     {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       if (active_replica_session_ != session ||
           (require_installed_cursor &&
            applied_frontier_ != session->applied_frontier_)) {
-        return;
+        co_return absl::OkStatus();
       }
       applied_frontier_.reset();
       upstream_history_id_.reset();
@@ -8932,15 +8976,16 @@ class ReplicationManager::ReplicationGroup {
     // state makes every flow request LSN 1 in the replacement session, which
     // forces one coordinated full sync instead of retrying that prefix.
     if (cluster_population_invalidated) {
-      // Close serving immediately on the detecting flow. Worker zero will
-      // retire the ReplicationGroup proof after whole-session join, but no
-      // request may observe the divergent active root during that handoff.
+      // The owner closes serving before acknowledging invalidation to the
+      // detecting flow. Proof retirement follows whole-session join; stale
+      // failures from a replaced session cannot fence its successor.
       native_dataset_valid_.store(false, std::memory_order_release);
       storage_->SetReplicaLoading(true);
       StoreRole(ReplicationRole::kConnecting, std::memory_order_release);
       celer::ThisWorker().self_->Spawn(
           RevokeClusterRebuildSourceAuthorizations());
     }
+    co_return absl::OkStatus();
   }
 
   bool ShouldInjectFlowDropAfterTransaction(unsigned flow_id) {
@@ -10453,7 +10498,7 @@ class ReplicationManager::ReplicationGroup {
       requested_population = std::move(identity);
     }
     if (population_handshake) {
-      std::lock_guard lock(state_mutex_);
+      AssertStateOwner();
       // This is the admission side of the revoke barrier. If this handler
       // observes an open gate, a later revoker sees active_master_controls_
       // and joins it; if the revoker closed the gate first, reject before
@@ -10507,7 +10552,7 @@ class ReplicationManager::ReplicationGroup {
       celer::CrossWorkerMutex::Guard master_lock(&master_mutex_);
       source_history_id = history_id_;
       {
-        std::lock_guard lock(state_mutex_);
+        AssertStateOwner();
         source_group_id = group_id_;
       }
       if (replication_shutdown_requested_.load(std::memory_order_acquire) ||
@@ -10519,7 +10564,7 @@ class ReplicationManager::ReplicationGroup {
       std::shared_ptr<const ClusterRebuildContext> authorized_population;
       if (requested_population.has_value()) {
         const RebuildIdentity& requested = *requested_population;
-        std::lock_guard lock(state_mutex_);
+        AssertStateOwner();
         const bool authorized =
             cluster_rebuild_ != nullptr &&
             cluster_rebuild_->state_.load(std::memory_order_relaxed) ==
@@ -11112,25 +11157,40 @@ class ReplicationManager::ReplicationGroup {
   std::atomic<std::uint64_t>* const serving_generation_;
   const bool cluster_enabled_;
   const bool cluster_population_managed_;
-  mutable std::mutex state_mutex_;
+  // The existing discovery cancellation set also covers target-session
+  // sockets, including connect/TLS. It is declared before their shared owners
+  // so it outlives them. Only socket lifecycle/shutdown touches this registry;
+  // heartbeat and progress never acquire its descriptor-lifetime mutex.
+  SocketSet outbound_sockets_;
+  // All mutable role/population/session state below is owned by worker zero.
+  // Foreign workers query or change it with Celer messages, never a native
+  // thread lock. Flow-owned progress and command admission stay independent.
   std::optional<ReplicaOfConfig> upstream_;
-  // Guarded by state_mutex_. A failed promotion remains fenced, but REPLICAOF
+  struct UpstreamSnapshot {
+    std::uint64_t version_ = 0;
+    std::optional<ReplicaOfConfig> endpoint_;
+  };
+  std::atomic<std::shared_ptr<const UpstreamSnapshot>> published_upstream_;
+  std::atomic<std::uint64_t> upstream_version_{0};
+  // Each cache is accessed only by its indexed worker, never by the writer.
+  // Keeping it on the manager also avoids TLS cache ABA across manager reuse.
+  std::unique_ptr<UpstreamSnapshot[]> upstream_caches_;
+  // Owner-local. A failed promotion remains fenced, but REPLICAOF
   // NO ONE may retry the frozen proof without reconstructing retired flows.
   std::optional<storage::PromotionBase> pending_promotion_;
   std::shared_ptr<ReplicaSession> active_replica_session_;
   std::shared_ptr<ClusterRebuildContext> cluster_rebuild_;
   detail::SourceAuthorizationLedger source_authorizations_;
-  // Source authorization and handshake publication take master_mutex_ before
-  // state_mutex_. A revoke uses the same order, while this count keeps grants
-  // closed across the asynchronous flow join that follows registry removal.
+  // Source authorization and handshake publication run on worker zero under
+  // master_mutex_. A revoke uses the same registry gate; this count keeps
+  // grants closed across the asynchronous flow join that follows registry
+  // removal.
   unsigned cluster_source_revocations_in_flight_ = 0;
-  // Role changes are rare; command admission never takes this mutex.
-  mutable std::mutex serving_transition_mutex_;
   std::atomic<ReplicationRole> role_{ReplicationRole::kMaster};
   std::atomic<std::uint64_t> link_state_changed_nanos_{SteadyNanos()};
   std::atomic<std::uint64_t> role_epoch_{0};
   // Redis sources replace one node-wide population together. The active
-  // session is guarded by state_mutex_; the allocator is boot-scoped so a
+  // session is owned by worker zero; the allocator is boot-scoped so a
   // restarted process cannot mistake an old durable fence for its attempt.
   std::uint64_t redis_full_sync_session_id_ = 0;
   std::atomic<std::uint64_t> next_redis_full_sync_session_id_{1};
@@ -11141,11 +11201,11 @@ class ReplicationManager::ReplicationGroup {
   unsigned source_worker_count_ = 0;
   bool ready_waiter_started_ = false;             // worker 0 only
   bool coordinator_started_ = false;              // worker 0 only
-  bool replica_reconfiguration_running_ = false;  // guarded by state_mutex_
+  bool replica_reconfiguration_running_ = false;  // worker 0 only
   // Distinguishes the coordinator's automatic cancel/join/abort window from
   // an ordinary disconnected session. A control-plane supersession waits for
   // this owner to finish instead of racing a second abort of the same root.
-  bool replica_session_teardown_running_ = false;  // guarded by state_mutex_
+  bool replica_session_teardown_running_ = false;  // worker 0 only
   // Worker-zero lifecycle bit. Shutdown sets it before cancelling the native
   // target session so no directive can recreate work behind the drain barrier.
   bool cluster_control_stopping_ = false;
@@ -11156,7 +11216,7 @@ class ReplicationManager::ReplicationGroup {
   std::shared_ptr<detail::ReplicaAppliedFrontier> applied_frontier_;
   std::optional<std::string> upstream_node_id_;
   std::optional<std::string> upstream_history_id_;
-  std::string failure_reason_;  // guarded by state_mutex_
+  std::string failure_reason_;  // worker 0 only
 #if KEYLANE_FAULTS_ENABLED
   // Fault-injection settings are process-startup inputs in fault-enabled
   // binaries only. Ordinary releases neither read them nor keep fault state.
@@ -11208,7 +11268,7 @@ class ReplicationManager::ReplicationGroup {
   bool history_reset_running_ = false;  // worker 0 only
 
   const std::string node_id_;
-  std::string group_id_;  // guarded by state_mutex_
+  std::string group_id_;  // worker 0 only
   const std::string boot_id_;
   const std::string replica_incarnation_;
   // Owning the single boot-scoped group here fixes the
@@ -11234,10 +11294,6 @@ class ReplicationManager::ReplicationGroup {
   bool redis_cluster_ = false;
   bool redis_topology_fault_ = false;
   bool redis_topology_monitor_started_ = false;  // worker 0 only
-  // Covers outbound sockets before a target session exists. RequestShutdown
-  // may cancel it from the process main thread while worker zero is inside a
-  // TLS or discovery exchange.
-  SocketSet discovery_sockets_;
   // Covers native control/flow and Redis PSYNC export sockets independently
   // of the worker-affine source session registry. Process shutdown cancels it
   // before request drain so transport teardown releases backlog retention.
