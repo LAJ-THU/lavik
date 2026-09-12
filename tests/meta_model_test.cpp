@@ -2277,6 +2277,7 @@ TEST(MetaStateApply, DirectiveResultCommitUsesFirstRaftIndexOnReplay) {
   directive.authority_version_ = 1;
   directive.grant_revision_ = 8;
   directive.kind_ = "rebuild";
+  directive.payload_ = *keylane::cluster::control::EncodeRebuildRequest({3});
   directive.storage_mutating_ = true;
   keylane::meta::TransitionOperationPhase transition;
   transition.operation_id_ = submit.operation_id_;
@@ -2341,6 +2342,7 @@ TEST(MetaStateApply, DirectiveIntentMustMatchCommittedAuthorityAndAssignment) {
   directive.grant_revision_ = 8;
   directive.partition_replication_epoch_ = 0;
   directive.kind_ = "rebuild";
+  directive.payload_ = *keylane::cluster::control::EncodeRebuildRequest({3});
   directive.storage_mutating_ = true;
 
   keylane::meta::TransitionOperationPhase transition;
@@ -2400,6 +2402,8 @@ InstalledDirectiveFixture MakeInstalledDirectiveFixture() {
   fixture.directive.authority_version_ = 1;
   fixture.directive.grant_revision_ = 10;
   fixture.directive.kind_ = "rebuild";
+  fixture.directive.payload_ =
+      *keylane::cluster::control::EncodeRebuildRequest({3});
   fixture.directive.storage_mutating_ = true;
 
   keylane::meta::TransitionOperationPhase transition;
@@ -2658,6 +2662,7 @@ TEST(MetaStateApply, DirectiveRejectsSourceAssignmentFromBeforeRemoveAndReadd) {
   directive.authority_version_ = 1;
   directive.grant_revision_ = 8;
   directive.kind_ = "authorize-source";
+  directive.payload_ = *keylane::cluster::control::EncodeRebuildRequest({3});
 
   keylane::meta::TransitionOperationPhase transition;
   transition.operation_id_ = submit.operation_id_;
@@ -2707,6 +2712,7 @@ TEST(MetaStateApply,
     directive.authority_version_ = 1;
     directive.grant_revision_ = 6;
     directive.kind_ = "authorize-source";
+    directive.payload_ = *keylane::cluster::control::EncodeRebuildRequest({3});
     return directive;
   };
 
@@ -2842,6 +2848,7 @@ TEST(MetaStateApply,
     directive.authority_version_ = 1;
     directive.grant_revision_ = 6;
     directive.kind_ = "authorize-source";
+    directive.payload_ = *keylane::cluster::control::EncodeRebuildRequest({3});
     return directive;
   };
 
