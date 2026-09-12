@@ -22,6 +22,7 @@
 // current identity/topology rather than retained history.
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "keylane/meta/grant_store.h"
@@ -47,6 +48,10 @@ struct MetaCommittedStatusView {
   std::uint64_t applied_index_ = 0;
   std::uint64_t topology_epoch_ = 0;
   bool active_cluster_create_operation_ = false;
+  // The compact creation projection retains only diagnostic routing facts,
+  // never the complete operation intent or destructive workflow evidence.
+  std::string active_cluster_create_phase_;
+  std::vector<std::string> active_cluster_create_data_nodes_;
   std::vector<MetaMemberRecord> meta_members_;
   std::vector<MetaNodeRecord> data_nodes_;
   std::vector<MetaCommittedStatusGroup> groups_;
