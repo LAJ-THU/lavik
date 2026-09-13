@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Copyright (C) 2026 EloqData Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+set -euo pipefail
+mkdir -p /mnt/dev/ycsb-md0-keylane-matrix
+for w in a b c d; do
+  for t in 64 128 256 512; do
+    echo "=== $w $t ==="
+    /mnt/dev/YCSB-hreplace-dist/bin/ycsb run redis -threads "$t" -P "/mnt/dev/YCSB-hreplace-dist/workloads/workload${w}" \
+      -p redis.host=172.16.0.4 -p redis.port=16379 -p recordcount=100000000 -p operationcount=100000 \
+      -p fieldcount=10 -p fieldlength=128 -p fieldlengthdistribution=constant -p readallfields=true -p writeallfields=true \
+      -p requestdistribution=uniform -p redis.scanindex=none -p measurementtype=hdrhistogram -p measurement.interval=op \
+      -p hdrhistogram.percentiles=50,95,99,99.9,99.99 > "/mnt/dev/ycsb-md0-keylane-matrix/${w}-c${t}.log" 2>&1
+  done
+done
