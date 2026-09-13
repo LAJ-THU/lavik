@@ -3161,9 +3161,7 @@ class ReplicationManager::ReplicationGroup {
                    std::atomic<std::uint64_t>* serving_generation)
       : storage_(storage),
         serving_generation_(serving_generation),
-        cluster_enabled_(options.cluster_enabled_ ||
-                         options.cluster_population_managed_),
-        cluster_population_managed_(options.cluster_population_managed_),
+        cluster_enabled_(options.cluster_enabled_),
         upstream_(cluster_enabled_ ? std::nullopt
                                    : std::move(initial_upstream)),
         upstream_caches_(
@@ -3184,7 +3182,7 @@ class ReplicationManager::ReplicationGroup {
         masterauth_(options.masterauth_),
         redis_psync_(cluster_enabled_ ? false : options.redis_psync_),
         redis_export_backpressure_(options.redis_export_backpressure_) {
-    if (cluster_population_managed_) {
+    if (cluster_enabled_) {
       cluster_group_ =
           std::make_unique<keylane::ReplicationGroup>(node_id_, boot_id_);
     }
@@ -3224,7 +3222,7 @@ class ReplicationManager::ReplicationGroup {
         group_id_ = (**recovered_base).group_id_;
       }
     }
-    if (upstream_.has_value() || cluster_population_managed_) {
+    if (upstream_.has_value() || cluster_enabled_) {
       StoreRole(ReplicationRole::kConnecting, std::memory_order_relaxed);
       role_epoch_.store(1, std::memory_order_relaxed);
     }
@@ -3262,7 +3260,7 @@ class ReplicationManager::ReplicationGroup {
                 std::move(upstream), std::move(directive), std::move(manifest));
           });
     }
-    if (!cluster_population_managed_ || cluster_group_ == nullptr) {
+    if (!cluster_enabled_ || cluster_group_ == nullptr) {
       co_return absl::FailedPreconditionError(
           "cluster rebuild directives require Meta-managed population mode");
     }
@@ -3538,7 +3536,7 @@ class ReplicationManager::ReplicationGroup {
                                                       std::move(manifest));
           });
     }
-    if (!cluster_population_managed_ || cluster_group_ == nullptr) {
+    if (!cluster_enabled_ || cluster_group_ == nullptr) {
       co_return absl::FailedPreconditionError(
           "empty population initialization requires Meta-managed mode");
     }
@@ -3886,7 +3884,7 @@ class ReplicationManager::ReplicationGroup {
             return StartClusterPromotionPrepareDirective(std::move(directive));
           });
     }
-    if (!cluster_population_managed_ || cluster_group_ == nullptr) {
+    if (!cluster_enabled_ || cluster_group_ == nullptr) {
       co_return absl::FailedPreconditionError(
           "promotion prepare requires Meta-managed population mode");
     }
@@ -4024,7 +4022,7 @@ class ReplicationManager::ReplicationGroup {
                                            preserve_any_ready, reason);
           });
     }
-    if (!cluster_population_managed_ || cluster_group_ == nullptr) {
+    if (!cluster_enabled_ || cluster_group_ == nullptr) {
       co_return absl::FailedPreconditionError(
           "population reconciliation requires Meta-managed population mode");
     }
@@ -4228,7 +4226,7 @@ class ReplicationManager::ReplicationGroup {
       co_return co_await celer::SubmitTaskTo(
           0, [this]() { return CancelClusterRebuildForShutdown(); });
     }
-    if (!cluster_population_managed_ || cluster_group_ == nullptr) {
+    if (!cluster_enabled_ || cluster_group_ == nullptr) {
       co_return absl::FailedPreconditionError(
           "population shutdown requires Meta-managed population mode");
     }
@@ -4256,7 +4254,7 @@ class ReplicationManager::ReplicationGroup {
     }
     RequestShutdown();
     absl::Status result = absl::OkStatus();
-    if (cluster_population_managed_) {
+    if (cluster_enabled_) {
       // The Meta transition additionally retires its Ready proof. It is
       // idempotent when the control client already completed the same barrier.
       result = co_await CancelClusterRebuildForShutdown();
@@ -4389,7 +4387,7 @@ class ReplicationManager::ReplicationGroup {
             return AuthorizeClusterRebuildSource(std::move(directive));
           });
     }
-    if (!cluster_population_managed_ || cluster_group_ == nullptr) {
+    if (!cluster_enabled_ || cluster_group_ == nullptr) {
       co_return absl::FailedPreconditionError(
           "cluster source authorization requires Meta-managed population "
           "mode");
@@ -4492,7 +4490,7 @@ class ReplicationManager::ReplicationGroup {
                 allow_same_revision_replay, preserve_established_exports);
           });
     }
-    if (!cluster_population_managed_ || cluster_group_ == nullptr) {
+    if (!cluster_enabled_ || cluster_group_ == nullptr) {
       co_return absl::FailedPreconditionError(
           "cluster source revocation requires Meta-managed population mode");
     }
@@ -5552,16 +5550,6 @@ class ReplicationManager::ReplicationGroup {
                                            std::uint64_t client_id,
                                            std::string client_address,
                                            bool tls) {
-    if (cluster_enabled_ && !cluster_population_managed_) {
-      absl::Status sent = co_await WriteText(
-          stream,
-          "-ERR native replication export is unavailable in static cluster "
-          "mode\r\n");
-      co_return sent.ok() ? absl::FailedPreconditionError(
-                                "static cluster mode has no authorized native "
-                                "replication export")
-                          : sent;
-    }
     if (is_loading()) {
       absl::Status sent = co_await WriteText(
           stream,
@@ -6850,7 +6838,7 @@ class ReplicationManager::ReplicationGroup {
     storage_->SetReplicaLoading(true);
     storage_->SetExpirationAuthority(false);
     StoreRole(ReplicationRole::kConnecting, std::memory_order_release);
-    if (cluster_population_managed_) {
+    if (cluster_enabled_) {
       celer::ThisWorker().self_->Spawn(
           RevokeClusterRebuildSourceAuthorizations());
     }
@@ -10998,8 +10986,8 @@ class ReplicationManager::ReplicationGroup {
                                         std::uint64_t client_id) {
     const bool population_handshake =
         args.size() == 26 && args[8] == "POPULATION";
-    if ((!cluster_population_managed_ && args.size() != 8) ||
-        (cluster_population_managed_ && !population_handshake) ||
+    if ((!cluster_enabled_ && args.size() != 8) ||
+        (cluster_enabled_ && !population_handshake) ||
         args[1] != kProtocolVersion ||
         (args[3] != "?" && !IsReplicationId(args[3])) ||
         (args[4] != "?" && !IsReplicationId(args[4])) ||
@@ -11710,7 +11698,6 @@ class ReplicationManager::ReplicationGroup {
   // remaining bits are a monotonic dataset generation.
   std::atomic<std::uint64_t>* const serving_generation_;
   const bool cluster_enabled_;
-  const bool cluster_population_managed_;
   // The existing discovery cancellation set also covers target-session
   // sockets, including connect/TLS. It is declared before their shared owners
   // so it outlives them. Only socket lifecycle/shutdown touches this registry;

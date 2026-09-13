@@ -13,7 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Real-process gates for static one-, three-, and five-Meta genesis."""
+"""Real-process gates for manifest-bootstrapped one-, three-, and five-Meta
+genesis.
+"""
 
 import os
 import sys
@@ -55,13 +57,13 @@ def has_initial_binding_fault():
 def prove_replicated(nodes, leader, value):
     operation_id, reply = leader.propose(value)
     if not reply.startswith("OK "):
-        raise H.Failure(f"static cluster proposal failed: {reply}")
+        raise H.Failure(f"initial membership proposal failed: {reply}")
     index = int(reply[3:])
     H.wait_cluster_committed(nodes, index, timeout=20)
     for node in nodes:
         if node.getop(operation_id) != f"OK completed {value}":
             raise H.Failure(
-                f"node {node.id} did not apply static-cluster proposal")
+                f"node {node.id} did not apply initial membership proposal")
 
 
 def run_count(workdir, count):
@@ -77,9 +79,9 @@ def run_count(workdir, count):
     H.write_initial_cluster_manifest(manifest, nodes)
     try:
         if count == 3:
-            # A static three-voter config cannot elect with one process. The
-            # same pristine node becomes viable as soon as a majority arrives;
-            # nobody is added through the membership API.
+            # A manifest-bootstrapped three-voter config cannot elect with one
+            # process. The same pristine node becomes viable as soon as a
+            # majority arrives; nobody is added through the membership API.
             faults_enabled = has_initial_binding_fault()
             if faults_enabled:
                 for node in nodes:
@@ -124,7 +126,7 @@ def run_count(workdir, count):
                            explicit_ctl_socket=count != 1)
             leader = H.find_leader(nodes, timeout=20)
 
-        prove_replicated(nodes, leader, f"static-{count}")
+        prove_replicated(nodes, leader, f"manifest-{count}")
         H.wait_until(
             f"all {count} members close initial binding grace", 10,
             lambda: all(
@@ -145,7 +147,9 @@ def run_count(workdir, count):
         for node in nodes:
             H.wait_no_regress(node, before_restart)
         prove_replicated(nodes, leader, f"restart-{count}")
-        H.log(f"static {count}-Meta genesis and manifest-free restart — OK")
+        H.log(
+            f"manifest-bootstrapped {count}-Meta genesis and "
+            "manifest-free restart — OK")
     except Exception:
         H.dump_node_logs(nodes, lines=120)
         raise
