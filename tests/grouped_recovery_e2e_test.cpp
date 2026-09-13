@@ -112,7 +112,7 @@ class RecordImage {
         key, std::move(*encoded),
         RecordHeader{.value_type_ = ValueType::kHash,
                      .external_ = external,
-                     .hash_group_ = true,
+                     .auxiliary_group_ = true,
                      .group_retired_ = group.retired_,
                      .group_incarnation_ = group.incarnation_,
                      .group_prefix_ = group.id_.prefix_,
@@ -154,7 +154,7 @@ class RecordImage {
                                ? ValueType::kList
                                : ValueType::kSortedSet,
             .external_ = external,
-            .hash_group_ = true,
+            .auxiliary_group_ = true,
             .group_retired_ = group.retired_,
             .group_incarnation_ = group.incarnation_,
             .group_prefix_ = group.id_,
@@ -286,8 +286,8 @@ class RecordImage {
       };
     }
     record.key_bytes_ = key.size();
-    record.header_bytes_ =
-        RecordHeaderBytes(key.size(), false, tagged, false, record.hash_group_);
+    record.header_bytes_ = RecordHeaderBytes(key.size(), false, tagged, false,
+                                             record.auxiliary_group_);
     record.payload_bytes_ = payload.size();
     record.total_disk_bytes_ =
         AlignRecord(record.header_bytes_ + payload.size());
@@ -679,7 +679,7 @@ TEST(GroupedRecoveryE2e, IndexedSortedSetRequiresAndChecksMemberGraph) {
       ASSERT_TRUE(encoded.ok()) << encoded.status();
       RecordHeader header{.value_type_ = ValueType::kSortedSet,
                           .external_ = true,
-                          .hash_group_ = true,
+                          .auxiliary_group_ = true,
                           .group_incarnation_ = 17,
                           .logical_size_ = 1,
                           .mutation_sequence_ = 1};
