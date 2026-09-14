@@ -42,6 +42,8 @@
 #include <utility>
 #include <vector>
 
+#include "support/test_data_path.h"
+
 namespace {
 
 using namespace std::chrono_literals;
@@ -359,8 +361,8 @@ int main(int argc, char** argv) {
     return 2;
   }
   try {
-    const std::string prefix =
-        "/tmp/keylane-extent-recovery-" + std::to_string(::getpid());
+    const std::string prefix = keylane::test::TestDataPath(
+        "keylane-extent-recovery-" + std::to_string(::getpid()));
     const std::string data_path = prefix + ".data";
     const std::string log_path = prefix + ".log";
     (void)::unlink(data_path.c_str());
@@ -458,8 +460,8 @@ int main(int argc, char** argv) {
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << "\n";
-    const std::string log_path =
-        "/tmp/keylane-extent-recovery-" + std::to_string(::getpid()) + ".log";
+    const std::string log_path = keylane::test::TestDataPath(
+        "keylane-extent-recovery-" + std::to_string(::getpid()) + ".log");
     std::ifstream log(log_path);
     if (log) {
       std::string contents((std::istreambuf_iterator<char>(log)),

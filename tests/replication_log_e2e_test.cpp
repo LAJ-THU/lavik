@@ -47,6 +47,7 @@
 #include "keylane/storage/format.h"
 #include "keylane/storage/scan_hash_map.h"
 #include "keylane/tx/tx_shard.h"
+#include "support/test_data_path.h"
 
 namespace {
 
@@ -2741,8 +2742,8 @@ int main(int argc, char** argv) {
       return RunOnce(argv[2], false);
     }
     Check(argc == 1, "unexpected replication-log test arguments");
-    const std::string path =
-        "/tmp/keylane-replication-log-" + std::to_string(::getpid()) + ".data";
+    const std::string path = keylane::test::TestDataPath(
+        "keylane-replication-log-" + std::to_string(::getpid()) + ".data");
     CreateDataFile(path);
     const int writer = RunOnce(path, true);
     if (writer != 0) {

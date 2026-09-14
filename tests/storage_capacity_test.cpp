@@ -32,6 +32,7 @@
 #include "keylane/metrics.h"
 #include "keylane/storage/engine.h"
 #include "keylane/tx/tx_shard.h"
+#include "support/test_data_path.h"
 
 namespace keylane::storage {
 
@@ -478,10 +479,8 @@ TEST(StorageExpirationAuthorityTest, LegacyPermanentGrantIsIdempotent) {
 
 TEST(StorageExpirationAuthorityTest,
      FiniteAuthorityIsExactCancellableAndIndependentOfTombRaider) {
-  const std::string path =
-      (std::filesystem::temp_directory_path() /
-       ("keylane-expiration-authority-" + std::to_string(::getpid()) + ".data"))
-          .string();
+  const std::string path = keylane::test::TestDataPath(
+      "keylane-expiration-authority-" + std::to_string(::getpid()) + ".data");
   Cleanup cleanup{{path}};
   ASSERT_CHECK(CreateFile(path, 96 * kMiB),
                "failed to create expiration-authority storage file");
@@ -511,8 +510,8 @@ TEST(StorageExpirationAuthorityTest,
 }
 
 TEST(StorageCapacityTest, ValidatesAndPreservesDeviceCapacities) {
-  const std::string prefix =
-      "/tmp/keylane-storage-capacity-" + std::to_string(::getpid());
+  const std::string prefix = keylane::test::TestDataPath(
+      "keylane-storage-capacity-" + std::to_string(::getpid()));
   Cleanup cleanup;
 
   const std::string unequal_a = prefix + "-unequal-a.data";
@@ -559,8 +558,8 @@ TEST(StorageCapacityTest, ValidatesAndPreservesDeviceCapacities) {
 }
 
 TEST(StorageCapacityTest, ExpandsAnInitializedStorageSet) {
-  const std::string prefix =
-      "/tmp/keylane-storage-expansion-" + std::to_string(::getpid());
+  const std::string prefix = keylane::test::TestDataPath(
+      "keylane-storage-expansion-" + std::to_string(::getpid()));
   Cleanup cleanup;
   const std::string original = prefix + "-original.data";
   const std::string added = prefix + "-added.data";
@@ -581,8 +580,8 @@ TEST(StorageCapacityTest, ExpandsAnInitializedStorageSet) {
 }
 
 TEST(StorageCapacityTest, RejectsForeignDeviceDuringExpansion) {
-  const std::string prefix =
-      "/tmp/keylane-storage-foreign-" + std::to_string(::getpid());
+  const std::string prefix = keylane::test::TestDataPath(
+      "keylane-storage-foreign-" + std::to_string(::getpid()));
   Cleanup cleanup;
   const std::string first = prefix + "-first.data";
   const std::string foreign = prefix + "-foreign.data";

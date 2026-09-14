@@ -37,6 +37,7 @@
 #include <vector>
 
 #include "gtest/gtest.h"
+#include "support/test_data_path.h"
 
 namespace {
 
@@ -372,8 +373,8 @@ std::uint64_t MetricValue(std::string_view body, std::string_view name) {
 
 TEST(MetricsE2eTest, ConcurrentInfoAndScrapesSurviveWorkerAllocationReuse) {
   ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix =
-      "/tmp/keylane-metrics-reuse-e2e-" + std::to_string(::getpid());
+  const std::string prefix = keylane::test::TestDataPath(
+      "keylane-metrics-reuse-e2e-" + std::to_string(::getpid()));
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
   FileCleanup data_cleanup(data_path);
@@ -497,8 +498,8 @@ TEST(MetricsE2eTest, ConcurrentInfoAndScrapesSurviveWorkerAllocationReuse) {
 
 TEST(MetricsE2eTest, ConfigResetstatClearsCommandCountersOnly) {
   ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix =
-      "/tmp/keylane-resetstat-e2e-" + std::to_string(::getpid());
+  const std::string prefix = keylane::test::TestDataPath(
+      "keylane-resetstat-e2e-" + std::to_string(::getpid()));
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
   FileCleanup data_cleanup(data_path);
@@ -545,8 +546,8 @@ TEST(MetricsE2eTest, ConfigResetstatClearsCommandCountersOnly) {
 
 TEST(MetricsE2eTest, SlowLogRecordsBoundsQueriesAndDisables) {
   ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix =
-      "/tmp/keylane-slowlog-e2e-" + std::to_string(::getpid());
+  const std::string prefix = keylane::test::TestDataPath(
+      "keylane-slowlog-e2e-" + std::to_string(::getpid()));
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
   FileCleanup data_cleanup(data_path);
@@ -596,8 +597,8 @@ TEST(MetricsE2eTest, SlowLogRecordsBoundsQueriesAndDisables) {
 
 TEST(MetricsE2eTest, ExposesPrometheusCommandStorageAndDefragMetrics) {
   ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix =
-      "/tmp/keylane-metrics-e2e-" + std::to_string(::getpid());
+  const std::string prefix = keylane::test::TestDataPath(
+      "keylane-metrics-e2e-" + std::to_string(::getpid()));
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
   FileCleanup data_cleanup(data_path);
