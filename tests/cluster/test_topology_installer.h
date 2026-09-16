@@ -40,8 +40,8 @@ class TestTopologyInstaller {
     session_ = SessionIdentity{
         .session_id_ = SessionId::FromBytes(session_bytes),
         .generation_ = 1,
-        .data_boot_id_ = *NodeId::Parse(
-            "dddddddddddddddddddddddddddddddddddddddd"),
+        .data_boot_id_ =
+            *NodeId::Parse("dddddddddddddddddddddddddddddddddddddddd"),
     };
   }
 
@@ -67,13 +67,9 @@ class TestTopologyInstaller {
         .source_meta_applied_index_ = next_source_index_,
         .projection_hash_ = projection_hash,
     };
-    Sha256Digest object_hash{};
-    object_hash.fill(
-        static_cast<std::uint8_t>(((next_source_index_ + 1) % 251) + 1));
     if (absl::Status installed = installer_.InstallFullState(
             PreparedFullState{
                 .serving_state_ = std::move(state),
-                .object_hash_ = object_hash,
                 .control_groups_ = {},
             },
             projection);
@@ -92,8 +88,6 @@ class TestTopologyInstaller {
           .group_id_ = group.group_id_,
           .assignment_id_ = group.assignment_id_,
           .group_term_ = group.group_term_,
-          .authority_version_ = group.authority_version_,
-          .grant_revision_ = group.grant_revision_,
       };
       if (absl::Status granted = installer_.ApplyAuthority(
               AuthorityMessage{

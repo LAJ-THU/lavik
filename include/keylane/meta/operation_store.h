@@ -124,7 +124,6 @@ struct MetaTerminalReceipt {
   MetaBootIncarnation recipient_boot_id_{};
   MetaAssignmentId assignment_id_{};
   MetaDirectiveResultStatus status_ = MetaDirectiveResultStatus::kSucceeded;
-  MetaHash256 result_hash_{};
   std::string result_;
   std::uint64_t committed_index_ = 0;
   bool operator==(const MetaTerminalReceipt&) const = default;
@@ -140,7 +139,6 @@ struct MetaOperationRecord {
   std::string intent_;
   MetaHash256 intent_hash_{};
   MetaReplicationHistoryId replication_history_id_{};
-  std::vector<MetaPolicyReference> policy_references_;
   MetaOperationLifecycle lifecycle_ = MetaOperationLifecycle::kSubmitted;
   // Opaque to committed apply; operation-specific coordinators own the schema.
   std::string kind_phase_blob_;
@@ -249,9 +247,6 @@ class MetaOperationStore {
   // have legitimately advanced.
   bool TransitionAlreadyApplied(
       const keylane::meta::TransitionOperationPhase& command) const;
-  // True only for a live Submitted/Running operation. Terminal records no
-  // longer block retirement even before archival.
-  bool PolicyInUse(std::string_view policy_id, std::uint64_t version) const;
   // Active operation evidence/directives retain manifest documents needed to
   // validate or resume their current phase.
   bool PopulationManifestInUse(const MetaHash256& digest) const;
