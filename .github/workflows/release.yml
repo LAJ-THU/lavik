@@ -163,6 +163,9 @@ jobs:
           - Standard: DPDK/SPDK included; x86-64-v2 or ARMv8-A+CRC32 required.
           - Minimal: kernel TCP/io_uring only; compiler-default CPU target.
 
+          Both variants require Linux 6.1+ with io_uring enabled for lavik and
+          lavik-meta, including DPDK/SPDK deployments, and Ubuntu 24.04-compatible glibc.
+
           These prerelease assets are replaced after successful main builds.
           EOF
           printf '\nSource: [%s](https://github.com/%s/commit/%s)\n' \

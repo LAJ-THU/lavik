@@ -102,7 +102,7 @@ SPDK NVMe namespaces, so capacity scales with storage.
 
 The standard io_uring build requires:
 
-- Linux (`x86_64` and `aarch64` are the release-package targets)
+- Linux 6.1 or newer with io_uring enabled (`x86_64` and `aarch64` are the release-package targets)
 - CMake 3.26 or newer (required by the bundled Meta dependency)
 - a C++23 compiler (GCC 13+ or a recent Clang is recommended)
 - GNU Make, Git, and OpenSSL development headers/static libraries
@@ -161,8 +161,13 @@ features must use `minimal`. On ARM64, the standard package additionally
 requires the CRC32 instruction extension. The requirement applies to the
 package even when bypass is not selected at startup.
 
-Both variants require Linux with usable io_uring and a compatible glibc. CI
-builds on Ubuntu 24.04; artifacts are not intended for older glibc environments.
+Both variants require **Linux 6.1 or newer** with usable io_uring for `lavik`
+and `lavik-meta`, including when DPDK/SPDK is selected. Worker initialization
+requires `IORING_SETUP_DEFER_TASKRUN`, introduced in Linux 6.1, with no fallback
+to older kernels. This is the API compatibility floor, not a tested-kernel
+matrix; see [Kernel requirements](docs/operations/building-and-packaging.md#kernel-requirements).
+CI builds on Ubuntu 24.04; artifacts also require a compatible glibc and are
+not intended for older glibc environments.
 The standard package additionally needs the NUMA and UUID runtime libraries
 (`libnuma1` and `libuuid1` on Ubuntu). It defaults to kernel TCP/io_uring;
 DPDK/SPDK must be explicitly selected and provisioned. Its bundled DPDK network

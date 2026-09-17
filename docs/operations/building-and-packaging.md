@@ -16,6 +16,28 @@ limitations under the License.
 
 # Building and packaging
 
+## Kernel requirements
+
+Running `lavik` or `lavik-meta` requires **Linux 6.1 or newer** with io_uring
+enabled. This applies to both `minimal` and standard packages on x86_64 and
+ARM64. Selecting DPDK/SPDK does not remove the requirement: workers retain an
+io_uring instance for runtime services, including timers and wakeups.
+
+Bycorf creates each worker ring with `IORING_SETUP_DEFER_TASKRUN`, available
+since Linux 6.1, and does not retry initialization without that flag. The other
+required setup flags, `SINGLE_ISSUER`, `COOP_TASKRUN`, and `TASKRUN_FLAG`, were
+available by Linux 6.0. See the upstream
+[io_uring setup manual](https://github.com/axboe/liburing/blob/master/man/io_uring_setup.2).
+The runtime's separate `IORING_FEAT_NODROP` check mentions Linux 5.5, but that
+is only the minimum for that feature, not for the complete runtime.
+
+Linux 6.1 is the API compatibility floor, not a claim that every 6.1 kernel
+has been tested. Use an updated distribution kernel with its bug fixes;
+release CI builds on Ubuntu 24.04 and does not test a Linux 6.1 kernel matrix.
+For containers, the host kernel must meet this requirement and the container
+policy must allow `io_uring_setup`, `io_uring_enter`, and `io_uring_register`.
+CPU instruction-set and glibc requirements remain separate constraints.
+
 ## Local builds
 
 Optimized local builds use the current machine's instruction set by default:
