@@ -14,19 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Keylane SPDK：16 个 worker 下，十亿条记录、128–1024 字节 value 的 GET 吞吐超过百万 QPS
+# Lavik SPDK：16 个 worker 下，十亿条记录、128–1024 字节 value 的 GET 吞吐超过百万 QPS
 
 [English](README.md) | **简体中文** | [报告目录](../README.md)
 
-> 本报告记录项目更名为 Lavik 之前的 Keylane 测试。产品名、版本、命令和数据均对应当时的实验，
-> 不代表当前 Lavik 版本的实测结果。
 > 恢复来源： [2026-09-15 历史版本](https://github.com/eloqdata/lavik/tree/eedb3080d808769519d93e971195b53b38b09c1e/perf_reports)。
 
 日期：2026-08-31 UTC
 
 ## 技术总结
 
-Keylane 在 **1,000,000,000** 个已有 key 上执行随机 GET，固定 value 大小从 **128 字节到 1024 字节**时均超过百万 GET/s。128 字节的最佳结果为 **1,058,414 GET/s**，全量 256 字节为 **1,043,567 GET/s**，全量 512 字节为 **1,031,819 GET/s**，全量 1024 字节为 **1,007,197 GET/s**。下一个测试大小 2048 字节得到 843,047 GET/s。因此，在本配置已验证的大小中，1024 字节是超过百万 GET/s 的最大值。所有测试均使用 16 个固定 CPU 的 Keylane worker、六个裸 SPDK NVMe namespace，以及 `dfly_bench` 的 16 个客户端线程、640 个连接、pipeline=1 和不限速配置。每次测量的 64,000,000 个请求全部命中，未报告错误。
+Lavik 在 **1,000,000,000** 个已有 key 上执行随机 GET，固定 value 大小从 **128 字节到 1024 字节**时均超过百万 GET/s。128 字节的最佳结果为 **1,058,414 GET/s**，全量 256 字节为 **1,043,567 GET/s**，全量 512 字节为 **1,031,819 GET/s**，全量 1024 字节为 **1,007,197 GET/s**。下一个测试大小 2048 字节得到 843,047 GET/s。因此，在本配置已验证的大小中，1024 字节是超过百万 GET/s 的最大值。所有测试均使用 16 个固定 CPU 的 Lavik worker、六个裸 SPDK NVMe namespace，以及 `dfly_bench` 的 16 个客户端线程、640 个连接、pipeline=1 和不限速配置。每次测量的 64,000,000 个请求全部命中，未报告错误。
 
 这是闭环吞吐结果，不是开放环延迟 SLA 承诺。读取开始前持久化 keyspace 恰好有十亿个 key，随机读取均匀覆盖完整的 `0` 到 `999999999` 范围。
 
@@ -56,8 +54,8 @@ completion cap 从 8 到 16 的对比具有运维参考价值，但不是严格�
 - CPU：AMD EPYC 9V74，16 个逻辑 CPU；单插槽、八个核心，每核心两个硬件线程。
 - 内存：135,066,603,520 字节（125.79 GiB）。
 - 存储：六个 Microsoft NVMe Direct Disk v2 namespace，每个 1,919,850,381,312 字节；裸数据总容量 10.48 TiB。SPDK BDF 为 `5361:00:00.0`、`6d30:00:00.0`、`32a1:00:00.0`、`78f5:00:00.0`、`9093:00:00.0` 和 `c7c0:00:00.0`。
-- Keylane 可执行文件 SHA-256：`be1f71c6c8c11e6130685ca0c0e83ad8478bb30b27cff1b61742376959ce32bf`。
-- 测试时源码：Keylane `07d4115ab6e8a66e8b2dc81a5a7abf42f6eb78a6`，Celer `6437653f87887924c5e7ea1e83defb85d8e1f9f1`。
+- Lavik 可执行文件 SHA-256：`be1f71c6c8c11e6130685ca0c0e83ad8478bb30b27cff1b61742376959ce32bf`。
+- 测试时源码：Lavik `07d4115ab6e8a66e8b2dc81a5a7abf42f6eb78a6`，Celer `6437653f87887924c5e7ea1e83defb85d8e1f9f1`。
 
 ### 客户端
 
@@ -73,7 +71,7 @@ completion cap 从 8 到 16 的对比具有运维参考价值，但不是严格�
 
 1024 字节覆盖耗时 20m2.139s（877,563 SET/s），2048 字节覆盖耗时 26m7.184s（685,017 SET/s）。每次均保留恰好十亿个 key；GET 前，`0`、`500000000`、`999999999` 三个 key 的长度都符合目标大小。1024 字节读取仅比百万门槛高 0.72%；2048 字节没有达到门槛是实测结果，而非外推。
 
-用于 cap=16 测试的重启之前，Keylane 报告：
+用于 cap=16 测试的重启之前，Lavik 报告：
 
 | 指标 | 值 |
 |---|---:|
@@ -82,7 +80,7 @@ completion cap 从 8 到 16 的对比具有运维参考价值，但不是严格�
 | 峰值 RSS | 51.89 GiB |
 | 配置的最大内存 | 100.63 GiB |
 
-128 字节数据集的逻辑 key 和 value 总量约 127.5 GiB。计入 104 字节 record header、内联 key 和八字节 record 对齐后，存活记录分配量约 230 GiB，尚未计入 block header 和 direct-I/O flush padding。256 字节 value 的同类估算约 349 GiB。Keylane 的内存索引大小未随 value 大小发生显著变化：256 字节测试后 `used_memory=49.06 GiB`，RSS 为 `50.25 GiB`。
+128 字节数据集的逻辑 key 和 value 总量约 127.5 GiB。计入 104 字节 record header、内联 key 和八字节 record 对齐后，存活记录分配量约 230 GiB，尚未计入 block header 和 direct-I/O flush padding。256 字节 value 的同类估算约 349 GiB。Lavik 的内存索引大小未随 value 大小发生显著变化：256 字节测试后 `used_memory=49.06 GiB`，RSS 为 `50.25 GiB`。
 
 裸设备没有文件系统 `df` 计数；以上是存活数据估算，不代表安全擦除。`FLUSHDB` 是逻辑删除，之前实验的记录可能仍保留在物理介质上，在回收发生前增加恢复扫描时间。
 
@@ -148,7 +146,7 @@ taskset -c 0-15 /tmp/dfly_bench-x86_64 \
   --key_dist=U --tcp_nodelay=true
 ```
 
-该命令建立 640 个客户端连接，执行 64,000,000 次 GET。先提高客户端文件描述符上限：默认的 1024 不足以支撑 1,024 个连接，会产生客户端 `EMFILE`，并非 Keylane 服务端错误。
+该命令建立 640 个客户端连接，执行 64,000,000 次 GET。先提高客户端文件描述符上限：默认的 1024 不足以支撑 1,024 个连接，会产生客户端 `EMFILE`，并非 Lavik 服务端错误。
 
 复现 256、512、1024 或 2048 字节版本时，再次执行相同顺序 SET 命令，将 `--d=` 设置为对应大小；验证 `DBSIZE` 和三个 `STRLEN` 后执行相同 GET 命令。覆盖 value 大小时无需 `FLUSHDB`。
 

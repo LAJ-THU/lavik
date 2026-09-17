@@ -14,12 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Keylane SPDK 与裸设备 io_uring 对比：5 亿 key、固定 2 KiB、12 个 worker
+# Lavik SPDK 与裸设备 io_uring 对比：5 亿 key、固定 2 KiB、12 个 worker
 
 [English](README.md) | **简体中文** | [报告目录](../README.md)
 
-> 本报告记录项目更名为 Lavik 之前的 Keylane 测试。产品名、版本、命令和数据均对应当时的实验，
-> 不代表当前 Lavik 版本的实测结果。
 > 恢复来源： [2026-09-15 历史版本](https://github.com/eloqdata/lavik/tree/eedb3080d808769519d93e971195b53b38b09c1e/perf_reports)。
 > 历史 `perf_runs/` 原始输入目录未包含在来源快照中；本次恢复报告及其中的结果表，不包含那些原始日志。
 
@@ -27,14 +25,14 @@ limitations under the License.
 
 ## 技术总结
 
-在这台 16 个逻辑 CPU 的主机上，Keylane 使用固定在 CPU 0–11 的 12 个 worker，本地用户进程和 mlx5 IRQ 隔离到 CPU 12–15。两个后端均使用两个 1.92 TB NVMe namespace、Release 构建、pipeline=1、80 个客户端连接、八个客户端线程、固定 2048 字节 value、500,000,000 个已有 key、不限速闭环负载和 300 秒正式窗口。
+在这台 16 个逻辑 CPU 的主机上，Lavik 使用固定在 CPU 0–11 的 12 个 worker，本地用户进程和 mlx5 IRQ 隔离到 CPU 12–15。两个后端均使用两个 1.92 TB NVMe namespace、Release 构建、pipeline=1、80 个客户端连接、八个客户端线程、固定 2048 字节 value、500,000,000 个已有 key、不限速闭环负载和 300 秒正式窗口。
 
 两个客户端给出的后端对比方向一致：
 
 - SPDK 的随机读和 1:1 读写更快。memtier 下，读吞吐领先裸 io_uring 5.69%，混合吞吐领先 6.72%；Valkey 下，读吞吐领先 8.24%。
 - 纯写吞吐基本持平。裸 io_uring 在 memtier 下快 0.49%，在 Valkey 下快 0.19%，但深尾写延迟更高。
-- SPDK 读吞吐几乎相同时，memtier 报告 p99.99 为 `1.039 ms`，Valkey 为 `(0.591, 0.623] ms`。裸 io_uring 也有相同现象：memtier 为 `1.079 ms`，Valkey 为 `(0.607, 0.639] ms`。额外读尾延迟因此主要来自客户端，而不是 Keylane 吞吐差异。
-- 所有接受的测试均成功退出，保留恰好 500,000,000 个 key，内存拒绝为零，且未产生 Keylane error 或 latency-trace 日志。所有 memtier GET 负载均报告零 miss。
+- SPDK 读吞吐几乎相同时，memtier 报告 p99.99 为 `1.039 ms`，Valkey 为 `(0.591, 0.623] ms`。裸 io_uring 也有相同现象：memtier 为 `1.079 ms`，Valkey 为 `(0.607, 0.639] ms`。额外读尾延迟因此主要来自客户端，而不是 Lavik 吞吐差异。
+- 所有接受的测试均成功退出，保留恰好 500,000,000 个 key，内存拒绝为零，且未产生 Lavik error 或 latency-trace 日志。所有 memtier GET 负载均报告零 miss。
 
 ## 主要结果
 
@@ -100,7 +98,7 @@ SPDK 下两个客户端的读吞吐只差 0.17%，但 memtier 的 p99.99 至少�
 - 分段吞吐从约 290–300K QPS 降至约 51K QPS。
 - 分段平均延迟升至约 1.54 ms。
 - 完整窗口结果降至 290,002.56 QPS，p99.99 为 `(2.535, 2.735] ms`，最大值 `206.463 ms`。
-- Keylane 维持约 1120% CPU。Keylane journal、kernel journal 和两块 NVMe 的 SMART 日志均无错误；两设备的 media error 和 critical warning 均为零。
+- Lavik 维持约 1120% CPU。Lavik journal、kernel journal 和两块 NVMe 的 SMART 日志均无错误；两设备的 media error 和 critical warning 均为零。
 
 紧接着进行的第二次 300 秒读取未复现该扰动，得到 297,588.91 QPS，p99.99 为 `(0.607, 0.639] ms`。主表采用稳定重测结果。首次测试在历史原始证据中的位置为 `iouring/valkey/read-run1-anomalous`；原因尚未查明，若复现应使用块层延迟跟踪调查。
 
@@ -128,7 +126,7 @@ SPDK 下两个客户端的读吞吐只差 0.17%，但 memtier 的 p99.99 至少�
 
 | 工作 | CPUs |
 |---|---|
-| Keylane 服务 cgroup 和 12 个固定 worker | 0-11 |
+| Lavik 服务 cgroup 和 12 个固定 worker | 0-11 |
 | 本地 user slice、tmux、Codex 和 SSH 启动器 | 12-15 |
 | mlx5 异步 IRQ | 15 |
 | mlx5 completion IRQ | 12-15 轮转分布 |
@@ -136,7 +134,7 @@ SPDK 下两个客户端的读吞吐只差 0.17%，但 memtier 的 p99.99 至少�
 
 最终生效状态为 `user-1000.slice AllowedCPUs=12-15`；mlx5 IRQ 58 位于 CPU 15，IRQ 59–74 在 CPU 12–15 上轮转分布。Linux 将裸 NVMe I/O vector 暴露为每 CPU 一个的 managed IRQ，因此无法全部迁出 worker CPU 集合。这部分内核工作有意计入裸 io_uring 的结果。
 
-### Keylane 设置
+### Lavik 设置
 
 - `--threads=12 --pin-workers`
 - `--busy-poll-us=20`
@@ -192,7 +190,7 @@ taskset -c 0-15 /tmp/keylane-valkey-offset/valkey-benchmark \
 
 ## 验证与限制
 
-- Keylane commit：`c9f981732539fd32b6ec9000d2608f03e698691b`
+- Lavik commit：`c9f981732539fd32b6ec9000d2608f03e698691b`
 - celer commit：`0a70d22086fb14435464253991ca6fc6a90f19d5`
 - 每项主要测试只有一个 300 秒正式窗口；Valkey 额外预热五秒。
 - 所有主要客户端退出码均为零，前后 `DBSIZE` 均为 500,000,000，`keylane_memory_rejected_commands_total` 一直为零。

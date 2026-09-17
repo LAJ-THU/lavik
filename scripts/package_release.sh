@@ -47,35 +47,43 @@ cmake -S "$REPO_ROOT" -B "$BUILD_DIR" \
   -DCMAKE_BUILD_TYPE=Release \
   -DBUILD_TESTING=OFF \
   -DLAVIK_BUILD_FAULT_SERVER=OFF \
+  -DLAVIK_BUILD_META=ON \
   -DLAVIK_ENABLE_OPT=ON \
   -DLAVIK_MARCH="$PACKAGE_MARCH" \
   -DLAVIK_STATIC_OPENSSL=ON \
   -DLAVIK_STATIC_CXX_RUNTIME=ON
-cmake --build "$BUILD_DIR" --target lavik -j"$BUILD_JOBS"
+BINARIES=(lavik lavik-meta lavik-ctl)
+cmake --build "$BUILD_DIR" --target "${BINARIES[@]}" -j"$BUILD_JOBS"
 
-BINARY=$BUILD_DIR/lavik
-if [[ ! -x "$BINARY" ]]; then
-  echo "Release build did not produce $BINARY" >&2
-  exit 1
-fi
+for binary_name in "${BINARIES[@]}"; do
+  binary=$BUILD_DIR/$binary_name
+  if [[ ! -x "$binary" ]]; then
+    echo "Release build did not produce $binary" >&2
+    exit 1
+  fi
 
-DYNAMIC_SECTION=$(readelf -d "$BINARY")
-if grep -Eq 'Shared library: \[(libssl|libcrypto)\.so' <<<"$DYNAMIC_SECTION"; then
-  echo "Packaging refused: OpenSSL is still dynamically linked" >&2
-  exit 1
-fi
-if grep -Eq 'Shared library: \[(libstdc\+\+|libgcc_s)\.so' \
-    <<<"$DYNAMIC_SECTION"; then
-  echo "Packaging refused: the C++ runtime is still dynamically linked" >&2
-  exit 1
-fi
+  dynamic_section=$(readelf -d "$binary")
+  if grep -Eq 'Shared library: \[(libssl|libcrypto)\.so' <<<"$dynamic_section"; then
+    echo "Packaging refused: $binary_name still dynamically links OpenSSL" >&2
+    exit 1
+  fi
+  if grep -Eq 'Shared library: \[(libstdc\+\+|libgcc_s)\.so' \
+      <<<"$dynamic_section"; then
+    echo "Packaging refused: $binary_name still dynamically links the C++ runtime" >&2
+    exit 1
+  fi
+done
 
 cmake -E remove_directory "$STAGE_DIR"
 cmake -E make_directory "$STAGE_DIR"
-install -m 0755 "$BINARY" "$STAGE_DIR/lavik"
+for binary_name in "${BINARIES[@]}"; do
+  install -m 0755 "$BUILD_DIR/$binary_name" "$STAGE_DIR/$binary_name"
+done
 install -m 0644 "$REPO_ROOT/LICENSE" "$REPO_ROOT/NOTICE" "$STAGE_DIR/"
 if command -v strip >/dev/null 2>&1; then
-  strip --strip-unneeded "$STAGE_DIR/lavik"
+  for binary_name in "${BINARIES[@]}"; do
+    strip --strip-unneeded "$STAGE_DIR/$binary_name"
+  done
 fi
 install -m 0644 "$REPO_ROOT/docs/design-docs/tls-and-auth.md" \
   "$STAGE_DIR/tls-and-auth.md"
@@ -88,7 +96,9 @@ fi
 install -m 0644 "$OPENSSL_LICENSE" "$STAGE_DIR/OPENSSL-LICENSE.txt"
 printf '%s\n' "$VERSION" >"$STAGE_DIR/VERSION"
 
-"$STAGE_DIR/lavik" --help >/dev/null
+for binary_name in "${BINARIES[@]}"; do
+  "$STAGE_DIR/$binary_name" --help >/dev/null
+done
 
 cmake -E make_directory "$OUTPUT_DIR"
 tar -C "$BUILD_DIR" -czf "$ARCHIVE" "$PACKAGE_NAME"
@@ -96,5 +106,8 @@ tar -C "$BUILD_DIR" -czf "$ARCHIVE" "$PACKAGE_NAME"
 echo "Release package: $ARCHIVE"
 echo "CPU baseline: -march=$PACKAGE_MARCH"
 echo "Dynamic dependencies:"
-ldd "$STAGE_DIR/lavik" || true
+for binary_name in "${BINARIES[@]}"; do
+  echo "$binary_name:"
+  ldd "$STAGE_DIR/$binary_name" || true
+done
 sha256sum "$ARCHIVE"

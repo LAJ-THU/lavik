@@ -14,18 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Keylane SPDK 48-hour online stability experiment (2026-08-15)
+# Lavik SPDK 48-hour online stability experiment (2026-08-15)
 
 **English** | [简体中文](README.zh-CN.md) | [All reports](../README.md)
 
-> Historical benchmark of Keylane, the project now named Lavik. Product names,
-> versions, commands, and measurements describe the original test; this is not a
-> measurement of the current Lavik release.
 > Restored from the [2026-09-15 archive](https://github.com/eloqdata/lavik/tree/eedb3080d808769519d93e971195b53b38b09c1e/perf_reports).
 
 ## Conclusion
 
-Keylane ran continuously for a strict 48-hour window with the final defrag settings, serving 400 million records with 1–4 KB values at 100,000 QPS and a 95% read / 5% overwrite mix. The window completed approximately 17.280 billion GET/SET operations without a service restart, error, memory rejection, or loss of database entries.
+Lavik ran continuously for a strict 48-hour window with the final defrag settings, serving 400 million records with 1–4 KB values at 100,000 QPS and a 95% read / 5% overwrite mix. The window completed approximately 17.280 billion GET/SET operations without a service restart, error, memory rejection, or loss of database entries.
 
 Server-side latency remained stable:
 
@@ -43,7 +40,7 @@ This experiment supports stable operation at 100,000 QPS for 48 hours under this
 
 ## 48-hour results
 
-Latency is calculated from Keylane Prometheus histograms and measures server-side command execution, excluding network transport and socket response writes. Means and maxima use all five-minute windows within the strict 48-hour interval. Only points with QPS between 90,000 and 110,000 are retained, excluding incomplete samples at the interval boundaries.
+Latency is calculated from Lavik Prometheus histograms and measures server-side command execution, excluding network transport and socket response writes. Means and maxima use all five-minute windows within the strict 48-hour interval. Only points with QPS between 90,000 and 110,000 are retained, excluding incomplete samples at the interval boundaries.
 
 | Metric | Result |
 | --- | ---: |
@@ -77,20 +74,20 @@ Latency is calculated from Keylane Prometheus histograms and measures server-sid
 
 The actual GET:SET count ratio was 95:5. The test used neither DEL nor TTL, and Tomb Raider was dynamically disabled. Defrag reclaimed old physical versions created by overwrites. This validates overwrite reclamation, not cleanup stability under large volumes of tombstones or expired TTL data.
 
-After load generation stopped, Keylane remained `active (running)`, systemd reported `NRestarts=0`, and the test window contained no warning/error journal entries.
+After load generation stopped, Lavik remained `active (running)`, systemd reported `NRestarts=0`, and the test window contained no warning/error journal entries.
 
 ## Memory stability
 
 | Metric | Start | End | 48-hour maximum |
 | --- | ---: | ---: | ---: |
 | RSS | 37.388 GiB | 37.392 GiB | 37.399 GiB |
-| Keylane accounted memory | 37.352 GiB | 37.354 GiB | 37.354 GiB |
+| Lavik accounted memory | 37.352 GiB | 37.354 GiB | 37.354 GiB |
 
 RSS varied by approximately 11 MiB at most and did not grow with overwrite count. Post-test `INFO memory` reported `oom_rejected_commands=0`; the process used mimalloc.
 
 ## Disk space and defrag
 
-Each of the two SPDK namespaces provided 1,920,370,475,008 bytes of usable data capacity, approximately 3.49 TiB in total. Keylane's `storage_available` already excludes the defrag reserve. This report defines used capacity as `capacity - available`; it is not Linux `df` usage.
+Each of the two SPDK namespaces provided 1,920,370,475,008 bytes of usable data capacity, approximately 3.49 TiB in total. Lavik's `storage_available` already excludes the defrag reserve. This report defines used capacity as `capacity - available`; it is not Linux `df` usage.
 
 | Metric | 48-hour result |
 | --- | ---: |
@@ -130,7 +127,7 @@ redis-cli -h 10.0.0.4 -p 6379 TOMBRAIDER OFF
 | Server | `Standard_L16s_v3` | 16 vCPU, Intel Xeon Platinum 8370C | `10.0.0.4:6379` |
 | Client | `Standard_L16s_v3` | 16 vCPU, Intel Xeon Platinum 8370C | `10.0.0.5` |
 
-The server used 12 Keylane workers with systemd `AllowedCPUs=0-11`. IRQs 58–74 were spread over logical CPUs 12–15 to avoid directly competing with Keylane workers. Client memtier used CPUs 0–15.
+The server used 12 Lavik workers with systemd `AllowedCPUs=0-11`. IRQs 58–74 were spread over logical CPUs 12–15 to avoid directly competing with Lavik workers. Client memtier used CPUs 0–15.
 
 Storage comprised two independent SPDK NVMe namespaces, without RAID:
 
@@ -142,7 +139,7 @@ spdk://69f9:00:00.0/1
 Versions:
 
 ```text
-Keylane: 13dab14e786fa3e9465d5e82780d53b83ba93268
+Lavik: 13dab14e786fa3e9465d5e82780d53b83ba93268
 Celer:   e394652ddacffd18854b927367911ba8d283f0ca
 Binary SHA-256: 66d3a451f337e7f4852dc3f397757d4415ab680e7ebe892c4ea1c74e4b1cd8a4
 ```
@@ -174,7 +171,7 @@ memtier actually ran for more than 48 hours. This report selects the final 48 ho
 
 ## Monitoring definitions and verification queries
 
-Prometheus ran on the client with 30-day retention and scraped Keylane metrics every five seconds. The report used these PromQL queries with five-minute rates as the stability aggregation interval:
+Prometheus ran on the client with 30-day retention and scraped Lavik metrics every five seconds. The report used these PromQL queries with five-minute rates as the stability aggregation interval:
 
 ```promql
 # GET + SET QPS

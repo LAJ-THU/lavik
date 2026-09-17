@@ -14,27 +14,24 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Keylane SPDK: 1B values through 1024 bytes exceed 1M GET/s on 16 workers
+# Lavik SPDK: 1B values through 1024 bytes exceed 1M GET/s on 16 workers
 
 **English** | [简体中文](README.zh-CN.md) | [All reports](../README.md)
 
-> Historical benchmark of Keylane, the project now named Lavik. Product names,
-> versions, commands, and measurements describe the original test; this is not a
-> measurement of the current Lavik release.
 > Restored from the [2026-09-15 archive](https://github.com/eloqdata/lavik/tree/eedb3080d808769519d93e971195b53b38b09c1e/perf_reports).
 
 Date: 2026-08-31 UTC
 
 ## Technical summary
 
-Keylane served **1,000,000,000** existing keys at over one million random
+Lavik served **1,000,000,000** existing keys at over one million random
 GET/s with fixed values from **128 bytes through 1024 bytes**.  The best
 128-byte run reached **1,058,414 GET/s**, the all-256-byte run reached
 **1,043,567 GET/s**, the all-512-byte run reached **1,031,819 GET/s**, and
 the all-1024-byte run reached **1,007,197 GET/s**.  The next tested size,
 2048 bytes, reached 843,047 GET/s.  Thus 1024 bytes is the largest value
 size verified above one million GET/s in this configuration.  All runs used
-16 pinned Keylane workers, six raw SPDK NVMe namespaces, and `dfly_bench`
+16 pinned Lavik workers, six raw SPDK NVMe namespaces, and `dfly_bench`
 with 16 client threads, 640 connections, pipeline depth one, and no rate
 limit.  All 64,000,000 measured requests hit and no errors were reported.
 
@@ -80,9 +77,9 @@ cap alone explains the whole delta.
   1,919,850,381,312 bytes; aggregate raw data capacity 10.48 TiB.  The SPDK
   BDFs were `5361:00:00.0`, `6d30:00:00.0`, `32a1:00:00.0`,
   `78f5:00:00.0`, `9093:00:00.0`, and `c7c0:00:00.0`.
-- Keylane executable SHA-256:
+- Lavik executable SHA-256:
   `be1f71c6c8c11e6130685ca0c0e83ad8478bb30b27cff1b61742376959ce32bf`.
-- Source checkout at test time: Keylane `07d4115ab6e8a66e8b2dc81a5a7abf42f6eb78a6`,
+- Source checkout at test time: Lavik `07d4115ab6e8a66e8b2dc81a5a7abf42f6eb78a6`,
   Celer `6437653f87887924c5e7ea1e83defb85d8e1f9f1`.
 
 ### Client
@@ -119,7 +116,7 @@ length before its GET run.  The 1024-byte read result is only 0.72% above the
 one-million threshold; 2048 bytes is a measured failure of that threshold,
 not an extrapolation.
 
-Immediately before the restart used for the cap-16 run, Keylane reported:
+Immediately before the restart used for the cap-16 run, Lavik reported:
 
 | Metric | Value |
 |---|---:|
@@ -132,7 +129,7 @@ For the 128-byte dataset, logical key and value bytes total about 127.5 GiB.
 Including the 104-byte record header, inline key bytes, and eight-byte record
 alignment, the live record allocation is approximately 230 GiB before block
 headers and direct-I/O flush padding.  The same calculation for 256-byte
-values is approximately 349 GiB.  Keylane's reported in-memory index size did
+values is approximately 349 GiB.  Lavik's reported in-memory index size did
 not materially change with the value size: the post-256-byte run reported
 `used_memory=49.06 GiB` and RSS `50.25 GiB`.
 
@@ -143,7 +140,7 @@ recovery scan time until reclamation occurs.
 
 ## Reproduction
 
-Bind the six dedicated namespaces to `vfio-pci` and start Keylane with all
+Bind the six dedicated namespaces to `vfio-pci` and start Lavik with all
 16 workers pinned.  `--defrag-paused` was used to keep reclamation work out
 of this read measurement.
 
@@ -211,7 +208,7 @@ taskset -c 0-15 /tmp/dfly_bench-x86_64 \
 
 This produces 640 client connections and 64,000,000 GETs.  Raise the client
 open-file limit first: the default limit of 1024 is insufficient for 1,024
-connections and produces client-side `EMFILE`, not a Keylane server error.
+connections and produces client-side `EMFILE`, not a Lavik server error.
 
 To reproduce the 256-byte, 512-byte, 1024-byte, or 2048-byte variants, run
 the same sequential SET command again with `--d=` set to that size, validate

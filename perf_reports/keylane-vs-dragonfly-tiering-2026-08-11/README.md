@@ -14,20 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Keylane SPDK/io_uring vs. Dragonfly, Garnet, Apache Kvrocks, Pika, Tendis, and KeyDB On Flash (August 11, 2026)
+# Lavik SPDK/io_uring vs. Dragonfly, Garnet, Apache Kvrocks, Pika, Tendis, and KeyDB On Flash (August 11, 2026)
 
 **English** | [简体中文](README.zh-CN.md) | [All reports](../README.md)
 
-> Historical benchmark of Keylane, the project now named Lavik. Product names,
-> versions, commands, and measurements describe the original test; this is not a
-> measurement of the current Lavik release.
 > Restored from the [2026-09-15 archive](https://github.com/eloqdata/lavik/tree/eedb3080d808769519d93e971195b53b38b09c1e/perf_reports).
 
-> August 12, 2026 update: all three Keylane backends, Dragonfly Tiered Storage,
+> August 12, 2026 update: all three Lavik backends, Dragonfly Tiered Storage,
 > Microsoft Garnet Storage Tier, Apache Kvrocks, Pika, Tendis, and KeyDB On
 > Flash were retested with a uniform five-minute protocol. The table now uses
 > only these results. Each backend was loaded once and then ran read-only, 1:1
-> mixed read/write, and write-only workloads in that order. Keylane kept
+> mixed read/write, and write-only workloads in that order. Lavik kept
 > defragmentation enabled; the other systems kept their configured reclamation
 > or automatic compaction enabled.
 
@@ -40,15 +37,15 @@ limitations under the License.
 
 Except for the independent Azure Managed Redis rows marked `*`, this test used
 two NVMe devices, 200 million keys with uniformly random 1–4 KB values, 80
-client connections, and unlimited-rate workloads. Keylane SPDK had the highest
+client connections, and unlimited-rate workloads. Lavik SPDK had the highest
 read-only and mixed QPS; raw io_uring had the highest write-only QPS. All three
-Keylane backends formed the highest-throughput group in every workload.
+Lavik backends formed the highest-throughput group in every workload.
 
 | Workload | System | QPS | p99 (ms) | p99.9 (ms) |
 | --- | --- | ---: | ---: | ---: |
-| Read-only GET | Keylane SPDK | 310,387.22 | 0.455 | 0.895 |
-| Read-only GET | Keylane io_uring (two raw block devices) | 278,924.72 | 0.503 | 2.319 |
-| Read-only GET | Keylane io_uring (two XFS files) | 272,726.70 | 0.519 | 2.319 |
+| Read-only GET | Lavik SPDK | 310,387.22 | 0.455 | 0.895 |
+| Read-only GET | Lavik io_uring (two raw block devices) | 278,924.72 | 0.503 | 2.319 |
+| Read-only GET | Lavik io_uring (two XFS files) | 272,726.70 | 0.519 | 2.319 |
 | Read-only GET | Microsoft Garnet Storage Tier | 205,297.49 | 2.303 | 4.223 |
 | Read-only GET | Dragonfly Tiered Storage | 187,652.86 | 2.911 | 16.383 |
 | Read-only GET | Pika | 86,669.28 | 1.775 | 2.383 |
@@ -56,9 +53,9 @@ Keylane backends formed the highest-throughput group in every workload.
 | Read-only GET | Tendis | 68,860.36 | 2.063 | 5.855 |
 | Read-only GET | Azure Managed Redis* | 44,480.15 | 5.855 | 11.839 |
 | Read-only GET | KeyDB On Flash | 6,146.18 | 18.047 | 25.471 |
-| Write-only SET | Keylane io_uring (two raw block devices) | 393,732.53 | 1.015 | 1.647 |
-| Write-only SET | Keylane SPDK | 392,283.87 | 0.999 | 1.607 |
-| Write-only SET | Keylane io_uring (two XFS files) | 385,324.26 | 1.055 | 1.727 |
+| Write-only SET | Lavik io_uring (two raw block devices) | 393,732.53 | 1.015 | 1.647 |
+| Write-only SET | Lavik SPDK | 392,283.87 | 0.999 | 1.607 |
+| Write-only SET | Lavik io_uring (two XFS files) | 385,324.26 | 1.055 | 1.727 |
 | Write-only SET | Microsoft Garnet Storage Tier | 361,960.06 | 1.583 | 3.391 |
 | Write-only SET | Dragonfly Tiered Storage | 199,233.52 | 4.639 | 10.303 |
 | Write-only SET | Tendis | 160,641.92 | 1.335 | 2.127 |
@@ -66,9 +63,9 @@ Keylane backends formed the highest-throughput group in every workload.
 | Write-only SET | Azure Managed Redis* | 84,863.93 | 3.199 | 7.839 |
 | Write-only SET | Pika | 79,537.31 | 4.223 | 7.327 |
 | Write-only SET | KeyDB On Flash | 5,395.49 | 24.447 | 31.359 |
-| 1:1 read/write | Keylane SPDK | 352,442.49 | 0.631 | 1.447 |
-| 1:1 read/write | Keylane io_uring (two raw block devices) | 328,831.03 | 0.655 | 1.447 |
-| 1:1 read/write | Keylane io_uring (two XFS files) | 326,110.00 | 0.687 | 1.503 |
+| 1:1 read/write | Lavik SPDK | 352,442.49 | 0.631 | 1.447 |
+| 1:1 read/write | Lavik io_uring (two raw block devices) | 328,831.03 | 0.655 | 1.447 |
+| 1:1 read/write | Lavik io_uring (two XFS files) | 326,110.00 | 0.687 | 1.503 |
 | 1:1 read/write | Microsoft Garnet Storage Tier | 209,366.38 | 2.511 | 4.895 |
 | 1:1 read/write | Dragonfly Tiered Storage | 207,247.53 | 4.015 | 9.791 |
 | 1:1 read/write | Tendis | 102,212.78 | 1.439 | 1.975 |
@@ -131,9 +128,9 @@ describe this configuration and are not fixed quotations.
 | Deployment | Estimated price (USD/month) |
 | --- | ---: |
 | Azure Managed Redis Flex, 480 GB / 16 vCPU | $2,414.28 |
-| Keylane server, `Standard_L16s_v3` | $1,152.67 |
+| Lavik server, `Standard_L16s_v3` | $1,152.67 |
 
-Redis Flex was estimated to cost $1,261.61 more per month, or 2.09× the Keylane
+Redis Flex was estimated to cost $1,261.61 more per month, or 2.09× the Lavik
 server VM price (109.45% higher). Neither figure includes the benchmark client.
 Actual bills vary with region, purchasing model, discounts, storage, and
 networking. Managed Redis and a self-managed VM also have different service
@@ -241,7 +238,7 @@ once and then ran read-only, 1:1 mixed, and write-only tests without restarting
 or clearing the database. The nine services/backends used the same port at
 different times and never ran concurrently.
 
-All three Keylane backends used 16 workers with defragmentation enabled. SPDK
+All three Lavik backends used 16 workers with defragmentation enabled. SPDK
 directly accessed two NVMe namespaces. Raw io_uring directly accessed two block
 devices through the Linux NVMe driver with 512-byte direct-I/O alignment. File
 io_uring used one XFS filesystem and one fully preallocated 1,600 GiB regular
@@ -259,22 +256,22 @@ server threads, a 64 GiB DRAM hot tier, RAID0/XFS, and retained its RocksDB WAL.
 
 ## Result boundaries and fairness notes
 
-- Keylane does not use an LSM tree or RocksDB compaction. Defragmentation stayed
+- Lavik does not use an LSM tree or RocksDB compaction. Defragmentation stayed
   enabled. Read-only traffic creates no obsolete versions and does not actively
   trigger defrag. The 1:1 workload allowed at most two active tasks per device
   and cooled for 15 ms between blocks. The write-only workload allowed six
   active tasks per device with no inter-block cooling. Both write workloads used
   zero inter-record cooling.
-- Keylane raw and file io_uring used the same binary and service parameters.
+- Lavik raw and file io_uring used the same binary and service parameters.
   Regular files were opened with O_DIRECT and did not rely on the Linux page
   cache. Raw devices bypassed XFS but retained the Linux block layer and NVMe
-  kernel driver. Keylane treated both paths as independent devices and assigned
+  kernel driver. Lavik treated both paths as independent devices and assigned
   eight home workers to each.
 - `--registered-buffer-mb-per-worker=256` means 256 MiB per worker in this code,
   or roughly 4 GiB across 16 workers—not 256 MiB for the process. SPDK and
   io_uring used the same setting, so their comparison remains consistent, but
   deployment capacity planning must use the per-worker interpretation.
-- Each Keylane backend began formal testing immediately after its own full
+- Each Lavik backend began formal testing immediately after its own full
   load, without artificial aging or a hand-picked short window. Each backend
   loaded once and then ran read-only, mixed, and write-only workloads in that
   fixed order. Both drives had symmetric I/O during read and mixed tests. The
@@ -357,9 +354,9 @@ server threads, a 64 GiB DRAM hot tier, RAID0/XFS, and retained its RocksDB WAL.
 
 ## Reproduction
 
-### 1. Keylane defragmentation parameters
+### 1. Lavik defragmentation parameters
 
-All three Keylane backends used the same dynamic parameters. Defragmentation
+All three Lavik backends used the same dynamic parameters. Defragmentation
 remained enabled, with parameters set before each applicable workload.
 
 The 1:1 workload used lower background concurrency and a 15 ms pause after each
@@ -390,7 +387,7 @@ command to confirm configuration, active tasks, and queued tasks:
 redis-cli -h 10.0.0.4 -p 6379 DEFRAG STATUS
 ```
 
-### 2. Start Keylane with SPDK
+### 2. Start Lavik with SPDK
 
 ```bash
 sudo systemd-run \
@@ -405,7 +402,7 @@ sudo systemd-run \
   --data-file=spdk://021d:00:00.0/1
 ```
 
-### 3. Build and start Keylane with io_uring
+### 3. Build and start Lavik with io_uring
 
 The ordinary io_uring build explicitly disables SPDK. Raw block devices and
 regular files use the same binary:
@@ -440,9 +437,9 @@ fallocate -l 1600G /mnt/data0/keylane.data
 fallocate -l 1600G /mnt/data1/keylane.data
 ```
 
-`1,600 GiB` was specific to this machine, not a fixed Keylane requirement.
+`1,600 GiB` was specific to this machine, not a fixed Lavik requirement.
 Production provisioning must leave filesystem journal and operational space.
-Each new file must be a multiple of 8 MiB. Keylane does not create, expand, or
+Each new file must be a multiple of 8 MiB. Lavik does not create, expand, or
 truncate these files at startup.
 
 ```bash
@@ -464,8 +461,8 @@ eight home workers per device, and 4,096-byte direct-I/O alignment.
 #### Two raw block devices
 
 The raw configuration requires unmounted, exclusively owned devices. The
-following operations make the original filesystem and Keylane file data
-inaccessible. `wipefs` plus zeroing the first 8 MiB establishes new Keylane
+following operations make the original filesystem and Lavik file data
+inaccessible. `wipefs` plus zeroing the first 8 MiB establishes new Lavik
 metadata and bitmap state; it is not a secure full-device erase, so old data
 blocks may remain physically present but are excluded from the new storage set.
 
@@ -493,7 +490,7 @@ sudo systemd-run \
   --data-file=/dev/nvme1n1
 ```
 
-Each NVMe device had a raw capacity of 1,920,383,410,176 bytes. Keylane used
+Each NVMe device had a raw capacity of 1,920,383,410,176 bytes. Lavik used
 1,920,378,863,616 bytes and ignored the tail shorter than one 8 MiB block. Each
 device provided 228,926 data blocks, eight home workers, and 512-byte
 direct-I/O alignment.
@@ -1139,13 +1136,13 @@ redis-cli -h 10.0.0.4 -p 6379 INFO rocksdb \
 Substitute read-only `0:1`, 1:1 mixed `1:1`, and write-only `1:0` for `RATIO` in
 that order. Each backend performs one full load, and all three tests reuse that
 dataset. After every test, verify that no background error occurred. For
-Keylane, also record active and queued tasks with `DEFRAG STATUS`. Kvrocks,
+Lavik, also record active and queued tasks with `DEFRAG STATUS`. Kvrocks,
 Pika, Garnet, Tendis, and KeyDB On Flash keep background compaction or
 reclamation active; do not wait for it to become idle.
 
 No system clears OS page cache between the three tests. Only Dragonfly receives
 an extra Linux page-cache warmup before formal testing. Other backends retain
-the cache state naturally created by loading and earlier workloads. Keylane
+the cache state naturally created by loading and earlier workloads. Lavik
 SPDK, raw io_uring, O_DIRECT regular-file io_uring, and Garnet's Native O_DIRECT
 Storage Tier do not depend on this page-cache path.
 

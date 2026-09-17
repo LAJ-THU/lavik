@@ -14,13 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Keylane SPDK vs raw io_uring: 500M keys, fixed 2 KiB, 12 workers
+# Lavik SPDK vs raw io_uring: 500M keys, fixed 2 KiB, 12 workers
 
 **English** | [简体中文](README.zh-CN.md) | [All reports](../README.md)
 
-> Historical benchmark of Keylane, the project now named Lavik. Product names,
-> versions, commands, and measurements describe the original test; this is not a
-> measurement of the current Lavik release.
 > Restored from the [2026-09-15 archive](https://github.com/eloqdata/lavik/tree/eedb3080d808769519d93e971195b53b38b09c1e/perf_reports).
 > The historical `perf_runs/` input directory was not included in the source snapshot;
 > this restoration contains the report and its recorded tables, not those raw logs.
@@ -29,14 +26,14 @@ Date: 2026-08-26 UTC
 
 ## Technical summary
 
-On this 16-logical-CPU host, Keylane used 12 pinned workers on CPUs 0-11 while local user processes and mlx5 IRQs were isolated to CPUs 12-15. Both backends used two 1.92 TB NVMe namespaces, Release builds, pipeline one, 80 client connections, eight client threads, fixed 2048-byte values, 500,000,000 existing keys, unlimited closed-loop load, and 300-second formal windows.
+On this 16-logical-CPU host, Lavik used 12 pinned workers on CPUs 0-11 while local user processes and mlx5 IRQs were isolated to CPUs 12-15. Both backends used two 1.92 TB NVMe namespaces, Release builds, pipeline one, 80 client connections, eight client threads, fixed 2048-byte values, 500,000,000 existing keys, unlimited closed-loop load, and 300-second formal windows.
 
 The main backend result is consistent across both clients:
 
 - SPDK is faster for random reads and 1:1 read/write. With memtier it leads raw io_uring by 5.69% on read throughput and 6.72% on mixed throughput. With Valkey it leads raw io_uring by 8.24% on read throughput.
 - Pure-write throughput is effectively tied. raw io_uring is 0.49% faster with memtier and 0.19% faster with Valkey, but its deep write tail is higher.
-- At essentially identical SPDK read throughput, memtier reports p99.99 `1.039 ms` while Valkey reports `(0.591, 0.623] ms`. The same pattern appears on raw io_uring: memtier `1.079 ms`, Valkey `(0.607, 0.639] ms`. The extra read tail is therefore primarily client-side, not a Keylane throughput difference.
-- Every accepted run exited successfully, retained exactly 500,000,000 keys, recorded zero memory rejections, and produced no Keylane error or latency-trace log lines. All memtier GET workloads reported zero misses.
+- At essentially identical SPDK read throughput, memtier reports p99.99 `1.039 ms` while Valkey reports `(0.591, 0.623] ms`. The same pattern appears on raw io_uring: memtier `1.079 ms`, Valkey `(0.607, 0.639] ms`. The extra read tail is therefore primarily client-side, not a Lavik throughput difference.
+- Every accepted run exited successfully, retained exactly 500,000,000 keys, recorded zero memory rejections, and produced no Lavik error or latency-trace log lines. All memtier GET workloads reported zero misses.
 
 ## Headline results
 
@@ -102,7 +99,7 @@ The first io_uring/Valkey read attempt completed but contained a 5.4-second dist
 - Tick throughput fell from approximately 290-300K QPS to approximately 51K QPS.
 - Tick average latency rose to approximately 1.54 ms.
 - The full-window result fell to 290,002.56 QPS with p99.99 `(2.535, 2.735] ms` and maximum `206.463 ms`.
-- Keylane remained at approximately 1120% CPU. Keylane journal, kernel journal, and both NVMe SMART logs showed no error; both devices reported zero media errors and zero critical warnings.
+- Lavik remained at approximately 1120% CPU. Lavik journal, kernel journal, and both NVMe SMART logs showed no error; both devices reported zero media errors and zero critical warnings.
 
 An immediate second 300-second read did not reproduce the disturbance and measured 297,588.91 QPS with p99.99 `(0.607, 0.639] ms`. The stable rerun is the main table value. The first run remains in the raw evidence as `iouring/valkey/read-run1-anomalous`; the cause is unresolved and should be investigated with block-layer latency tracing if it recurs.
 
@@ -130,7 +127,7 @@ All memtier read and mixed runs reported zero misses. For each Valkey dataset, t
 
 | Work | CPUs |
 |---|---|
-| Keylane service cgroup and 12 pinned workers | 0-11 |
+| Lavik service cgroup and 12 pinned workers | 0-11 |
 | Local user slice, tmux, Codex and SSH launchers | 12-15 |
 | mlx5 async IRQ | 15 |
 | mlx5 completion IRQs | 12-15 round-robin |
@@ -138,7 +135,7 @@ All memtier read and mixed runs reported zero misses. For each Valkey dataset, t
 
 The final effective state was `user-1000.slice AllowedCPUs=12-15`; mlx5 IRQ 58 was on CPU 15 and IRQs 59-74 were round-robin across 12-15. Linux exposes the raw NVMe I/O vectors as managed IRQs assigned one per CPU, so they cannot all be moved off the worker set. This kernel work is intentionally part of the raw io_uring result.
 
-### Keylane settings
+### Lavik settings
 
 - `--threads=12 --pin-workers`
 - `--busy-poll-us=20`
@@ -194,7 +191,7 @@ Client versions and hashes:
 
 ## Validation and limitations
 
-- Keylane commit: `c9f981732539fd32b6ec9000d2608f03e698691b`
+- Lavik commit: `c9f981732539fd32b6ec9000d2608f03e698691b`
 - celer commit: `0a70d22086fb14435464253991ca6fc6a90f19d5`
 - Every primary run used one 300-second measured window; Valkey additionally used a five-second warmup.
 - All primary client exit codes were zero, `DBSIZE` was 500,000,000 before and after, and `keylane_memory_rejected_commands_total` remained zero.

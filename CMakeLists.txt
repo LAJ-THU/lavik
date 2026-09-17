@@ -692,6 +692,13 @@ if (LAVIK_BUILD_META)
     target_compile_options(lavik-ctl PRIVATE -Wall -Wextra -Wpedantic)
   endif()
 
+  # Release archives carry all three executables, so Meta and the operator
+  # client must honor the same portable-runtime policy as the data server.
+  if (LAVIK_STATIC_CXX_RUNTIME AND CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_link_options(lavik-meta PRIVATE -static-libstdc++ -static-libgcc)
+    target_link_options(lavik-ctl PRIVATE -static-libstdc++ -static-libgcc)
+  endif()
+
   # Negative guard for the layering rule above: fail at configure time if
   # nuraft ever leaks into the data-plane module's link interface.
   get_target_property(LAVIK_MODULE_IFACE_LIBS lavik_module

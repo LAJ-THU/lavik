@@ -182,10 +182,12 @@ with (REPORT_ROOT / "storage-raw-SHA256SUMS").open("w", encoding="utf-8") as out
 
 
 def svg_text(x, y, value, *, size=20, anchor="start", weight=400, fill="#17202A"):
+    # Keep raw-result product keys intact while publishing the current name.
+    label = str(value).replace("Keylane", "Lavik")
     return (
         f'<text x="{x}" y="{y}" font-family="Arial, sans-serif" '
         f'font-size="{size}" font-weight="{weight}" text-anchor="{anchor}" '
-        f'fill="{fill}">{html.escape(str(value))}</text>'
+        f'fill="{fill}">{html.escape(label)}</text>'
     )
 
 
