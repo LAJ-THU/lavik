@@ -25,6 +25,8 @@ or safety boundaries.
 
 | Runbook | Use it when |
 |---|---|
+| [Quick startup tuning](quick-start-tuning.md) | Generate a CPU plan for the current host and start Lavik |
+| [Cluster deployment](cluster-deployment.md) | Launch the local Meta-managed cluster example |
 | [Building and packaging](building-and-packaging.md) | Building locally, producing release artifacts, or changing package contents |
 | [Multi-device storage](multi-device-storage.md) | Provisioning storage paths, expanding a storage set, or diagnosing membership and capacity constraints |
 | [Tomb Raider scheduling](tomb-raider.md) | Configuring or operating tombstone cleanup schedules |

@@ -65,16 +65,16 @@ production libraries. Clang test links enable its LLVM bitcode reader without
 compiling the test sources with IPO. Debug builds also omit IPO to keep iteration time
 predictable. LTO is not required for functional correctness.
 
-When `LAVIK_BUILD_META=ON`, the source build also provides `lavik-meta`
-and the Raft-free `lavik-ctl` operator target for direct administration
-and cluster readiness:
+The release build produces `lavik`, `lavik-meta`, and the Raft-free
+`lavik-ctl` operator client. `lavik-meta` and `lavik-ctl` provide direct
+administration and cluster readiness. To build them from an existing build
+directory:
 
 ```bash
 cmake --build <build-dir> --target lavik-meta lavik-ctl
 ```
 
-The downloadable release archive below continues to contain only `lavik`;
-build the Meta and operator binaries from source for this release.
+The downloadable release archive below contains all three executables.
 
 ### Experimental DPDK networking
 
@@ -368,10 +368,10 @@ portable path when that system binary is unavailable.
 ./scripts/package_release.sh
 ```
 
-The packaging script performs a Release build, statically links OpenSSL plus
-the GNU C++/compiler runtimes, strips a staged copy of the executable, verifies
-that no dynamic OpenSSL or C++ runtime dependency remains, and writes a
-versioned archive and SHA-256 checksum under `dist/`. The archive carries the project LICENSE and NOTICE, plus
+The packaging script performs a Release build of `lavik`, `lavik-meta`, and
+`lavik-ctl`, statically links OpenSSL plus the GNU C++/compiler runtimes,
+strips and verifies each executable, and writes a versioned archive and SHA-256
+checksum under `dist/`. The archive carries the project LICENSE and NOTICE, plus
 the Apache-2.0 license text required by the statically linked OpenSSL code.
 It explicitly configures `LAVIK_BUILD_FAULT_SERVER=OFF`; CMake also rejects
 that option whenever `BUILD_TESTING` is off.

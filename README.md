@@ -18,8 +18,6 @@ limitations under the License.
 
 # Lavik
 
-The canonical repository is [eloqdata/lavik](https://github.com/eloqdata/lavik).
-
 ### Redis-class performance. NVMe-scale capacity.
 
 Lavik is built around a simple idea: use high-performance NVMe instead of
@@ -39,14 +37,8 @@ in-memory services.
 </div>
 
 Lavik is a Linux C++23 key-value server that speaks RESP2 and RESP3. It keeps
-a compact top-level key index in DRAM while storing data on existing files, raw
-block devices, or SPDK NVMe namespaces. Capacity therefore scales primarily
-with storage instead of requiring the complete dataset to remain in memory as
-it does with Redis.
-
-Lavik is designed for low-latency access to hundreds of millions of keys,
-online space reclamation, and compatibility with existing Redis clients and
-operational tooling.
+a compact key index in DRAM and stores data on files, raw block devices, or
+SPDK NVMe namespaces, so capacity scales with storage.
 
 > [!IMPORTANT]
 > Lavik implements a broad Redis-compatible surface, but it is not a claim of
@@ -56,64 +48,46 @@ operational tooling.
 
 ## Highlights
 
-- **NVMe-scale capacity.** Store data in preallocated regular files, raw Linux
-  block devices, or NVMe namespaces accessed directly through SPDK.
-- **Redis-compatible interface.** RESP2/RESP3, common Redis data structures,
-  pipelining, authentication, TLS, Pub/Sub, Lua scripts, and Functions.
-- **Rich data model.** Strings, Lists, Hashes, Sets, Sorted Sets, and Streams,
-  with semantics exercised by vendored Valkey compatibility tests.
-- **Atomic multi-key operations.** Cross-worker coordination for multi-key
-  commands, `MULTI`/`EXEC`, `WATCH`, and declared-key Lua/Function calls.
-- **Crash-consistent storage.** Checksummed append-only records, A/B metadata,
-  transaction commit records, parallel recovery, TTL, and online defragmentation.
-- **Replication and migration.** Native Lavik replication, Redis PSYNC
-  following/export, Redis Sentinel integration, and Redis-compatible RDB
-  import/export.
-- **Operational visibility.** Prometheus metrics, Redis `INFO`, `SLOWLOG`,
-  bounded memory admission, graceful shutdown, and configurable background
-  maintenance.
+- **Grow your dataset beyond RAM.** Keep a compact key index in memory and put
+  the data on NVMe. Lavik serves datasets with hundreds of millions of keys
+  without requiring every value to fit in DRAM, making storage capacity the
+  main lever for dataset growth. Deploy on preallocated files, raw block
+  devices, or directly on NVMe through SPDK.
 
-## Architecture
+- **Near a million operations per second on NVMe.** On an AMD EPYC 9V74 server
+  with 125 GiB RAM and six raw NVMe drives, Lavik reached **828,502 GET QPS**
+  and **984,452 SET QPS** over **10 million keys with 1 KiB values**, with
+  p99 latency of **4.543 ms** and **4.575 ms**, respectively. With **one billion
+  keys** (about **1 TB** of values), it reached **784,179 GET QPS** and
+  **856,523 SET QPS**. See [Benchmark](#benchmark) for the test conditions and
+  full results.
 
-Lavik is a single-process, layered system. Mutable state is partitioned by
-worker, the complete top-level key index stays in memory, and record data is
-placed on high-performance storage.
+- **Put multiple CPU cores to work in one server.** Worker threads own their
+  data partitions and execute requests in parallel. A C++23 coroutine runtime
+  overlaps network and storage I/O, while CPU affinity and asynchronous
+  io_uring access keep the serving path tuned for modern multicore NVMe hosts.
+  The [startup tuning script](docs/operations/quick-start-tuning.md) generates
+  a CPU plan for your machine.
 
-```text
-┌─────────────────────────────────────────────────────┐
-│ Redis compatibility & service layer                 │
-│ RESP2/RESP3 · commands · sessions · Lua · Pub/Sub   │
-├─────────────────────────────────────────────────────┤
-│ Thread-per-worker coroutine runtime                 │
-│ CPU affinity · busy polling · async I/O · mailboxes │
-├─────────────────────────────────────────────────────┤
-│ Routing & transaction coordination                  │
-│ 16,384 hash slots · key intents · multi-key ops     │
-├─────────────────────────────────────────────────────┤
-│ In-memory hash index layer                          │
-│ worker-local indexes · compact record locations     │
-├─────────────────────────────────────────────────────┤
-│ Durable storage engine                              │
-│ append · flush · recovery · expiry · defragmentation│
-├─────────────────┬─────────────────┬─────────────────┤
-│ regular files   │ raw block I/O   │ SPDK NVMe       │
-└─────────────────┴─────────────────┴─────────────────┘
-```
+- **Keep the Redis tools and data structures you know.** Use RESP2/RESP3
+  clients with Strings, Lists, Hashes, Sets, Sorted Sets, and Streams. Build
+  application logic with pipelining, Pub/Sub, Lua scripts, and Functions;
+  connect with authentication and TLS. Redis-compatible RDB import/export and
+  PSYNC replication provide migration paths for existing data, with
+  compatibility exercised by the vendored Valkey test suites.
 
-| Layer | Responsibility | Key design choices |
-|---|---|---|
-| **Redis service** | Owns protocol compatibility and connection state | RESP2/RESP3, command dispatch, Lua/Functions, Pub/Sub, TLS, and Redis administration surfaces |
-| **Worker runtime** | Executes network, command, and storage work | One native thread and coroutine scheduler per worker; workers can be pinned one-to-one to CPUs, busy-poll before parking, and exchange work through cross-core mailboxes |
-| **Coordination** | Routes keys and serializes conflicting operations | Redis hash-slot ownership, worker-local shared/exclusive intents, and cross-worker transactions for atomic multi-key commands |
-| **In-memory hash index** | Locates the newest logical version of every key | Worker-owned partition indexes retain compact key and record-location metadata in DRAM; values remain staged or storage-backed, and recovery rebuilds the indexes from durable records |
-| **Storage engine** | Owns durable data and device capacity | Immutable record versions, checksummed metadata, batched direct I/O, parallel recovery, TTL, online defragmentation, and file/raw/SPDK backends |
+- **Atomic operations across worker partitions.** Multi-key commands,
+  `MULTI`/`EXEC`, `WATCH`, and declared-key Lua/Function calls coordinate access
+  across workers inside a node. Applications can combine related changes
+  atomically while the server processes independent work in parallel. Cluster
+  mode retains Redis Cluster's same-slot requirement for multi-key commands.
 
-Replication, memory admission, metrics, and graceful lifecycle management span
-these layers rather than belonging to only one of them.
-
-See the [architecture index](docs/architecture/README.md) for the authoritative
-module map and deeper descriptions of request serving, transactions, storage,
-recovery, and replication.
+- **From a local process to a replicated cluster.** Redis Cluster routing,
+  native replication, and a Raft-backed Meta control plane provide partitioned
+  serving and coordinated failover. Prometheus metrics, `INFO`, and `SLOWLOG`
+  expose operational health through familiar tools. The
+  [cluster quick start](docs/operations/cluster-deployment.md) launches three
+  Meta nodes and two primary/replica groups with one bootstrap command.
 
 ## Installation
 
@@ -143,50 +117,29 @@ git -C third_party/nuraft submodule update --init asio
 git -C bycorf submodule update --init third_party/liburing third_party/abseil
 
 ./scripts/build_release.sh
-sudo install -m 0755 build/lavik /usr/local/bin/lavik
+sudo install -m 0755 build/lavik build/lavik-meta build/lavik-ctl /usr/local/bin/
 ```
 
-These commands initialize the default build's dependencies. DPDK/SPDK
-dependencies are only needed for the optional kernel bypass build below.
-
-The local release build uses `-march=native`. To create a portable archive for
-the current architecture instead, run:
+To create a portable archive for the current architecture, run:
 
 ```bash
 ./scripts/package_release.sh
 ```
 
-The archive is written under `dist/` using an `x86-64-v2` or `armv8-a` CPU
-baseline. See [Building and packaging](docs/operations/building-and-packaging.md)
-for compiler, sanitizer, CPU-target, and packaging details.
-
-### Optional kernel bypass build
-
-The default build includes kernel networking and io_uring storage only;
-`lavik-meta` and ordinary Lavik deployments need no DPDK/SPDK dependencies.
-For DPDK networking or userspace NVMe access, install the bypass dependencies
-described in the build guide and enable both capabilities with:
-
-```bash
-cmake -S . -B build-bypass \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DLAVIK_ENABLE_OPT=ON \
-  -DLAVIK_KERNEL_BYPASS=ON
-cmake --build build-bypass --target lavik -j"$(nproc)"
-```
-
-Select `--storage=spdk` at startup; compiling support alone keeps io_uring as
-the default. SPDK device paths use the form
-`spdk://<PCI-domain>:<bus>:<device>.<function>/<nsid>`.
-Networking is selected independently with `--network=kernel|dpdk`; see
-[runtime backend selection](docs/operations/building-and-packaging.md#runtime-backend-selection).
-SPDK requires exclusive device ownership, host driver binding, DMA-capable
-memory, and deployment-specific CPU/IRQ planning.
+The archive includes `lavik`, `lavik-meta`, and `lavik-ctl`. See
+[Building and packaging](docs/operations/building-and-packaging.md) for
+portable builds, sanitizers, DPDK, and SPDK.
 
 ## Quick Start
 
-Lavik never creates, extends, or truncates a storage path. For a throwaway
-local instance, first provision a file and then start the server:
+For deployment beyond the basic example below:
+
+- [Quick startup tuning](docs/operations/quick-start-tuning.md): generate this
+  machine's CPU plan and start Lavik.
+- [Cluster deployment](docs/operations/cluster-deployment.md): launch the local
+  Meta-managed cluster example.
+
+For a throwaway local instance, provision a file and start the server:
 
 ```bash
 mkdir -p /tmp/lavik-quickstart
@@ -195,12 +148,6 @@ fallocate -l 1G /tmp/lavik-quickstart/lavik.data
 ./build/lavik \
   --data-file /tmp/lavik-quickstart/lavik.data
 ```
-
-By default, Lavik listens on `127.0.0.1:6379`, uses every CPU in its inherited
-affinity mask, and pins one worker to each CPU. It configures 256 MiB of storage
-buffers per worker and writes logs to `./logs/lavik.log`. Use `taskset` or the
-corresponding command-line options when the process should use fewer resources.
-Production settings should be sized and benchmarked for the host and workload.
 
 In another terminal, use any Redis-compatible client:
 
@@ -218,59 +165,80 @@ redis-cli HSET user:42 name Ada language C++
 redis-cli HGETALL user:42
 ```
 
-Stop the server with `Ctrl-C`. A graceful shutdown drains admitted requests and
-flushes active storage buffers; starting it again with the same `--data-file`
-recovers the stored data before becoming ready.
-
-For production storage:
-
-- use persistent absolute paths rather than `/tmp`;
-- provision every file before startup;
-- make each fresh file an 8 MiB multiple and at least 80 MiB; Function catalog
-  updates use the same foreground capacity as ordinary data;
-- repeat `--data-file` to use multiple files or devices;
-- always provide the complete device set when restarting an initialized
-  multi-device instance.
-
-Read [Multi-Device Storage](docs/operations/multi-device-storage.md) before
-using raw devices or expanding an existing storage set.
-
-Run `lavik --help` for all command-line options. Lavik also accepts a
-Redis-style configuration file as its first argument.
+Stop the server with `Ctrl-C`. See [Multi-Device Storage](docs/operations/multi-device-storage.md)
+for persistent files, raw devices, and storage expansion.
 
 ## Benchmark
 
-Browse the [performance report index](perf_reports/README.md) for the SPDK
-stability and value-size tests, SPDK/io_uring comparison, Redis/Valkey and
-storage-tier comparisons, and YCSB results. Reports open in English and link
-to their Simplified Chinese versions.
+Browse the [performance reports](perf_reports/README.md) for full results in
+English and Simplified Chinese.
 
-The [Keylane–Aerospike YCSB report (before the Lavik rename)](perf_reports/ycsb-rerun-2026-09-13/README.md)
-records a fresh 100-million-record dataset for each database, ten 128-byte
-fields per record, and 256 YCSB threads. It includes the server/client hardware,
-database settings, QPS, and p99/p99.9/p99.99 latency for A/B/C/D at 100K ops/s
-and without a rate limit, with raw evidence and an offline verification script.
+### Disk-backed KV systems
 
-Aerospike uses server performance defaults and the host's original CPU and
-IRQ policy. Lavik uses 12 pinned workers with housekeeping and NIC IRQs on
-the remaining four logical CPUs. The report compares these explicitly chosen
-deployments, which have different CPU allocations and database settings.
+Our [Redis-compatible storage-tier benchmark](perf_reports/keylane-vs-dragonfly-tiering-2026-08-11/README.md)
+compares Lavik with Garnet, Dragonfly, Pika, Apache Kvrocks,
+Tendis, and KeyDB On Flash. Server and client ran on separate Azure
+`Standard_L16s_v3` VMs. Each backend used two NVMe drives and **200 million
+keys with uniformly random 1–4 KB values**, measured with 80 connections over
+300 seconds per workload, without a QPS limit. Results below are from the
+report's August 12, 2026 rerun.
 
-## Durability and compatibility notes
+![Read, mixed, and write throughput across Redis-compatible storage tiers](perf_reports/charts/tiering-throughput.svg)
 
-- An ordinary successful write is not a synchronous `fsync` durability fence.
-  Lavik batches data and header flushes; graceful shutdown drains them. Read
-  the [storage architecture](docs/architecture/04-storage-and-recovery.md)
-  before selecting failure semantics for a deployment.
-- Native and Redis replication continuation cursors are process-local. A
-  restart can require a new full synchronization.
-- Raw block and SPDK paths are destructive deployment boundaries: verify
-  device identity and exclusive ownership before use.
-- The current repository does not ship a Lavik systemd unit or an
-  orchestration manifest. The deployment layer owns service supervision,
-  persistent path provisioning, and resource isolation.
+| System / storage backend | Read-only QPS | Write-only QPS | 1:1 read/write QPS |
+|---|---:|---:|---:|
+| **Lavik SPDK** | **310,387** | **392,284** | **352,442** |
+| **Lavik io_uring — raw devices** | **278,925** | **393,733** | **328,831** |
+| **Lavik io_uring — XFS files** | **272,727** | **385,324** | **326,110** |
+| Garnet Storage Tier | 205,297 | 361,960 | 209,366 |
+| Dragonfly Tiered Storage | 187,653 | 199,234 | 207,248 |
+| Pika | 86,669 | 79,537 | 75,324 |
+| Apache Kvrocks | 70,672 | 110,167 | 88,084 |
+| Tendis | 68,860 | 160,642 | 102,213 |
+| KeyDB On Flash | 6,146 | 5,395 | 5,197 |
 
-## Development and documentation
+Lavik SPDK's read p99 was **0.455 ms**, versus 2.303 ms for Garnet and
+2.911 ms for Dragonfly. These results use each system's recorded
+cache, warmup, and persistence settings; uniform random access is unfavorable
+to KeyDB On Flash's hot-tier design. The report documents those differences
+and reproduction commands. Its separate Azure Managed Redis test used a
+different dataset and duration and is excluded from this chart and table.
+
+See also the [100-million-record YCSB comparison with Aerospike](perf_reports/ycsb-rerun-2026-09-13/README.md),
+covering workloads A/B/C/D and their tail latencies.
+
+### In-memory Redis and Valkey
+
+The [Redis/Valkey comparison](perf_reports/keylane-vs-redis-valkey-iothreads-10g-1k-2026-09-06/README.md)
+used an AMD EPYC 9V74 server with 125 GiB RAM and **10 million keys with 1 KiB
+values** (about 10 GB). Lavik used io_uring on six raw NVMe devices; Redis
+8.8.0 and Valkey 9.1.0 held the complete dataset in memory. Tests swept
+80–1,280 connections with pipeline=1 and 30-second measurement windows,
+selecting each in-memory system's best measured I/O-thread setting per command.
+
+![Lavik versus tuned in-memory Redis and Valkey across connection counts](perf_reports/keylane-vs-redis-valkey-iothreads-10g-1k-2026-09-06/best-memory-vs-keylane-qps.svg)
+
+| System | Peak GET QPS | GET p99 | Peak SET QPS | SET p99 |
+|---|---:|---:|---:|---:|
+| **Lavik — raw io_uring** | **828,502** | **4.543 ms** | **984,452** | **4.575 ms** |
+| Redis 8.8.0 | 964,267 | 4.671 ms | 874,879 | 4.767 ms |
+| Valkey 9.1.0 | 948,300 | 4.479 ms | 796,145 | 4.319 ms |
+
+At peak throughput, Lavik's reads were **14.1% below Redis and 12.6% below
+Valkey**, while writes were **12.5% above Redis and 23.7% above Valkey**, with
+similar p99 latency. All peaks occurred at 1,280 connections. Redis and Valkey
+had AOF and automatic RDB saves disabled; Lavik had defragmentation paused.
+This 10 GB test is independent of the larger storage-tier benchmark above.
+
+## Important notes
+
+- A successful write is not a synchronous `fsync` fence; see the
+  [storage architecture](docs/architecture/04-storage-and-recovery.md) before
+  selecting failure semantics.
+- A replication restart can require a full synchronization.
+- Raw block and SPDK paths require exclusive device ownership.
+
+## Development
 
 ```bash
 ./scripts/build_debug.sh

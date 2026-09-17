@@ -39,8 +39,9 @@ cmake -S . -B "${build_dir}" \
   -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address" \
   -DLAVIK_ENABLE_OPT=OFF \
   -DLAVIK_STATIC_OPENSSL=ON \
+  -DLAVIK_BUILD_META=ON \
   -DLAVIK_BUILD_FAULT_SERVER=ON \
   -DBUILD_TESTING=ON
 cmake --build "${build_dir}" -j"$(nproc)"
 
-echo "Clang ASan build complete: ${build_dir}/lavik"
+echo "Clang ASan build complete: ${build_dir}/lavik, ${build_dir}/lavik-meta, ${build_dir}/lavik-ctl"

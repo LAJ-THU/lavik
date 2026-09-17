@@ -5,11 +5,11 @@
 <pattern id="dots" width="10" height="10" patternUnits="userSpaceOnUse"><circle cx="3" cy="3" r="1.6" fill="#FFFFFF" opacity="0.55"/></pattern>
 <pattern id="cross" width="12" height="12" patternUnits="userSpaceOnUse"><path d="M2,2 L10,10 M10,2 L2,10" stroke="#FFFFFF" stroke-width="1.5" opacity="0.45"/></pattern>
 </defs>
-<text x="70" y="65" font-family="Arial, sans-serif" font-size="35" font-weight="700" text-anchor="start" fill="#17202A">Keylane, Dragonfly, and Garnet storage-tier throughput</text>
+<text x="70" y="65" font-family="Arial, sans-serif" font-size="35" font-weight="700" text-anchor="start" fill="#17202A">Lavik, Dragonfly, and Garnet storage-tier throughput</text>
 <text x="70" y="105" font-family="Arial, sans-serif" font-size="21" font-weight="400" text-anchor="start" fill="#566573">1B keys × 1 KiB · 60 s/run · 16 memtier threads · pipeline 1</text>
 <rect x="380" y="145" width="48" height="26" rx="3" fill="#1473E6"/>
 <rect x="380" y="145" width="48" height="26" rx="3" fill="url(#diag)"/>
-<text x="440" y="166" font-family="Arial, sans-serif" font-size="18" font-weight="400" text-anchor="start" fill="#17202A">Keylane · raw NVMe</text>
+<text x="440" y="166" font-family="Arial, sans-serif" font-size="18" font-weight="400" text-anchor="start" fill="#17202A">Lavik · raw NVMe</text>
 <rect x="835" y="145" width="48" height="26" rx="3" fill="#E97827"/>
 <rect x="835" y="145" width="48" height="26" rx="3" fill="url(#dots)"/>
 <text x="895" y="166" font-family="Arial, sans-serif" font-size="18" font-weight="400" text-anchor="start" fill="#17202A">Dragonfly · Tiered Storage</text>
@@ -136,5 +136,5 @@
 <rect x="1652.17" y="757.90" width="65" height="272.10" rx="2" fill="url(#cross)"/>
 <text x="1611.6666666666667" y="1061" font-family="Arial, sans-serif" font-size="18" font-weight="400" text-anchor="middle" fill="#34495E">2,560</text>
 <text x="945.0" y="1097" font-family="Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#17202A">Concurrent connections</text>
-<text x="70" y="1145" font-family="Arial, sans-serif" font-size="17" font-weight="400" text-anchor="start" fill="#566573">Keylane uses six raw NVMe devices; Dragonfly and Garnet use tier files on the same six-device RAID0/XFS.</text>
+<text x="70" y="1145" font-family="Arial, sans-serif" font-size="17" font-weight="400" text-anchor="start" fill="#566573">Lavik uses six raw NVMe devices; Dragonfly and Garnet use tier files on the same six-device RAID0/XFS.</text>
 </svg>

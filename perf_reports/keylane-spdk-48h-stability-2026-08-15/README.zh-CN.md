@@ -14,17 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Keylane SPDK 48 小时在线稳定性实验（2026-08-15）
+# Lavik SPDK 48 小时在线稳定性实验（2026-08-15）
 
 [English](README.md) | **简体中文** | [报告目录](../README.md)
 
-> 本报告记录项目更名为 Lavik 之前的 Keylane 测试。产品名、版本、命令和数据均对应当时的实验，
-> 不代表当前 Lavik 版本的实测结果。
 > 恢复来源： [2026-09-15 历史版本](https://github.com/eloqdata/lavik/tree/eedb3080d808769519d93e971195b53b38b09c1e/perf_reports)。
 
 ## 结论
 
-Keylane 在 4 亿条 1–4 KB 数据、10 万 QPS、95% 读 / 5% 覆盖写的持续负载下，使用最终 defrag 参数连续运行了严格的 48 小时。窗口内完成约 172.80 亿次 GET/SET，服务没有重启、报错、内存拒绝或数据条目丢失。
+Lavik 在 4 亿条 1–4 KB 数据、10 万 QPS、95% 读 / 5% 覆盖写的持续负载下，使用最终 defrag 参数连续运行了严格的 48 小时。窗口内完成约 172.80 亿次 GET/SET，服务没有重启、报错、内存拒绝或数据条目丢失。
 
 服务端延迟保持稳定：
 
@@ -34,7 +32,7 @@ Keylane 在 4 亿条 1–4 KB 数据、10 万 QPS、95% 读 / 5% 覆盖写的持
 
 磁盘空间随着旧版本 block 达到 defrag 条件后呈锯齿式回收，而不是平滑不变。48 小时内两块 SPDK 设备合计占用范围为 1,268.1–1,493.1 GiB，结束时为 1,364.7 GiB，已经从本轮峰值回落 128.4 GiB；最后 24 小时净下降 52.6 GiB。该窗口没有出现磁盘空间单调耗尽。
 
-因此，本实验支持 Keylane 在该 workload 和最终 defrag 参数下连续 48 小时稳定承载 10 万 QPS，并将服务端 p99.99 控制在 3 ms 以内。该结论只适用于本报告的配置与时间窗口，不等价于任意 workload 下的无限期稳态证明。
+因此，本实验支持 Lavik 在该 workload 和最终 defrag 参数下连续 48 小时稳定承载 10 万 QPS，并将服务端 p99.99 控制在 3 ms 以内。该结论只适用于本报告的配置与时间窗口，不等价于任意 workload 下的无限期稳态证明。
 
 ## Grafana 截图
 
@@ -43,7 +41,7 @@ Keylane 在 4 亿条 1–4 KB 数据、10 万 QPS、95% 读 / 5% 覆盖写的持
 
 ## 48 小时结果
 
-延迟使用 Keylane Prometheus 直方图计算，表示服务端命令执行时间，不包含网络传输和 socket response write。平均值与最高值来自严格 48 小时内的所有 5 分钟窗口；只保留 QPS 位于 90,000–110,000 的点，排除窗口边界处的非完整采样。
+延迟使用 Lavik Prometheus 直方图计算，表示服务端命令执行时间，不包含网络传输和 socket response write。平均值与最高值来自严格 48 小时内的所有 5 分钟窗口；只保留 QPS 位于 90,000–110,000 的点，排除窗口边界处的非完整采样。
 
 | 指标 | 结果 |
 | --- | ---: |
@@ -59,7 +57,7 @@ Keylane 在 4 亿条 1–4 KB 数据、10 万 QPS、95% 读 / 5% 覆盖写的持
 | p99.99 最低值 | 1.515 ms |
 | p99.99 最高值 | 2.810 ms |
 
-10 万 QPS 是客户端 rate limit，而不是峰值吞吐测试。这里的稳定性含义是 Keylane 在持续后台回收期间始终跟上设定负载，不能据此推导系统的最大 QPS。
+10 万 QPS 是客户端 rate limit，而不是峰值吞吐测试。这里的稳定性含义是 Lavik 在持续后台回收期间始终跟上设定负载，不能据此推导系统的最大 QPS。
 
 ## 数据完整性与服务状态
 
@@ -77,20 +75,20 @@ Keylane 在 4 亿条 1–4 KB 数据、10 万 QPS、95% 读 / 5% 覆盖写的持
 
 GET 与 SET 的实际计数比例为 95:5。测试没有使用 DEL 或 TTL，Tomb Raider 动态关闭；覆盖写产生的旧物理版本由 defrag 回收。因此本实验验证的是覆盖写回收路径，不覆盖大量 tombstone 或 TTL 过期数据的清理稳定性。
 
-压测停止后 Keylane 仍为 `active (running)`，systemd 的 `NRestarts=0`，测试窗口内没有 warning/error journal。
+压测停止后 Lavik 仍为 `active (running)`，systemd 的 `NRestarts=0`，测试窗口内没有 warning/error journal。
 
 ## 内存稳定性
 
 | 指标 | 开始 | 结束 | 48 小时最高值 |
 | --- | ---: | ---: | ---: |
 | RSS | 37.388 GiB | 37.392 GiB | 37.399 GiB |
-| Keylane 计费内存 | 37.352 GiB | 37.354 GiB | 37.354 GiB |
+| Lavik 计费内存 | 37.352 GiB | 37.354 GiB | 37.354 GiB |
 
 RSS 的最大波动约 11 MiB，没有随覆盖写次数增长。测试结束后的 `INFO memory` 显示 `oom_rejected_commands=0`；进程使用 mimalloc。
 
 ## 磁盘空间与 Defrag
 
-两块 SPDK namespace 各提供 1,920,370,475,008 bytes 可用数据容量，合计约 3.49 TiB。Keylane 的 `storage_available` 已扣除 defrag reserve；本报告用 `capacity - available` 表示已占用容量，该值不是 Linux `df`。
+两块 SPDK namespace 各提供 1,920,370,475,008 bytes 可用数据容量，合计约 3.49 TiB。Lavik 的 `storage_available` 已扣除 defrag reserve；本报告用 `capacity - available` 表示已占用容量，该值不是 Linux `df`。
 
 | 指标 | 48 小时结果 |
 | --- | ---: |
@@ -130,7 +128,7 @@ redis-cli -h 10.0.0.4 -p 6379 TOMBRAIDER OFF
 | Server | `Standard_L16s_v3` | 16 vCPU，Intel Xeon Platinum 8370C | `10.0.0.4:6379` |
 | Client | `Standard_L16s_v3` | 16 vCPU，Intel Xeon Platinum 8370C | `10.0.0.5` |
 
-Server 使用 12 个 Keylane workers，systemd `AllowedCPUs=0-11`。IRQ 58–74 分散到逻辑 CPU 12–15，避免和 Keylane workers 直接争抢。Client 的 memtier 使用 CPU 0–15。
+Server 使用 12 个 Lavik workers，systemd `AllowedCPUs=0-11`。IRQ 58–74 分散到逻辑 CPU 12–15，避免和 Lavik workers 直接争抢。Client 的 memtier 使用 CPU 0–15。
 
 存储为两个独立 SPDK NVMe namespace，不使用 RAID：
 
@@ -142,7 +140,7 @@ spdk://69f9:00:00.0/1
 版本：
 
 ```text
-Keylane: 13dab14e786fa3e9465d5e82780d53b83ba93268
+Lavik: 13dab14e786fa3e9465d5e82780d53b83ba93268
 Celer:   e394652ddacffd18854b927367911ba8d283f0ca
 Binary SHA-256: 66d3a451f337e7f4852dc3f397757d4415ab680e7ebe892c4ea1c74e4b1cd8a4
 ```
@@ -174,7 +172,7 @@ memtier 实际运行超过 48 小时；本报告固定截取最终参数已经�
 
 ## 监控口径与复核查询
 
-Prometheus 位于 client，保留 30 天数据，每 5 秒抓取一次 Keylane metrics。报告使用以下 PromQL，并以 5 分钟 rate 作为稳定性统计粒度：
+Prometheus 位于 client，保留 30 天数据，每 5 秒抓取一次 Lavik metrics。报告使用以下 PromQL，并以 5 分钟 rate 作为稳定性统计粒度：
 
 ```promql
 # GET + SET QPS

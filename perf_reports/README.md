@@ -16,12 +16,11 @@ limitations under the License.
 
 # Performance reports
 
-These reports record benchmarks of Keylane before the project was renamed Lavik.
-Each directory opens with an English `README.md` and provides a Simplified Chinese
-`README.zh-CN.md`. Test versions, commands, configurations, and results retain their
-historical meaning; they are not measurements of the current Lavik release.
+Lavik benchmark results, test configurations, and reproduction commands.
+Each report provides an English `README.md` and a Simplified Chinese
+`README.zh-CN.md`.
 
-每份报告默认展示英文版，点击“简体中文”进入中文版。报告保留测试时的名称、版本和数据。
+每份报告默认展示英文版，点击“简体中文”进入中文版。
 
 | Report | Test date | English | 简体中文 |
 |---|---|---|---|
@@ -30,7 +29,7 @@ historical meaning; they are not measurements of the current Lavik release.
 | SPDK vs. raw io_uring: 500M keys, 2 KiB values | 2026-08-26 | [English](keylane-spdk-vs-iouring-500m2k-memtier-valkey-12c-2026-08-26/README.md) | [简体中文](keylane-spdk-vs-iouring-500m2k-memtier-valkey-12c-2026-08-26/README.zh-CN.md) |
 | Persistence and storage tiers: Dragonfly, Garnet, Kvrocks, Pika, Tendis, KeyDB, and Azure Managed Redis | 2026-08-11 | [English](keylane-vs-dragonfly-tiering-2026-08-11/README.md) | [简体中文](keylane-vs-dragonfly-tiering-2026-08-11/README.zh-CN.md) |
 | High concurrency: Redis/Valkey I/O threads and Dragonfly/Garnet storage tiers | 2026-09-06 | [English](keylane-vs-redis-valkey-iothreads-10g-1k-2026-09-06/README.md) | [简体中文](keylane-vs-redis-valkey-iothreads-10g-1k-2026-09-06/README.zh-CN.md) |
-| Keylane–Aerospike YCSB A/B/C/D throughput and tail latency | 2026-09-16 | [English](ycsb-rerun-2026-09-13/README.md) | [简体中文](ycsb-rerun-2026-09-13/README.zh-CN.md) |
+| Lavik–Aerospike YCSB A/B/C/D throughput and tail latency | 2026-09-16 | [English](ycsb-rerun-2026-09-13/README.md) | [简体中文](ycsb-rerun-2026-09-13/README.zh-CN.md) |
 
 The YCSB directory name retains its original batch date; its current report covers
 the fresh-data rerun on September 16. Evidence availability and measurement limits

@@ -29,25 +29,25 @@ limitations under the License.
   counts without relying only on color.
 - Delivery: `iothread-scaling-qps.svg` and its inspected PNG rendering.
 
-## Best in-memory configurations versus Keylane
+## Best in-memory configurations versus Lavik
 
-- Question: at each connection count, how close is raw-device Keylane to the
+- Question: at each connection count, how close is raw-device Lavik to the
   best measured pure-memory Redis and Valkey configuration?
-- Takeaway: Keylane GET peaks 13–14% below the memory systems, while Keylane
+- Takeaway: Lavik GET peaks 13–14% below the memory systems, while Lavik
   SET is faster than both.
 - Form: two vertically stacked grouped-bar charts for GET and SET.
 - Data: 30 reviewed rows. Redis uses 16 I/O threads; Valkey uses 16 for GET and
-  8 for SET; Keylane uses 16 workers.
+  8 for SET; Lavik uses 16 workers.
 - Scale: zero-based, shared 0–1.05M QPS scale.
 - Identity: stable blue/orange/pink product colors plus distinct fill textures.
 - Delivery: `best-memory-vs-keylane-qps.svg` and its inspected PNG rendering.
 
 ## One-terabyte storage-tier comparison
 
-- Question: how do Keylane raw io_uring, Dragonfly Tiered Storage, and Garnet
+- Question: how do Lavik raw io_uring, Dragonfly Tiered Storage, and Garnet
   Storage Tier scale from 80 to 2,560 concurrent connections on a 1B-key
   working set?
-- Takeaway: Keylane has the highest GET and SET peak throughput; every product
+- Takeaway: Lavik has the highest GET and SET peak throughput; every product
   regresses at 2,560 connections, while Garnet leads SET at 80 connections.
 - Form: two vertically stacked grouped-bar charts for GET and SET.
 - Data: 36 reviewed rows; six connection counts, two workloads, three products.

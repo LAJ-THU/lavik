@@ -14,27 +14,25 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Keylane SPDK/io_uring、Dragonfly、Garnet、Apache Kvrocks、Pika、Tendis 与 KeyDB On Flash 性能对比（2026-08-11）
+# Lavik SPDK/io_uring、Dragonfly、Garnet、Apache Kvrocks、Pika、Tendis 与 KeyDB On Flash 性能对比（2026-08-11）
 
 [English](README.md) | **简体中文** | [报告目录](../README.md)
 
-> 本报告记录项目更名为 Lavik 之前的 Keylane 测试。产品名、版本、命令和数据均对应当时的实验，
-> 不代表当前 Lavik 版本的实测结果。
 > 恢复来源： [2026-09-15 历史版本](https://github.com/eloqdata/lavik/tree/eedb3080d808769519d93e971195b53b38b09c1e/perf_reports)。
 
-> 2026-08-12 更新：Keylane 三种后端、Dragonfly Tiered Storage、Microsoft Garnet Storage Tier、Apache Kvrocks、Pika、Tendis 和 KeyDB On Flash 已按统一的 5 分钟口径完成复测，表内均已替换为本轮结果。每种后端只灌数一次，随后依次执行纯读、1:1 读写混合和纯写。本次 Keylane 复测保持 defrag 开启，其他系统保持各自的后台回收或 auto compaction 开启。
+> 2026-08-12 更新：Lavik 三种后端、Dragonfly Tiered Storage、Microsoft Garnet Storage Tier、Apache Kvrocks、Pika、Tendis 和 KeyDB On Flash 已按统一的 5 分钟口径完成复测，表内均已替换为本轮结果。每种后端只灌数一次，随后依次执行纯读、1:1 读写混合和纯写。本次 Lavik 复测保持 defrag 开启，其他系统保持各自的后台回收或 auto compaction 开启。
 
 > 2026-08-12 补充：增加 Azure Managed Redis 480 GB/16 vCPU 实例的独立容量与性能测试。该组使用约 400 GB 数据和 60 秒窗口，已用 `*` 标入主榜单，并在表下说明与本地双 NVMe 300 秒结果的口径差异。
 
 ## 测试结果
 
-除带 `*` 的 Azure Managed Redis 独立结果外，本次测试使用双 NVMe、2 亿条 1–4 KB 数据、80 个客户端连接和不限速 workload。Keylane SPDK 的纯读和混合 QPS 最高，raw io_uring 的纯写 QPS 最高；三种 Keylane 后端在三类 workload 中均保持最高的一组吞吐。
+除带 `*` 的 Azure Managed Redis 独立结果外，本次测试使用双 NVMe、2 亿条 1–4 KB 数据、80 个客户端连接和不限速 workload。Lavik SPDK 的纯读和混合 QPS 最高，raw io_uring 的纯写 QPS 最高；三种 Lavik 后端在三类 workload 中均保持最高的一组吞吐。
 
 | Workload | 系统 | QPS | p99 (ms) | p99.9 (ms) |
 | --- | --- | ---: | ---: | ---: |
-| 纯读 GET | Keylane SPDK | 310,387.22 | 0.455 | 0.895 |
-| 纯读 GET | Keylane io_uring（双裸块设备） | 278,924.72 | 0.503 | 2.319 |
-| 纯读 GET | Keylane io_uring（双 XFS 文件） | 272,726.70 | 0.519 | 2.319 |
+| 纯读 GET | Lavik SPDK | 310,387.22 | 0.455 | 0.895 |
+| 纯读 GET | Lavik io_uring（双裸块设备） | 278,924.72 | 0.503 | 2.319 |
+| 纯读 GET | Lavik io_uring（双 XFS 文件） | 272,726.70 | 0.519 | 2.319 |
 | 纯读 GET | Microsoft Garnet Storage Tier | 205,297.49 | 2.303 | 4.223 |
 | 纯读 GET | Dragonfly Tiered Storage | 187,652.86 | 2.911 | 16.383 |
 | 纯读 GET | Pika | 86,669.28 | 1.775 | 2.383 |
@@ -42,9 +40,9 @@ limitations under the License.
 | 纯读 GET | Tendis | 68,860.36 | 2.063 | 5.855 |
 | 纯读 GET | Azure Managed Redis* | 44,480.15 | 5.855 | 11.839 |
 | 纯读 GET | KeyDB On Flash | 6,146.18 | 18.047 | 25.471 |
-| 纯写 SET | Keylane io_uring（双裸块设备） | 393,732.53 | 1.015 | 1.647 |
-| 纯写 SET | Keylane SPDK | 392,283.87 | 0.999 | 1.607 |
-| 纯写 SET | Keylane io_uring（双 XFS 文件） | 385,324.26 | 1.055 | 1.727 |
+| 纯写 SET | Lavik io_uring（双裸块设备） | 393,732.53 | 1.015 | 1.647 |
+| 纯写 SET | Lavik SPDK | 392,283.87 | 0.999 | 1.607 |
+| 纯写 SET | Lavik io_uring（双 XFS 文件） | 385,324.26 | 1.055 | 1.727 |
 | 纯写 SET | Microsoft Garnet Storage Tier | 361,960.06 | 1.583 | 3.391 |
 | 纯写 SET | Dragonfly Tiered Storage | 199,233.52 | 4.639 | 10.303 |
 | 纯写 SET | Tendis | 160,641.92 | 1.335 | 2.127 |
@@ -52,9 +50,9 @@ limitations under the License.
 | 纯写 SET | Azure Managed Redis* | 84,863.93 | 3.199 | 7.839 |
 | 纯写 SET | Pika | 79,537.31 | 4.223 | 7.327 |
 | 纯写 SET | KeyDB On Flash | 5,395.49 | 24.447 | 31.359 |
-| 1:1 读写混合 | Keylane SPDK | 352,442.49 | 0.631 | 1.447 |
-| 1:1 读写混合 | Keylane io_uring（双裸块设备） | 328,831.03 | 0.655 | 1.447 |
-| 1:1 读写混合 | Keylane io_uring（双 XFS 文件） | 326,110.00 | 0.687 | 1.503 |
+| 1:1 读写混合 | Lavik SPDK | 352,442.49 | 0.631 | 1.447 |
+| 1:1 读写混合 | Lavik io_uring（双裸块设备） | 328,831.03 | 0.655 | 1.447 |
+| 1:1 读写混合 | Lavik io_uring（双 XFS 文件） | 326,110.00 | 0.687 | 1.503 |
 | 1:1 读写混合 | Microsoft Garnet Storage Tier | 209,366.38 | 2.511 | 4.895 |
 | 1:1 读写混合 | Dragonfly Tiered Storage | 207,247.53 | 4.015 | 9.791 |
 | 1:1 读写混合 | Tendis | 102,212.78 | 1.439 | 1.975 |
@@ -88,9 +86,9 @@ KeyDB On Flash 本轮保留 RocksDB WAL 和 auto compaction，使用 64 GiB DRAM
 | 部署 | 估计价格（USD/月） |
 | --- | ---: |
 | Azure Managed Redis Flex，480 GB/16 vCPU | $2,414.28 |
-| Keylane server，`Standard_L16s_v3` | $1,152.67 |
+| Lavik server，`Standard_L16s_v3` | $1,152.67 |
 
-Redis Flex 估计每月高 $1,261.61，约为 Keylane server VM 的 2.09 倍（高 109.45%）。两项都不计公共压测 client；实际账单还会随区域、计费方式、折扣、存储和网络费用变化。托管 Redis 与自管 VM 的服务边界也不同，因此这组数字是实例月费对照，不代表包含运维、可用性和支持成本的完整 TCO。
+Redis Flex 估计每月高 $1,261.61，约为 Lavik server VM 的 2.09 倍（高 109.45%）。两项都不计公共压测 client；实际账单还会随区域、计费方式、折扣、存储和网络费用变化。托管 Redis 与自管 VM 的服务边界也不同，因此这组数字是实例月费对照，不代表包含运维、可用性和支持成本的完整 TCO。
 
 | Workload | QPS | p99 (ms) | p99.9 (ms) | 窗口 | 校验 |
 | --- | ---: | ---: | ---: | ---: | --- |
@@ -157,14 +155,14 @@ taskset -c 0-15 memtier_benchmark \
 
 公共 workload：8 个 memtier threads、每个 thread 10 个连接、1,000–4,000 byte 随机 value、key 范围 `kv_1`–`kv_200000000`、每组 300 秒、不限制 QPS。每个后端只灌入一次 2 亿条初始数据，随后依次执行纯读、1:1 读写混合和纯写，三组之间不重启、不清库。九组服务/后端在不同时段独占同一个端口运行，不并发运行。
 
-Keylane 三个存储后端都使用 16 workers，并保持 defrag 开启。SPDK 直接访问两个 NVMe namespace；raw io_uring 通过 Linux NVMe 驱动直接访问两个块设备，direct-I/O alignment 为 512 bytes；file io_uring 让两块 NVMe 各自使用独立 XFS，并通过两个 1,600 GiB 预分配 regular files 执行 4 KiB 对齐的 O_DIRECT I/O。两种 io_uring 方案都不使用 RAID。Dragonfly 使用 v1.40.1、16 proactor threads、双 NVMe Linux RAID0、XFS，并关闭 experimental cooling。Garnet 使用 v2.1.3、.NET 10.0.302、同一个 RAID0/XFS、64 GiB hybrid-log memory、32 GiB read cache、4 GiB index 和 Linux Native libaio。Kvrocks 使用 v2.16.0、16 workers、同一个 RAID0/XFS、80 GiB block cache、BlobDB，并关闭压缩。Pika 使用 Git tag v4.0.3、16 network threads、32 request threads、3 个 RocksDB instances、共 24 GiB block cache 和 32 GiB RTC cache，并关闭压缩与 binlog。Tendis 使用 tag `2.8.4-rocksdb-v8.5.3`、16 executor threads、10 个 RocksDB stores、72 GiB shared block/blob cache、同一个 RAID0/XFS，并关闭 WAL、binlog 和压缩。KeyDB On Flash 使用 v6.3.4、4 个 server threads、64 GiB DRAM 热层、同一个 RAID0/XFS，并保留 RocksDB WAL。
+Lavik 三个存储后端都使用 16 workers，并保持 defrag 开启。SPDK 直接访问两个 NVMe namespace；raw io_uring 通过 Linux NVMe 驱动直接访问两个块设备，direct-I/O alignment 为 512 bytes；file io_uring 让两块 NVMe 各自使用独立 XFS，并通过两个 1,600 GiB 预分配 regular files 执行 4 KiB 对齐的 O_DIRECT I/O。两种 io_uring 方案都不使用 RAID。Dragonfly 使用 v1.40.1、16 proactor threads、双 NVMe Linux RAID0、XFS，并关闭 experimental cooling。Garnet 使用 v2.1.3、.NET 10.0.302、同一个 RAID0/XFS、64 GiB hybrid-log memory、32 GiB read cache、4 GiB index 和 Linux Native libaio。Kvrocks 使用 v2.16.0、16 workers、同一个 RAID0/XFS、80 GiB block cache、BlobDB，并关闭压缩。Pika 使用 Git tag v4.0.3、16 network threads、32 request threads、3 个 RocksDB instances、共 24 GiB block cache 和 32 GiB RTC cache，并关闭压缩与 binlog。Tendis 使用 tag `2.8.4-rocksdb-v8.5.3`、16 executor threads、10 个 RocksDB stores、72 GiB shared block/blob cache、同一个 RAID0/XFS，并关闭 WAL、binlog 和压缩。KeyDB On Flash 使用 v6.3.4、4 个 server threads、64 GiB DRAM 热层、同一个 RAID0/XFS，并保留 RocksDB WAL。
 
 ## 结果边界与公平性说明
 
-- Keylane 不使用 LSM-tree，没有 RocksDB compaction；本轮复测始终保持自身 defrag 开启。纯读不产生旧版本，不会主动触发 defrag；1:1 使用每设备最多 2 个活动任务、块间冷却 15 ms；纯写使用每设备最多 6 个活动任务且不设置块间冷却。两种写入负载的记录间冷却均为 0。
-- Keylane io_uring 的 raw 和 regular-file 两组使用同一个二进制和服务参数。regular files 以 O_DIRECT 打开，不依赖 Linux page cache；raw 组绕过 XFS，但仍经过 Linux block layer 和 NVMe 内核驱动。两块盘均未组成 RAID，Keylane 自己把两个路径识别为独立设备并各分配 8 个 home workers。
+- Lavik 不使用 LSM-tree，没有 RocksDB compaction；本轮复测始终保持自身 defrag 开启。纯读不产生旧版本，不会主动触发 defrag；1:1 使用每设备最多 2 个活动任务、块间冷却 15 ms；纯写使用每设备最多 6 个活动任务且不设置块间冷却。两种写入负载的记录间冷却均为 0。
+- Lavik io_uring 的 raw 和 regular-file 两组使用同一个二进制和服务参数。regular files 以 O_DIRECT 打开，不依赖 Linux page cache；raw 组绕过 XFS，但仍经过 Linux block layer 和 NVMe 内核驱动。两块盘均未组成 RAID，Lavik 自己把两个路径识别为独立设备并各分配 8 个 home workers。
 - 当前代码把 `--registered-buffer-mb-per-worker=256` 解释为每个 worker 256 MiB；16 workers 合计约 4 GiB，而不是全进程 256 MiB。SPDK 和 io_uring 两组使用相同设置，因此后端对比一致，但部署容量规划必须按 per-worker 语义计算。
-- 三种 Keylane 后端都在各自全量灌数后直接运行正式测试，没有预先老化数据或挑选短窗口。每种后端只灌数一次，正式顺序固定为纯读、1:1 读写混合、纯写。纯读和混合期间两块盘 I/O 量对称；raw 组绕过文件系统，file 组则保留更通用的普通 Linux 文件部署方式。
+- 三种 Lavik 后端都在各自全量灌数后直接运行正式测试，没有预先老化数据或挑选短窗口。每种后端只灌数一次，正式顺序固定为纯读、1:1 读写混合、纯写。纯读和混合期间两块盘 I/O 量对称；raw 组绕过文件系统，file 组则保留更通用的普通 Linux 文件部署方式。
 - raw io_uring 需要独占块设备，部署和运维约束接近 SPDK；regular-file io_uring 包含 XFS 成本，但更接近普通 Linux 文件部署。两者都保留 Linux NVMe 驱动、中断和内核块层成本。
 - Dragonfly 的 `backing_file_direct=false` 使用 Linux buffered I/O。正常运行会保留 Linux page cache，因此本轮在灌数后执行 180 秒随机 GET 预热，随后依次执行纯读、1:1 和纯写；正式测试之间不清 page cache、不重启。
 - Garnet 使用官方 v2.1.3 Release 源码直接发布二进制，不使用容器。只测试 raw string `GET`/`SET`，因此关闭 object store 和 pub/sub；4 GiB index 按官方每 key 约 16 bytes 的规则覆盖 2 亿 key，避免默认 128 MiB index 产生长 hash chain。
@@ -188,9 +186,9 @@ Keylane 三个存储后端都使用 16 workers，并保持 defrag 开启。SPDK 
 
 ## 复现步骤
 
-### 1. Keylane defrag 参数
+### 1. Lavik defrag 参数
 
-Keylane 三种后端使用相同的动态参数。defrag 始终保持开启；参数在相应 workload 开始前设置。
+Lavik 三种后端使用相同的动态参数。defrag 始终保持开启；参数在相应 workload 开始前设置。
 
 1:1 读写混合使用较低的后台并行度，并在处理完每个 block 后冷却 15 ms，以降低在线长尾：
 
@@ -214,7 +212,7 @@ redis-cli -h 10.0.0.4 -p 6379 DEFRAG RECORD-SLEEP 0
 redis-cli -h 10.0.0.4 -p 6379 DEFRAG STATUS
 ```
 
-### 2. 启动 Keylane SPDK
+### 2. 启动 Lavik SPDK
 
 ```bash
 sudo systemd-run \
@@ -229,7 +227,7 @@ sudo systemd-run \
   --data-file=spdk://021d:00:00.0/1
 ```
 
-### 3. 编译并启动 Keylane io_uring
+### 3. 编译并启动 Lavik io_uring
 
 普通 io_uring 构建显式关闭 SPDK。raw 和 regular-file 两种存储方式共用同一个二进制：
 
@@ -261,7 +259,7 @@ fallocate -l 1600G /mnt/data0/keylane.data
 fallocate -l 1600G /mnt/data1/keylane.data
 ```
 
-`1,600 GiB` 是本机实验值，不是 Keylane 固定要求。部署时应按实际磁盘容量预留文件系统日志和运维空间；每个新文件必须是 8 MiB 的整数倍。Keylane 不会在启动时创建、扩展或 truncate 文件。
+`1,600 GiB` 是本机实验值，不是 Lavik 固定要求。部署时应按实际磁盘容量预留文件系统日志和运维空间；每个新文件必须是 8 MiB 的整数倍。Lavik 不会在启动时创建、扩展或 truncate 文件。
 
 ```bash
 sudo systemd-run \
@@ -280,7 +278,7 @@ sudo systemd-run \
 
 #### 双 raw block devices
 
-raw 版本需要卸载文件系统并独占设备。以下操作会使原文件系统和 Keylane 文件数据不可访问；`wipefs` 加前 8 MiB zeroout 用于建立新的 Keylane metadata/bitmap，不是全盘安全擦除，旧数据块可能仍物理存在但不会进入新存储集。
+raw 版本需要卸载文件系统并独占设备。以下操作会使原文件系统和 Lavik 文件数据不可访问；`wipefs` 加前 8 MiB zeroout 用于建立新的 Lavik metadata/bitmap，不是全盘安全擦除，旧数据块可能仍物理存在但不会进入新存储集。
 
 ```bash
 sudo systemctl kill -s SIGINT keylane-iouring-files.service
@@ -306,7 +304,7 @@ sudo systemd-run \
   --data-file=/dev/nvme1n1
 ```
 
-本次每个 NVMe 的原始容量为 1,920,383,410,176 bytes；Keylane 使用其中 1,920,378,863,616 bytes，忽略不足一个 8 MiB block 的尾部。每盘有 228,926 个 data blocks、分配 8 个 home workers，direct-I/O alignment 为 512 bytes。
+本次每个 NVMe 的原始容量为 1,920,383,410,176 bytes；Lavik 使用其中 1,920,378,863,616 bytes，忽略不足一个 8 MiB block 的尾部。每盘有 228,926 个 data blocks、分配 8 个 home workers，direct-I/O alignment 为 512 bytes。
 
 ### 4. 创建 RAID0 和 XFS
 
@@ -868,9 +866,9 @@ redis-cli -h 10.0.0.4 -p 6379 INFO rocksdb \
 
 ### 14. 依次执行三组正式测试
 
-`RATIO` 依次替换为纯读 `0:1`、1:1 混合 `1:1` 和纯写 `1:0`。每个后端只执行一次全量灌数，三组正式测试共用这份数据。每组结束后确认没有 background error；Keylane 还需用 `DEFRAG STATUS` 记录活动和排队任务。Kvrocks、Pika、Garnet、Tendis 和 KeyDB On Flash 的后台 compaction/回收保持开启，不等待任务清零。
+`RATIO` 依次替换为纯读 `0:1`、1:1 混合 `1:1` 和纯写 `1:0`。每个后端只执行一次全量灌数，三组正式测试共用这份数据。每组结束后确认没有 background error；Lavik 还需用 `DEFRAG STATUS` 记录活动和排队任务。Kvrocks、Pika、Garnet、Tendis 和 KeyDB On Flash 的后台 compaction/回收保持开启，不等待任务清零。
 
-所有系统在三组正式测试之间都不清理操作系统 page cache。只有 Dragonfly 在正式测试前执行额外的 Linux page-cache 预热；其余后端不做额外读预热，并保留灌数和前序正式 workload 自然形成的缓存状态。Keylane SPDK、raw io_uring、使用 O_DIRECT regular files 的 io_uring，以及使用 Native O_DIRECT storage tier 的 Garnet 不依赖该 page-cache 路径。
+所有系统在三组正式测试之间都不清理操作系统 page cache。只有 Dragonfly 在正式测试前执行额外的 Linux page-cache 预热；其余后端不做额外读预热，并保留灌数和前序正式 workload 自然形成的缓存状态。Lavik SPDK、raw io_uring、使用 O_DIRECT regular files 的 io_uring，以及使用 Native O_DIRECT storage tier 的 Garnet 不依赖该 page-cache 路径。
 
 Garnet 三组顺序为纯读、1:1、纯写，全部在同一个进程和数据集上执行，不重启、不清库。正式测试结束时 `Log.BeginAddress=718970813904`、`Log.TailAddress=1533597570336`，log 目录约 702 GiB；服务保持正常，未发现后台错误。
 

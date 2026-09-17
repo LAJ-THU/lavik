@@ -14,12 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Keylane、Redis、Valkey、Dragonfly 与 Garnet：1 KiB 高并发性能对比
+# Lavik、Redis、Valkey、Dragonfly 与 Garnet：1 KiB 高并发性能对比
 
 [English](README.md) | **简体中文** | [报告目录](../README.md)
 
-> 本报告记录项目更名为 Lavik 之前的 Keylane 测试。产品名、版本、命令和数据均对应当时的实验，
-> 不代表当前 Lavik 版本的实测结果。
 > 恢复来源： [2026-09-15 历史版本](https://github.com/eloqdata/lavik/tree/eedb3080d808769519d93e971195b53b38b09c1e/perf_reports)。
 > 已恢复原有图表、CSV、哈希清单和辅助脚本。脚本引用原测试主机与原始输入路径；这些原始日志不在目录中。
 
@@ -28,20 +26,20 @@ limitations under the License.
 ## 技术结论
 
 本报告包含两个独立实验组。在 10,000,000-key × 1,024-byte（约 10 GB）
-纯内存对照中，六盘 raw io_uring Keylane 的最佳 GET 为
+纯内存对照中，六盘 raw io_uring Lavik 的最佳 GET 为
 **828,502 QPS**，比调到本轮最优的纯内存 Redis 8.8.0 低 **14.1%**，
-比纯内存 Valkey 9.1.0 低 **12.6%**。Keylane 的最佳 SET 为
+比纯内存 Valkey 9.1.0 低 **12.6%**。Lavik 的最佳 SET 为
 **984,452 QPS**，反而比 Redis 高 **12.5%**、比 Valkey 高 **23.7%**。
 
 在另一个 1,000,000,000-key × 1,024-byte（约 1 TB）分层存储实验中，
-Keylane raw io_uring 的 GET 峰值为 **784,179 QPS**，分别比 Dragonfly
+Lavik raw io_uring 的 GET 峰值为 **784,179 QPS**，分别比 Dragonfly
 v1.40.2 和 Garnet v2.1.5 高 **107.0%**、**135.7%**；SET 峰值为
 **856,523 QPS**，分别高 **44.0%**、**12.0%**。三个系统在 2,560 连接
 均从峰值回退，各自峰值都位于 640–1,280 连接区间。
 
 因此，这些结果支持一个有边界的结论：在本机、1 KiB value、pipeline=1
-和单客户端上，Keylane 的随机读吞吐与调优后的纯内存系统相差约
-13%–14%，写吞吐没有落后；面对同量级的大容量分层存储产品时，Keylane
+和单客户端上，Lavik 的随机读吞吐与调优后的纯内存系统相差约
+13%–14%，写吞吐没有落后；面对同量级的大容量分层存储产品时，Lavik
 的读写吞吐也保持领先。10 GB 与 1 TB 两组使用不同数据集、运行时长和
 存储模型，不能跨组直接排行，也不证明任意硬件或耐久性配置都有同样差距。
 
@@ -53,31 +51,31 @@ Valkey GET 在 16 threads 最佳，但 Valkey SET 在 8 threads 最佳，增加�
 若需要比较更多磁盘型 Redis 兼容系统及不同持久化、WAL、compaction
 配置，请参阅[更完整的持久化与分层存储对比报告](../keylane-vs-dragonfly-tiering-2026-08-11/README.zh-CN.md)。
 
-## Keylane 与调优后纯内存系统的差距
+## Lavik 与调优后纯内存系统的差距
 
-![Keylane、Redis、Valkey 不同连接数 QPS](best-memory-vs-keylane-qps.png)
+![Lavik、Redis、Valkey 不同连接数 QPS](best-memory-vs-keylane-qps.png)
 
 图中的纯内存配置按命令选择本轮实测最优线程数：Redis GET/SET 都是
-16 I/O threads；Valkey GET 是 16、SET 是 8。Keylane 固定为 16 workers。
+16 I/O threads；Valkey GET 是 16、SET 是 8。Lavik 固定为 16 workers。
 这样比较的是每个系统在已测配置中的最好结果，而不是用单线程
-Redis/Valkey 放大 Keylane 优势。
+Redis/Valkey 放大 Lavik 优势。
 
 | 负载 | 系统与配置 | 峰值 QPS | 峰值连接数 | Avg | p50 | p99 | p99.9 | p99.99 |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
-| GET | Keylane，16 workers | 828,502 | 1,280 | 1.544 ms | 1.319 ms | 4.543 ms | 11.199 ms | 21.887 ms |
+| GET | Lavik，16 workers | 828,502 | 1,280 | 1.544 ms | 1.319 ms | 4.543 ms | 11.199 ms | 21.887 ms |
 | GET | Redis，16 I/O threads | 964,267 | 1,280 | 1.327 ms | 1.111 ms | 4.671 ms | 8.191 ms | 17.407 ms |
 | GET | Valkey，16 I/O threads | 948,300 | 1,280 | 1.349 ms | 1.111 ms | 4.479 ms | 8.383 ms | 17.151 ms |
-| SET | Keylane，16 workers | 984,452 | 1,280 | 1.300 ms | 1.159 ms | 4.575 ms | 7.455 ms | 16.063 ms |
+| SET | Lavik，16 workers | 984,452 | 1,280 | 1.300 ms | 1.159 ms | 4.575 ms | 7.455 ms | 16.063 ms |
 | SET | Redis，16 I/O threads | 874,879 | 1,280 | 1.463 ms | 1.191 ms | 4.767 ms | 7.839 ms | 17.663 ms |
 | SET | Valkey，8 I/O threads | 796,145 | 1,280 | 1.607 ms | 1.447 ms | 4.319 ms | 9.471 ms | 17.919 ms |
 
 峰值点的 p99 很接近：GET 为 4.48–4.67 ms，SET 为 4.32–4.77 ms。
-Keylane GET 的 p99.99 较差，但 Keylane SET 的 p99.9/p99.99 都优于两套
+Lavik GET 的 p99.99 较差，但 Lavik SET 的 p99.9/p99.99 都优于两套
 纯内存对照。吞吐接近并不是以明显恶化 p99 换来的。
 
 ### 各连接数的精确 QPS
 
-| 负载 | 连接数 | Keylane 16 workers | Redis 16 I/O threads | Valkey 最佳线程配置 |
+| 负载 | 连接数 | Lavik 16 workers | Redis 16 I/O threads | Valkey 最佳线程配置 |
 |---|---:|---:|---:|---:|
 | GET | 80 | 251,872 | 300,320 | 374,308（16） |
 | GET | 160 | 447,569 | 496,011 | 576,207（16） |
@@ -90,35 +88,35 @@ Keylane GET 的 p99.99 较差，但 Keylane SET 的 p99.9/p99.99 都优于两套
 | SET | 640 | 964,503 | 798,889 | 775,229（8） |
 | SET | 1,280 | 984,452 | 874,879 | 796,145（8） |
 
-## 1 TB 分层存储：Keylane 领先 Dragonfly 与 Garnet
+## 1 TB 分层存储：Lavik 领先 Dragonfly 与 Garnet
 
-![Keylane、Dragonfly、Garnet 不同连接数 QPS](storage-tier-comparison-qps.png)
+![Lavik、Dragonfly、Garnet 不同连接数 QPS](storage-tier-comparison-qps.png)
 
 这一组把 key 数扩大到 10 亿，逻辑 value payload 为 1.024 TB（约
-953.7 GiB），因此与上面的 10 GB 纯内存实验分开分析。Keylane 直接使用
+953.7 GiB），因此与上面的 10 GB 纯内存实验分开分析。Lavik 直接使用
 六块 raw NVMe；Dragonfly Tiered Storage 和 Garnet Storage Tier 使用
 同一组六盘组成的 RAID0/XFS。三者均使用同一服务端、同一客户端、16 个
 memtier threads、pipeline=1，每点运行 60 秒。
 
-Keylane 的 GET 在 1,280 连接达到 784,179 QPS，是 Dragonfly 峰值的
+Lavik 的 GET 在 1,280 连接达到 784,179 QPS，是 Dragonfly 峰值的
 2.07 倍、Garnet 峰值的 2.36 倍；SET 在 1,280 连接达到 856,523 QPS，
 比 Dragonfly 高 44.0%，比 Garnet 高 12.0%。Dragonfly GET 的吞吐随着
 并发上升，但峰值 p99 已达到 47.615 ms；Garnet GET 的尾延迟更稳，却在
-640 连接后开始回退。Keylane 在 2,560 连接同样回退，继续增加连接只会
+640 连接后开始回退。Lavik 在 2,560 连接同样回退，继续增加连接只会
 增加排队和尾延迟。
 
 | 负载 | 系统与配置 | 峰值 QPS | 峰值连接数 | Avg | p50 | p99 | p99.9 |
 |---|---|---:|---:|---:|---:|---:|---:|
-| GET | Keylane，16 workers，raw NVMe | 784,179 | 1,280 | 1.632 ms | 1.527 ms | 4.095 ms | 8.895 ms |
+| GET | Lavik，16 workers，raw NVMe | 784,179 | 1,280 | 1.632 ms | 1.527 ms | 4.095 ms | 8.895 ms |
 | GET | Dragonfly，16 proactors，Tiered Storage | 378,851 | 1,280 | 3.378 ms | 1.439 ms | 47.615 ms | 77.823 ms |
 | GET | Garnet，Storage Tier | 332,665 | 640 | 1.923 ms | 1.735 ms | 3.743 ms | 5.503 ms |
-| SET | Keylane，16 workers，raw NVMe | 856,523 | 1,280 | 1.494 ms | 1.015 ms | 8.511 ms | 12.799 ms |
+| SET | Lavik，16 workers，raw NVMe | 856,523 | 1,280 | 1.494 ms | 1.015 ms | 8.511 ms | 12.799 ms |
 | SET | Dragonfly，16 proactors，Tiered Storage | 594,941 | 1,280 | 2.151 ms | 1.551 ms | 21.375 ms | 51.199 ms |
 | SET | Garnet，Storage Tier | 764,917 | 1,280 | 1.673 ms | 1.399 ms | 5.183 ms | 11.263 ms |
 
 ### 各连接数的精确 QPS
 
-| 负载 | 连接数 | Keylane raw io_uring | Dragonfly Tiered Storage | Garnet Storage Tier |
+| 负载 | 连接数 | Lavik raw io_uring | Dragonfly Tiered Storage | Garnet Storage Tier |
 |---|---:|---:|---:|---:|
 | GET | 80 | 253,251 | 199,548 | 177,016 |
 | GET | 160 | 444,808 | 297,609 | 247,875 |
@@ -133,11 +131,11 @@ Keylane 的 GET 在 1,280 连接达到 784,179 QPS，是 Dragonfly 峰值的
 | SET | 1,280 | 856,523 | 594,941 | 764,917 |
 | SET | 2,560 | 790,186 | 537,193 | 720,262 |
 
-低并发下 Garnet SET 更快：80 连接时比 Keylane 高 14.1%。Keylane 从
-160 连接开始反超，并在 640–1,280 连接扩大优势。因此“Keylane SET
+低并发下 Garnet SET 更快：80 连接时比 Lavik 高 14.1%。Lavik 从
+160 连接开始反超，并在 640–1,280 连接扩大优势。因此“Lavik SET
 始终最快”并不成立；更准确的结论是它在本轮高并发饱和区间具有最高峰值。
 
-## I/O threads 决定 Redis/Valkey 能否接近 Keylane
+## I/O threads 决定 Redis/Valkey 能否接近 Lavik
 
 ![Redis 与 Valkey I/O threads 扩展曲线](iothread-scaling-qps.png)
 
@@ -178,7 +176,7 @@ Keylane 的 GET 在 1,280 连接达到 784,179 QPS，是 Dragonfly 峰值的
 
 ## 实施方法
 
-- Keylane 使用代码提交
+- Lavik 使用代码提交
   [`29dc8e6`](https://github.com/thweetkomputer/keylane/commit/29dc8e6b87c40196dc397759690252944f1196f0)，
   Clang 18 Release、`-march=native`、16 workers、六块独立 raw NVMe 的
   io_uring 后端、暂停 defrag。二进制 SHA-256 为
@@ -190,9 +188,9 @@ Keylane 的 GET 在 1,280 连接达到 784,179 QPS，是 Dragonfly 峰值的
   `DBSIZE` 后保存一个基线 RDB；每个 I/O-thread 档都从这个未被正式 SET
   改写的 RDB 重启，验证 key 数和 `CONFIG GET io-threads`，预热 GET 10 秒，
   再按连接数由低到高跑 GET 和 SET。
-- Keylane 六盘从 RAID0 解组后逐盘 `blkdiscard`，只灌入一次 10M key，
+- Lavik 六盘从 RAID0 解组后逐盘 `blkdiscard`，只灌入一次 10M key，
   验证 `DBSIZE`，预热 GET 10 秒，再按相同顺序测试。
-- 1 TB 组使用同一份 10 亿 key × 1 KiB 测试口径。Keylane raw io_uring
+- 1 TB 组使用同一份 10 亿 key × 1 KiB 测试口径。Lavik raw io_uring
   直接打开六块 NVMe；[Dragonfly v1.40.2](https://github.com/dragonflydb/dragonfly/releases/tag/v1.40.2)
   使用 16 proactors、96 GiB `maxmemory` 和 RAID0/XFS 上的 Tiered
   Storage；[Garnet v2.1.5](https://github.com/microsoft/garnet/releases/tag/v2.1.5)
@@ -212,18 +210,18 @@ Keylane 的 GET 在 1,280 连接达到 784,179 QPS，是 Dragonfly 峰值的
 - 每个点目前只有一轮：纯内存组 30 秒、分层存储组 60 秒。适合判断
   十几个百分点和倍数级差异，不能把 1%–3% 当成稳定优势。应在关键的
   640/1,280 连接点交错重复三次。
-- 单客户端仍可能限制最高值。峰值点客户端平均使用的核心数为：Keylane
+- 单客户端仍可能限制最高值。峰值点客户端平均使用的核心数为：Lavik
   GET 11.38、SET 14.27；Redis GET 13.29、SET 12.41；Valkey GET 12.85、
-  SET 11.16。Keylane SET 尤其接近客户端 CPU 上限，因此 984k 是当前
+  SET 11.16。Lavik SET 尤其接近客户端 CPU 上限，因此 984k 是当前
   单客户端口径下的观测值，不一定是服务端上限。
-- Redis/Valkey 的正式窗口完全关闭持久化；Keylane 把 value 写到 raw
+- Redis/Valkey 的正式窗口完全关闭持久化；Lavik 把 value 写到 raw
   NVMe，但本报告不声称三者具备等价的崩溃耐久语义。这里回答的是请求
   路径性能差距，不是同耐久级别成本。
 - 两个实验组不可互换：Redis/Valkey 数字来自可完全装入 DRAM 的 10 GB
   工作集；Dragonfly/Garnet 数字来自 1 TB 分层存储工作集。分层存储组内
-  也不是单变量后端实验：Keylane 看见六个独立 raw 设备，Dragonfly 和
+  也不是单变量后端实验：Lavik 看见六个独立 raw 设备，Dragonfly 和
   Garnet 看见 RAID0/XFS 文件，并采用不同内存预算、缓存和后台维护策略。
-- 一个不计入正式结果的 Keylane 准备运行，在“恢复已有 10M key、再次
+- 一个不计入正式结果的 Lavik 准备运行，在“恢复已有 10M key、再次
   覆盖灌数、请求 metrics”这一时刻发生 general-protection fault。因果
   尚未定位。重新清盘、取消主动 metrics 抓取后的 10 个正式点全部完成且
   无断连；异常日志保留在原始结果目录，不能据此认定 metrics 是根因。
@@ -235,9 +233,9 @@ Keylane 的 GET 在 1,280 连接达到 784,179 QPS，是 Dragonfly 峰值的
 
 1. 在 640 和 1,280 连接对纯内存组三套最优配置交错跑三次，报告均值、
    标准差和最差 p99.99；分层存储组三套配置也在相同点重复。
-2. 恢复第二台客户端或增加客户端 CPU，验证 Keylane SET 和 Redis/Valkey
+2. 恢复第二台客户端或增加客户端 CPU，验证 Lavik SET 和 Redis/Valkey
    GET 是否被当前单客户端封顶。
-3. 单独复现并定位 Keylane 准备阶段 general-protection fault，分别隔离
+3. 单独复现并定位 Lavik 准备阶段 general-protection fault，分别隔离
    恢复后覆盖写、后台 flush 和 metrics scrape。
 4. 若要比较生产代价，再增加 Redis/Valkey AOF `everysec` 和明确 fsync
    策略的耐久性对等测试，不要把本轮无持久化纯内存数据直接当生产结论。
@@ -247,7 +245,7 @@ Keylane 的 GET 在 1,280 连接达到 784,179 QPS，是 Dragonfly 峰值的
 ## 仍待回答的问题
 
 - Redis/Valkey 的 12 I/O threads 是否比 8/16 更适合这台 8C/16T 主机？
-- value 变为 64 B、4 KiB 或出现热点分布后，Keylane 的相对差距如何变化？
+- value 变为 64 B、4 KiB 或出现热点分布后，Lavik 的相对差距如何变化？
 - 双客户端下超过 1M QPS 后，限制首先来自服务器、客户端还是网络？
-- Dragonfly/Garnet 改为与 Keylane 相同的 raw-device 拓扑（若产品支持）
-  或 Keylane 改为相同的 RAID0/XFS 文件后，1 TB 组差距还剩多少？
+- Dragonfly/Garnet 改为与 Lavik 相同的 raw-device 拓扑（若产品支持）
+  或 Lavik 改为相同的 RAID0/XFS 文件后，1 TB 组差距还剩多少？
