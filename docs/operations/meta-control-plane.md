@@ -202,7 +202,6 @@ schema_version = 1
 slot_strategy = "contiguous-even"
 
 [bootstrap_policy]
-automatic_uncontrolled_failover_enabled = true
 automatic_uncontrolled_failover_suspect_after_ms = 5000
 authority_lease_duration_ms = 5000
 
@@ -487,6 +486,40 @@ suspicion, reacquires observations, and gives the failure a fresh full
 debounce. Inspect the per-Group detector fields in `cluster-status` when
 diagnosing RTO rather than inferring progress from process reachability.
 
+### Restart and operator recovery
+
+A member that completes graceful shutdown publishes a one-use Clean Shutdown
+Proof after its data and transaction decisions are durable. On restart it
+consumes that proof and can report its recovered frontier for ordinary automatic
+selection without rebuilding. It remains fenced until Meta commits promotion
+and grants a fresh lease. This applies to the first Owner and ordinary replicas
+as well as later Owners; `shutdown-checkpoint` is not required.
+
+A crash or interrupted shutdown without a published proof requires FULL before
+automatic candidacy. When the Group has no eligible Candidate and no usable
+Owner can supply FULL, select one readable recovered member explicitly:
+
+```bash
+lavik-ctl --socket /path/to/leader.sock \
+  promote group-1 --node 2222222222222222222222222222222222222222 \
+  --accept-data-loss
+```
+
+This direct Admin command must reach the Meta leader and requires operator
+credentials and Meta quorum. `OK <index> promote loss=unknown action=<id>` means
+the selection committed; use `cluster-status` to observe Cutover and readiness.
+The selected node establishes a new history over its recovered local data.
+Acknowledged writes may be missing; `--accept-data-loss` is required and the
+committed action records the recovery choice. The command rejects an eligible
+automatic Candidate, a serving Owner, an occupied transition, stale membership,
+and absent readable recovery evidence. Corrupt storage/catalog or incomplete
+destructive FULL must be repaired or rebuilt, and cannot be promoted.
+
+For a whole-cluster outage, make this choice separately for each affected
+Group. There is no automatic selection of arbitrary crash-recovered data. If a
+request times out, inspect the Group's transition/action and audit before
+issuing another mutation; a timeout does not prove rejection.
+
 For postmortems, search Meta logs for `failover event=`. Accepted transition
 commits carry `mode`, `group`, `transition`, `action`, `loss`, and
 `commit_index`; candidate selection/replacement/domain fallback and bounded
@@ -762,11 +795,17 @@ raw document. The only accepted families and update forms are:
 ```sh
 lavik-ctl --socket /var/lib/lavik/meta-1/meta-admin.sock \
   putpolicy lavik.automatic-uncontrolled-failover-v1 2 \
-  '{"kind":"automatic-uncontrolled-failover-v1","enabled":true,"suspect_after_ms":5000}'
+  '{"kind":"automatic-uncontrolled-failover-v1","suspect_after_ms":5000}'
 lavik-ctl --socket /var/lib/lavik/meta-1/meta-admin.sock \
   putpolicy lavik.authority-lease-v1 2 \
   '{"kind":"authority-lease-v1","duration_ms":5000}'
 ```
+
+Automatic failover is always active. Its Policy configures only the finite
+suspicion threshold; neither the Policy JSON nor the bootstrap manifest accepts
+an enable/disable field. Without an eligible candidate the Group remains fenced
+until a candidate becomes eligible or an operator explicitly accepts data loss
+and selects a recovered population with `promote`.
 
 The same 1,000–86,400,000 ms automatic threshold and 100–86,400,000 ms lease
 range apply to runtime updates. Field reordering is accepted, but whitespace,

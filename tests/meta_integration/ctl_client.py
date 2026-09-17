@@ -51,11 +51,11 @@ def run_cluster(args, expected, timeout=10, input_text=None, env=None):
     return proc
 
 
-def disabled_automatic_failover_status():
-    """Encode the clusterstatus v1 Group diagnostics for a disabled detector."""
+def healthy_automatic_failover_status():
+    """Encode the clusterstatus v1 Group diagnostics for a healthy detector."""
     # state, current_reason presence, suspect/threshold ms,
     # blocked_reason presence.
-    return struct.pack(">BBQQB", 0, 0, 0, 1000, 0)
+    return struct.pack(">BBQQB", 1, 0, 0, 1000, 0)
 
 
 def make_leaf(directory, ca_crt, ca_key, name, san):
@@ -225,7 +225,7 @@ def scripted_cluster_gate(workdir):
     group = (
         wire_string("group-1") + struct.pack(">Q", 4) + bytes([1]) +
         wire_string("data-1") + struct.pack(">BB", 1, 1) +
-        disabled_automatic_failover_status())
+        healthy_automatic_failover_status())
     slot_range = struct.pack(">II", 0, 16_383) + wire_string("group-1")
     status_payload = (
         struct.pack(">HIQQQQ", 1, 1, 1, 1, 1, 1) +
@@ -420,7 +420,7 @@ def scripted_cluster_create_gate(workdir):
     group = (
         wire_string("group-1") + struct.pack(">Q", 1) + bytes([1]) +
         wire_string(node_id) + struct.pack(">BB", 1, 1) +
-        disabled_automatic_failover_status())
+        healthy_automatic_failover_status())
     slot_range = struct.pack(">II", 0, 16_383) + wire_string("group-1")
     ready_status = (
         struct.pack(">HIQQQQ", 1, 1, 1, 1, 22, 5) +
@@ -571,7 +571,7 @@ def scripted_failover_gate(workdir):
     group = (
         wire_string("group-1") + struct.pack(">Q", 4) + bytes([1]) +
         wire_string(node_id) + struct.pack(">BB", 1, 1) +
-        disabled_automatic_failover_status())
+        healthy_automatic_failover_status())
     slot_range = struct.pack(">II", 0, 16_383) + wire_string("group-1")
     status_payload = (
         struct.pack(">HIQQQQ", 1, 1, 1, 1, 50, 3) +
@@ -792,6 +792,13 @@ def admin_slow_reader_gate(node):
                 if not reply.startswith(b"OK "):
                     raise H.Failure(
                         f"slow-reader fixture node {index}: {reply!r}")
+
+    # Diagnostics may lag the last registration and yield ERR cut_changed.
+    # That short reply has no send watchdog; require a successful capture
+    # before testing the deadline on a parked large response.
+    H.wait_until("slow-reader status snapshot catches up", 10,
+                 lambda: node.ctl("clusterstatus 1").startswith(
+                     "OK clusterstatus 1 "))
 
     slow = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     slow.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1_024)
