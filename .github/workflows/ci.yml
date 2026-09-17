@@ -58,6 +58,8 @@ jobs:
           sudo prlimit --pid "$$" --memlock=unlimited
           python3 scripts/diagnose_meta_sync.py build_diag/lavik-meta /tmp/meta_sync_diagnostics
       - name: Trace the original unit and Meta integration sequence
+        # Explicit bash enables pipefail so tee cannot hide CTest failures.
+        shell: bash
         env:
           LAVIK_META_TRACE_SYNC_DIR: /tmp/meta_sync_diagnostics/full-gates
         run: |
