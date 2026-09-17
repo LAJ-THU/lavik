@@ -74,7 +74,7 @@ directory:
 cmake --build <build-dir> --target lavik-meta lavik-ctl
 ```
 
-The downloadable release archive below contains all three executables.
+The downloadable release archive below includes all three executables.
 
 ### Experimental DPDK networking
 
@@ -368,23 +368,119 @@ portable path when that system binary is unavailable.
 ./scripts/package_release.sh
 ```
 
-The packaging script performs a Release build of `lavik`, `lavik-meta`, and
-`lavik-ctl`, statically links OpenSSL plus the GNU C++/compiler runtimes,
-strips and verifies each executable, and writes a versioned archive and SHA-256
-checksum under `dist/`. The archive carries the project LICENSE and NOTICE, plus
+The packaging script builds `lavik`, `lavik-meta`, and `lavik-ctl` in Release
+mode, statically links OpenSSL plus the GNU C++/compiler runtimes, strips staged
+copies, verifies each executable's linkage and `--help`, and writes a
+versioned archive and `.tar.gz.sha256` file under `dist/`. The checksum uses a
+relative archive name so `sha256sum --check *.sha256` works after downloading.
+The archive carries the project LICENSE and NOTICE, plus
 the Apache-2.0 license text required by the statically linked OpenSSL code.
-It explicitly configures `LAVIK_BUILD_FAULT_SERVER=OFF`; CMake also rejects
-that option whenever `BUILD_TESTING` is off.
+It explicitly configures `LAVIK_BUILD_META=ON`, `BUILD_TESTING=OFF`, and
+`LAVIK_BUILD_FAULT_SERVER=OFF`; CMake also rejects the fault-server option
+whenever `BUILD_TESTING` is off.
 
-Unlike a local build, a package uses a portable CPU baseline:
+Unlike a local build, a package never selects `native` by default. The `minimal`
+variant uses the compiler's default CPU target on both x86_64 and aarch64,
+with no explicit `-march` flag for Lavik. The standard package uses the fixed
+targets listed below.
 
-- `x86_64`: `-march=x86-64-v2`
-- `aarch64`: `-march=armv8-a`
+For `minimal`, the script explicitly passes `-DLAVIK_MARCH=` so that
+CMake's local `native` default and cached CPU targets cannot leak into the
+package. Check the release toolchain's default target: it determines the CPU
+baseline when `-march` is omitted. On GCC, `c++ -Q --help=target` reports it.
+Toolchain files and externally supplied compiler flags must also be considered.
 
-Override it with `LAVIK_PACKAGE_MARCH` when producing a package for a more
-specific fleet. Other useful overrides are `LAVIK_PACKAGE_BUILD_DIR`,
+Override the Lavik target with `LAVIK_PACKAGE_MARCH` when producing a package
+for a specific fleet; an explicitly empty value selects the compiler default
+on either architecture. This does not lower DPDK/SPDK's CPU requirements in a
+standard package. Other useful overrides are `LAVIK_PACKAGE_BUILD_DIR`,
 `LAVIK_PACKAGE_OUTPUT_DIR`, and `LAVIK_PACKAGE_JOBS`.
+`LAVIK_PACKAGE_VERSION=nightly` selects stable nightly archive names without
+changing the source version recorded in `VERSION` or the full commit in
+`REVISION`. The moving `nightly` tag is excluded from source-version discovery.
+
+The bundled Abseil CRC32C engine requires both SSE4.2 and PCLMUL at compile time
+to enable its x86 hardware implementation. A baseline `x86-64` build uses its
+software implementation even on a CPU that supports these instructions;
+`x86-64-v2` also lacks PCLMUL and therefore does not enable that engine.
+Globally enabling these instructions raises the package's CPU requirements;
+it does not provide runtime fallback for older x86 CPUs.
 
 The release remains a normal Linux ELF executable and therefore uses the
 platform C library. Build official artifacts in the oldest supported Linux
 environment so their glibc requirement remains compatible with newer systems.
+
+### Standard packages and main-branch CI
+
+After installing the prerequisites and initializing the pinned submodules in
+[Experimental DPDK networking](#experimental-dpdk-networking), build a package
+with both network and storage bypass capabilities:
+
+```bash
+CC=gcc-13 CXX=g++-13 LAVIK_PACKAGE_KERNEL_BYPASS=ON ./scripts/package_release.sh
+```
+
+This produces a `lavik-<version>-linux-<arch>.tar.gz` archive containing
+the same three applications. Without this environment variable the default is
+`OFF`, producing `lavik-<version>-linux-<arch>-minimal.tar.gz`. The script sets
+the CMake option explicitly to prevent a previous build directory's setting
+from leaking into the package. A standard
+binary still starts with kernel TCP and io_uring; select `--network=dpdk`
+and/or `--storage=spdk` to activate those capabilities. The bundled network
+PMDs are Bycorf's current defaults: TAP, ring, and virtio; this package does not
+include drivers for every physical NIC.
+
+| Architecture | `minimal` target | Standard target (DPDK/SPDK) |
+|---|---|---|
+| x86_64 | Compiler default | `x86-64-v2` |
+| aarch64 / ARM64 | Compiler default | `armv8-a+crc` |
+
+Bypass dependencies have their own CPU baselines: the pinned DPDK uses
+`platform=generic` (x86 `corei7`/SSE4.2; ARM `armv8-a+crc`). The bypass targets
+above satisfy its public inline headers, including SPDK's DPDK adapter;
+forcing that adapter to plain `x86-64` fails to compile. A bypass package does
+not support every CPU allowed by plain compiler-default code.
+The script overrides SPDK's independent native default through its supported
+`TARGET_ARCHITECTURE` make variable, using the bypass target. It cleans previous
+SPDK build outputs first because SPDK builds in its source tree and does not
+track CPU flag changes. Do not build SPDK concurrently from another build directory
+using the same checkout.
+
+The bypass binaries additionally use system libraries such as NUMA and UUID;
+on Ubuntu install `libnuma1` and `libuuid1`. Static OpenSSL and C++ runtime
+checks apply to all three executables in either package variant.
+
+[Ubuntu release packages](../../.github/workflows/release.yml) runs on every
+push to `main` and can also be started with `workflow_dispatch`. It builds on
+native `ubuntu-24.04` (x86_64) and `ubuntu-24.04-arm` (aarch64) runners using
+GCC 13, producing four packages: both variants for both architectures.
+Each job checks the license files and all three executables after extracting
+the archive, runs kernel/io_uring SET/GET and recovery smoke checks on disposable
+files, and uploads the archive and checksum as an Actions artifact for 30 days.
+CI calls `scripts/package_release.sh` directly with the selected variant and
+`LAVIK_PACKAGE_VERSION=nightly`; tar creation, license inclusion, executable
+checks and checksums are shared with local packaging.
+
+After all four jobs succeed on `main`, a separate job updates the
+[nightly prerelease](https://github.com/eloqdata/lavik/releases/tag/nightly).
+It verifies all four archives and checksums before replacing the eight assets,
+moves the `nightly` tag to the built commit, and records that commit in the
+release notes. Stable asset names keep download links unchanged:
+
+```text
+lavik-nightly-linux-x86_64.tar.gz
+lavik-nightly-linux-x86_64-minimal.tar.gz
+lavik-nightly-linux-aarch64.tar.gz
+lavik-nightly-linux-aarch64-minimal.tar.gz
+```
+
+Each archive has a matching `.tar.gz.sha256` asset. A failed build does not
+publish, and a completed build skips publication if `main` has already
+advanced. Workflow runs are serialized so a new push cannot cancel an active
+asset upload; GitHub keeps the newest pending run. Manual builds on other
+branches upload Actions artifacts without updating nightly. The publication
+job alone has `contents: write`; it uses the workflow's `GITHUB_TOKEN`.
+No scheduled build is needed: a push to main triggers the replacement.
+
+The Ubuntu 24.04 build environment determines the glibc compatibility floor;
+these are not packages targeting older Ubuntu releases.

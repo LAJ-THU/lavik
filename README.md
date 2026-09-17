@@ -103,7 +103,7 @@ SPDK NVMe namespaces, so capacity scales with storage.
 The standard io_uring build requires:
 
 - Linux (`x86_64` and `aarch64` are the release-package targets)
-- CMake 3.20 or newer
+- CMake 3.26 or newer (required by the bundled Meta dependency)
 - a C++23 compiler (GCC 13+ or a recent Clang is recommended)
 - GNU Make, Git, and OpenSSL development headers/static libraries
 
@@ -133,9 +133,44 @@ To create a portable archive for the current architecture, run:
 ./scripts/package_release.sh
 ```
 
-The archive includes `lavik`, `lavik-meta`, and `lavik-ctl`. See
-[Building and packaging](docs/operations/building-and-packaging.md) for
-portable builds, sanitizers, DPDK, and SPDK.
+The archive contains `lavik`, `lavik-meta`, `lavik-ctl`, `LICENSE`, and notices
+under `dist/`. This command builds the `minimal` variant. Main-branch
+[Ubuntu release CI](.github/workflows/release.yml) builds both variants for
+x86_64 and ARM64. Download the four archives and their SHA-256 files from
+[Nightly](https://github.com/eloqdata/lavik/releases/tag/nightly), which is
+updated after successful builds of the latest main. CI artifacts are also
+retained for 30 days.
+
+### Release hardware and platform requirements
+
+| Package | Backends included | x86_64 CPU target | ARM64 CPU target |
+|---|---|---|---|
+| `lavik-<version>-linux-<arch>-minimal.tar.gz` | Kernel TCP and io_uring | Compiler default (`x86-64` with the CI toolchain) | Compiler default |
+| `lavik-<version>-linux-<arch>.tar.gz` | Kernel TCP/io_uring, DPDK networking, and SPDK storage | `x86-64-v2` | `armv8-a+crc` |
+
+Nightly uses `nightly` as the filename version so download URLs stay stable.
+The archive's `VERSION` and `REVISION` files identify the source build.
+Executable names are the same in both variants: `lavik`, `lavik-meta`, and
+`lavik-ctl`. Minimal rejects `--network=dpdk` and `--storage=spdk` with a
+configuration error; `--network=kernel` and `--storage=uring` remain available.
+
+Neither CI variant uses `-march=native`. On x86, the standard package requires
+all x86-64-v2 features, including SSE3, SSSE3, SSE4.1, SSE4.2, POPCNT,
+CMPXCHG16B, and LAHF/SAHF in 64-bit mode. CPUs or VMs lacking any of these
+features must use `minimal`. On ARM64, the standard package additionally
+requires the CRC32 instruction extension. The requirement applies to the
+package even when bypass is not selected at startup.
+
+Both variants require Linux with usable io_uring and a compatible glibc. CI
+builds on Ubuntu 24.04; artifacts are not intended for older glibc environments.
+The standard package additionally needs the NUMA and UUID runtime libraries
+(`libnuma1` and `libuuid1` on Ubuntu). It defaults to kernel TCP/io_uring;
+DPDK/SPDK must be explicitly selected and provisioned. Its bundled DPDK network
+drivers are TAP, ring, and virtio, so it does not support every physical NIC.
+SPDK mode requires an SPDK-accessible NVMe device.
+
+See [Building and packaging](docs/operations/building-and-packaging.md)
+for dependency setup, standard-package builds, and compatibility details.
 
 ## Quick Start
 
