@@ -197,7 +197,7 @@ fallocate -l 1G /tmp/lavik-quickstart/lavik.data
 ```
 
 By default, Lavik listens on `127.0.0.1:6379`, uses every CPU in its inherited
-affinity mask, and pins one worker to each CPU. It configures 256 MiB of storage
+affinity mask, and pins one worker to each CPU. It configures 64 MiB of storage
 buffers per worker and writes logs to `./logs/lavik.log`. Use `taskset` or the
 corresponding command-line options when the process should use fewer resources.
 Production settings should be sized and benchmarked for the host and workload.
