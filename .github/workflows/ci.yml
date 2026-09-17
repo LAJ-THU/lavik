@@ -44,19 +44,38 @@ jobs:
           git -C bycorf submodule update --init --depth 1 third_party/abseil third_party/liburing
           git -C third_party/nuraft submodule update --init --depth 1 asio
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends build-essential clang-18 cmake ninja-build libssl-dev python3 strace
+          sudo apt-get install -y --no-install-recommends build-essential clang-18 cmake ninja-build libssl-dev python3 strace redis-server redis-tools tcl
           sudo sysctl -w kernel.io_uring_disabled=0
-      - name: Build Meta only
+      - name: Build all tests
         run: |
           cmake -S . -B build_diag -G Ninja \
             -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 \
             -DCMAKE_BUILD_TYPE=Debug -DLAVIK_ENABLE_OPT=OFF \
-            -DLAVIK_STATIC_OPENSSL=ON -DLAVIK_BUILD_META=ON -DBUILD_TESTING=OFF
-          cmake --build build_diag --target lavik-meta --parallel "$(nproc)"
+            -DLAVIK_STATIC_OPENSSL=ON -DLAVIK_BUILD_META=ON -DLAVIK_BUILD_FAULT_SERVER=ON -DBUILD_TESTING=ON
+          cmake --build build_diag --parallel "$(nproc)"
       - name: Measure real sync calls with production defaults
         run: |
           sudo prlimit --pid "$$" --memlock=unlimited
           python3 scripts/diagnose_meta_sync.py build_diag/lavik-meta /tmp/meta_sync_diagnostics
+      - name: Trace the original unit and Meta integration sequence
+        env:
+          LAVIK_META_TRACE_SYNC_DIR: /tmp/meta_sync_diagnostics/full-gates
+        run: |
+          sudo prlimit --pid "$$" --memlock=unlimited
+          if [ -e /proc/sys/kernel/sched_schedstats ]; then
+            sudo sysctl -w kernel.sched_schedstats=1
+          fi
+          sudo install -d -o "$(id -u)" -g "$(id -g)" /mnt/dev
+          df -T /tmp /mnt "$GITHUB_WORKSPACE" > /tmp/meta_sync_diagnostics/filesystems.txt
+          lsblk -o NAME,TYPE,FSTYPE,SIZE,MOUNTPOINTS >> /tmp/meta_sync_diagnostics/filesystems.txt
+          python3 scripts/sample_meta_scheduling.py build_diag/lavik-meta /tmp/meta_sync_diagnostics/scheduling.jsonl &
+          sampler_pid=$!
+          trap 'kill "$sampler_pid"; wait "$sampler_pid" || true' EXIT
+          # Keep the original prefix of the failing run, including unit-test
+          # load before the first 17 Meta process gates. No Raft timing changes.
+          ctest --test-dir build_diag --parallel 1 --timeout 300 -I 1,1371 \
+            --output-on-failure --output-junit /tmp/meta_sync_diagnostics/ctest.xml \
+            2>&1 | tee /tmp/meta_sync_diagnostics/ctest.log
       - name: Upload measurements
         if: ${{ always() }}
         uses: actions/upload-artifact@v7

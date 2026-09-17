@@ -204,6 +204,7 @@ class Node:
         self.proc = None
         self.log_file = None
         self.paused = False
+        self.sync_trace_log = None
         # Operation-id counter: ids are 32 lowercase hex chars with the
         # node id as prefix, so two nodes can never mint the same id and a
         # restart (same Node object) keeps the sequence going.
@@ -268,6 +269,17 @@ class Node:
                 write_initial_cluster_manifest(manifest, [self])
             if manifest is not None:
                 args.extend(["--initial-cluster-manifest", manifest])
+            trace_dir = os.environ.get("LAVIK_META_TRACE_SYNC_DIR")
+            if trace_dir:
+                os.makedirs(trace_dir, exist_ok=True)
+                self.sync_trace_log = os.path.join(
+                    trace_dir, f"node{self.id}-{time.monotonic_ns()}.trace")
+                # Keep the Meta process as Popen's direct child so the real
+                # kill/pause/restart gates still signal the intended process.
+                # seccomp limits ptrace stops to the two measured syscalls.
+                args = ["strace", "-D", "-f", "--seccomp-bpf", "-ttt", "-T",
+                        "-yy", "-e", "trace=fsync,fdatasync", "-o",
+                        self.sync_trace_log] + args
             # Append across restarts: one file holds the node's history.
             self.log_file = open(self.log_path, "ab")
             self.proc = subprocess.Popen(
@@ -542,6 +554,8 @@ class Node:
         if self.log_file is not None:
             self.log_file.close()
             self.log_file = None
+            if self.sync_trace_log is not None:
+                shutil.copyfile(self.log_path, self.sync_trace_log + ".node.log")
 
     def log_tail(self, lines=40):
         try:
