@@ -18,7 +18,8 @@
 Kernel mode needs ordinary io_uring permissions. --dpdk also requires root and
 an unused bycorfdp0 TAP; it never binds physical devices. The binary must include
 both capabilities to verify that compiled SPDK/DPDK remain inactive; the
-kernel checks also run on the default io_uring-only build.
+kernel checks also run on the default io_uring-only build. --expect-no-bypass
+also checks that a minimal package rejects both unavailable backends.
 """
 import argparse
 import os
@@ -113,10 +114,20 @@ def run(binary, network, data, directory, iteration, populate):
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument('binary', type=Path)
     ap.add_argument('--dpdk', action='store_true'); ap.add_argument('--output', type=Path)
+    ap.add_argument('--expect-no-bypass', action='store_true')
     a = ap.parse_args(); binary = a.binary.resolve()
+    if a.dpdk and a.expect_no_bypass:
+        ap.error('--dpdk and --expect-no-bypass are mutually exclusive')
     with tempfile.TemporaryDirectory(prefix='lavik-runtime-backends-') as tmp:
         directory = a.output or Path(tmp); directory.mkdir(parents=True, exist_ok=True)
         data = Path(tmp) / 'data'; data.touch(); data.open('r+b').truncate(512 * 1024 * 1024)
+        if a.expect_no_bypass:
+            for args in [['--network=dpdk', '--data-file', str(data)],
+                         ['--storage=spdk', '--data-file', 'spdk://0000:00:00.0/1']]:
+                p = sp.run([str(binary), *args], capture_output=True, text=True, timeout=10)
+                assert p.returncode == 2 and 'requires a build with LAVIK_KERNEL_BYPASS=ON' in p.stderr, (
+                    args, p.returncode, p.stdout, p.stderr)
+            print('minimal PASS: DPDK and SPDK rejected before backend initialization', flush=True)
         for args in [ ['--network=invalid'], ['--storage=invalid'],
                       ['--storage=spdk', '--data-file', str(data)],
                       ['--storage=uring', '--data-file', 'spdk://0000:00:00.0/1'] ]:

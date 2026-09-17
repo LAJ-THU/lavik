@@ -690,6 +690,13 @@ if (LAVIK_BUILD_META)
   )
   if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(lavik-ctl PRIVATE -Wall -Wextra -Wpedantic)
+    # These targets are created after the data-plane optimization block, but
+    # ship in the same archive and must honor the same CPU target.
+    if (LAVIK_ENABLE_OPT)
+      foreach(target IN ITEMS lavik_meta_admin lavik_meta_core lavik-meta lavik-ctl)
+        target_compile_options(${target} PRIVATE ${LAVIK_OPT_COMPILE_OPTIONS})
+      endforeach()
+    endif()
   endif()
 
   # Release archives carry all three executables, so Meta and the operator
