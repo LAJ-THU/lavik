@@ -72,13 +72,21 @@ jobs:
 
       - name: Install build dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential gcc-13 g++-13 clang-18 cmake ninja-build meson \
-            pkg-config python3 python3-pyelftools python3-dev \
-            autoconf automake libtool nasm help2man patch \
-            libssl-dev libnuma-dev uuid-dev libaio-dev libjson-c-dev \
-            libncurses-dev libkeyutils-dev
+          args=()
+          if [[ "$LAVIK_PACKAGE_KERNEL_BYPASS" == ON ]]; then
+            args+=(--with-bypass)
+          fi
+          ./scripts/install_build_deps.sh "${args[@]}"
+
+      - name: Verify SPDK code generation dependencies
+        if: matrix.bypass == 'ON'
+        # Run the same generator as SPDK's include/Makefile before CMake starts
+        # building dependencies; runner images do not guarantee these modules.
+        run: |
+          bycorf/third_party/spdk/scripts/genrpc.py \
+            --schema bycorf/third_party/spdk/schema/schema.json --rpcs \
+            > "$RUNNER_TEMP/spdk-rpc-autogen.h"
+          test -s "$RUNNER_TEMP/spdk-rpc-autogen.h"
 
       - name: Build and verify release package
         run: ./scripts/package_release.sh
