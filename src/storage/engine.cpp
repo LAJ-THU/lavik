@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-#include "keylane/storage/engine.h"
+#include "lavik/storage/engine.h"
 
 #include "engine/impl.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 StorageEngine::StorageEngine(StorageEngineOptions options)
     : impl_(std::make_unique<Impl>(std::move(options))) {}
@@ -824,4 +824,4 @@ Task<bool> StorageEngine::KeyLive(std::uint8_t db_id, std::string_view key,
   return impl_->KeyLive(db_id, key, digest);
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

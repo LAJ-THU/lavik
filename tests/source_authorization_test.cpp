@@ -27,12 +27,12 @@ namespace {
 constexpr auto kLeaseNow = std::chrono::nanoseconds(100);
 constexpr auto kLeaseDeadline = std::chrono::nanoseconds(200);
 
-keylane::RebuildDirective Directive(std::uint64_t term, std::uint64_t revision,
-                                    std::string target, std::string operation,
-                                    std::string attempt) {
-  keylane::PopulationManifestId manifest;
+lavik::RebuildDirective Directive(std::uint64_t term, std::uint64_t revision,
+                                  std::string target, std::string operation,
+                                  std::string attempt) {
+  lavik::PopulationManifestId manifest;
   manifest.bytes_[0] = 1;
-  return keylane::RebuildDirective{
+  return lavik::RebuildDirective{
       .identity_ =
           {
               .group_id_ = "group-a",
@@ -60,10 +60,10 @@ keylane::RebuildDirective Directive(std::uint64_t term, std::uint64_t revision,
 
 TEST(SourceAuthorizationLedgerTest,
      SameRevisionAllowsMultipleTargetsUntilRevocation) {
-  keylane::detail::SourceAuthorizationLedger ledger;
-  const keylane::RebuildDirective first =
+  lavik::detail::SourceAuthorizationLedger ledger;
+  const lavik::RebuildDirective first =
       Directive(7, 11, "target-a", "operation-a", "attempt-a");
-  keylane::RebuildDirective second =
+  lavik::RebuildDirective second =
       Directive(7, 11, "target-b", "operation-b", "attempt-b");
   second.identity_.assignment_id_ = "assignment-b";
   second.identity_.authority_id_ = "authority-b";
@@ -72,23 +72,23 @@ TEST(SourceAuthorizationLedgerTest,
   auto first_result = ledger.Authorize(first);
   ASSERT_TRUE(first_result.ok()) << first_result.status();
   EXPECT_EQ(*first_result,
-            keylane::detail::SourceAuthorizationAction::kAuthorized);
+            lavik::detail::SourceAuthorizationAction::kAuthorized);
   auto second_result = ledger.Authorize(second);
   ASSERT_TRUE(second_result.ok()) << second_result.status();
   EXPECT_EQ(*second_result,
-            keylane::detail::SourceAuthorizationAction::kAuthorized);
+            lavik::detail::SourceAuthorizationAction::kAuthorized);
   EXPECT_TRUE(ledger.IsAuthorized(first.identity_));
   EXPECT_TRUE(ledger.IsAuthorized(second.identity_));
 
   auto replay = ledger.Authorize(first);
   ASSERT_TRUE(replay.ok()) << replay.status();
-  EXPECT_EQ(*replay, keylane::detail::SourceAuthorizationAction::kAuthorized);
+  EXPECT_EQ(*replay, lavik::detail::SourceAuthorizationAction::kAuthorized);
 }
 
 TEST(SourceAuthorizationLedgerTest,
      RevocationRejectsTheOldRevisionButAllowsANewerCompleteIdentity) {
-  keylane::detail::SourceAuthorizationLedger ledger;
-  const keylane::RebuildDirective first =
+  lavik::detail::SourceAuthorizationLedger ledger;
+  const lavik::RebuildDirective first =
       Directive(7, 11, "target-a", "operation-a", "attempt-a");
   ASSERT_TRUE(ledger.Authorize(first).ok());
 
@@ -97,26 +97,26 @@ TEST(SourceAuthorizationLedgerTest,
   EXPECT_EQ(ledger.Authorize(first).status().code(),
             absl::StatusCode::kFailedPrecondition);
 
-  const keylane::RebuildDirective same_revision =
+  const lavik::RebuildDirective same_revision =
       Directive(7, 11, "target-b", "operation-b", "attempt-b");
   EXPECT_EQ(ledger.Authorize(same_revision).status().code(),
             absl::StatusCode::kFailedPrecondition);
 
-  keylane::RebuildDirective rebound =
+  lavik::RebuildDirective rebound =
       Directive(7, 12, "target-a", "operation-a", "attempt-a");
   auto rebound_result = ledger.Authorize(rebound);
   ASSERT_TRUE(rebound_result.ok()) << rebound_result.status();
   EXPECT_EQ(*rebound_result,
-            keylane::detail::SourceAuthorizationAction::kAuthorized);
+            lavik::detail::SourceAuthorizationAction::kAuthorized);
   EXPECT_TRUE(ledger.IsAuthorized(rebound.identity_));
 }
 
 TEST(SourceAuthorizationLedgerTest,
      SessionCleanupAllowsCurrentRevisionReplayWithoutErasingARevokeFloor) {
-  keylane::detail::SourceAuthorizationLedger ledger;
-  const keylane::RebuildDirective first =
+  lavik::detail::SourceAuthorizationLedger ledger;
+  const lavik::RebuildDirective first =
       Directive(7, 11, "target-a", "operation-a", "attempt-a");
-  keylane::RebuildDirective sibling =
+  lavik::RebuildDirective sibling =
       Directive(7, 11, "target-b", "operation-b", "attempt-b");
   sibling.identity_.target_boot_id_ = "target-boot-b";
   ASSERT_TRUE(ledger.Authorize(first).ok());
@@ -129,7 +129,7 @@ TEST(SourceAuthorizationLedgerTest,
   EXPECT_TRUE(ledger.RetainsSourceHistory());
   auto replay = ledger.Authorize(first);
   ASSERT_TRUE(replay.ok()) << replay.status();
-  EXPECT_EQ(*replay, keylane::detail::SourceAuthorizationAction::kAuthorized);
+  EXPECT_EQ(*replay, lavik::detail::SourceAuthorizationAction::kAuthorized);
   EXPECT_TRUE(ledger.IsAuthorized(first.identity_));
 
   // A committed revocation remains authoritative even if a later transport
@@ -140,49 +140,48 @@ TEST(SourceAuthorizationLedgerTest,
   EXPECT_EQ(ledger.Authorize(first).status().code(),
             absl::StatusCode::kFailedPrecondition);
 
-  keylane::RebuildDirective newer =
+  lavik::RebuildDirective newer =
       Directive(7, 12, "target-a", "operation-a", "attempt-new");
   auto advanced = ledger.Authorize(newer);
   ASSERT_TRUE(advanced.ok()) << advanced.status();
-  EXPECT_EQ(*advanced, keylane::detail::SourceAuthorizationAction::kAuthorized);
+  EXPECT_EQ(*advanced, lavik::detail::SourceAuthorizationAction::kAuthorized);
 }
 
 TEST(SourceAuthorizationLedgerTest,
      NewRevisionRequiresWholeSessionRevocationBeforeInstallation) {
-  keylane::detail::SourceAuthorizationLedger ledger;
-  const keylane::RebuildDirective first =
+  lavik::detail::SourceAuthorizationLedger ledger;
+  const lavik::RebuildDirective first =
       Directive(7, 11, "target-a", "operation-a", "attempt-a");
-  const keylane::RebuildDirective newer =
+  const lavik::RebuildDirective newer =
       Directive(7, 12, "target-b", "operation-b", "attempt-b");
   ASSERT_TRUE(ledger.Authorize(first).ok());
 
   auto advance = ledger.Authorize(newer);
   ASSERT_TRUE(advance.ok()) << advance.status();
-  EXPECT_EQ(*advance, keylane::detail::SourceAuthorizationAction::kRevokeOlder);
+  EXPECT_EQ(*advance, lavik::detail::SourceAuthorizationAction::kRevokeOlder);
   EXPECT_TRUE(ledger.IsAuthorized(first.identity_));
   EXPECT_FALSE(ledger.IsAuthorized(newer.identity_));
 
   ledger.RevokeAll();
   auto installed = ledger.Authorize(newer);
   ASSERT_TRUE(installed.ok()) << installed.status();
-  EXPECT_EQ(*installed,
-            keylane::detail::SourceAuthorizationAction::kAuthorized);
+  EXPECT_EQ(*installed, lavik::detail::SourceAuthorizationAction::kAuthorized);
   EXPECT_FALSE(ledger.IsAuthorized(first.identity_));
   EXPECT_TRUE(ledger.IsAuthorized(newer.identity_));
 
-  const keylane::RebuildDirective stale =
+  const lavik::RebuildDirective stale =
       Directive(7, 10, "target-c", "operation-c", "attempt-c");
   EXPECT_EQ(ledger.Authorize(stale).status().code(),
             absl::StatusCode::kFailedPrecondition);
 }
 
 TEST(SourceAuthorizationLedgerTest, SameRevisionRejectsConflictingSourceScope) {
-  keylane::detail::SourceAuthorizationLedger ledger;
-  const keylane::RebuildDirective first =
+  lavik::detail::SourceAuthorizationLedger ledger;
+  const lavik::RebuildDirective first =
       Directive(7, 11, "target-a", "operation-a", "attempt-a");
   ASSERT_TRUE(ledger.Authorize(first).ok());
 
-  keylane::RebuildDirective conflicting =
+  lavik::RebuildDirective conflicting =
       Directive(7, 11, "target-b", "operation-b", "attempt-b");
   conflicting.identity_.source_boot_id_ = "source-boot-b";
   EXPECT_EQ(ledger.Authorize(conflicting).status().code(),
@@ -206,8 +205,8 @@ TEST(SourceAuthorizationLedgerTest, SameRevisionRejectsConflictingSourceScope) {
 
 TEST(SourceAuthorizationLedgerTest,
      AuthorizationIsBoundToTheExactDirectiveIdentity) {
-  keylane::detail::SourceAuthorizationLedger ledger;
-  const keylane::RebuildDirective directive =
+  lavik::detail::SourceAuthorizationLedger ledger;
+  const lavik::RebuildDirective directive =
       Directive(7, 11, "target-a", "operation-a", "attempt-a");
   ASSERT_TRUE(ledger.Authorize(directive).ok());
 
@@ -219,12 +218,12 @@ TEST(SourceAuthorizationLedgerTest,
 
 TEST(SourceAuthorizationLedgerTest,
      SiblingAuthorizationMatchesTheTargetsRebuildIdentity) {
-  keylane::detail::SourceAuthorizationLedger ledger;
-  const keylane::RebuildDirective authorize =
+  lavik::detail::SourceAuthorizationLedger ledger;
+  const lavik::RebuildDirective authorize =
       Directive(7, 11, "target-a", "operation-a", "authorize-attempt");
   ASSERT_TRUE(ledger.Authorize(authorize).ok());
 
-  keylane::RebuildIdentity rebuild = authorize.identity_;
+  lavik::RebuildIdentity rebuild = authorize.identity_;
   rebuild.directive_id_ = "rebuild-directive";
   rebuild.attempt_id_ = "rebuild-attempt";
   ++rebuild.directive_revision_;
@@ -276,32 +275,32 @@ TEST(SourceAuthorizationLedgerTest,
 
 TEST(SourceAuthorizationLedgerTest,
      LeaseGateSuspendsAdmissionWithoutLosingCurrentFdsCapability) {
-  keylane::detail::SourceAuthorizationLedger ledger;
-  const keylane::RebuildDirective authorize =
+  lavik::detail::SourceAuthorizationLedger ledger;
+  const lavik::RebuildDirective authorize =
       Directive(7, 11, "target-a", "operation-a", "authorize-attempt");
   ASSERT_TRUE(ledger.Authorize(authorize).ok());
-  keylane::RebuildIdentity rebuild = authorize.identity_;
+  lavik::RebuildIdentity rebuild = authorize.identity_;
   rebuild.directive_id_ = "rebuild-directive";
   rebuild.attempt_id_ = "rebuild-attempt";
   ++rebuild.directive_revision_;
 
   EXPECT_EQ(ledger.ClassifyAuthorizedRebuild(rebuild, authorize.flow_count_,
                                              true, kLeaseNow),
-            keylane::detail::SourceAuthorizationDisposition::kLeaseSuspended);
+            lavik::detail::SourceAuthorizationDisposition::kLeaseSuspended);
   EXPECT_FALSE(ledger.MatchesAuthorizedRebuild(rebuild, authorize.flow_count_,
                                                true, kLeaseNow));
 
   ledger.EnableLeaseAdmissionUntil(kLeaseDeadline);
   EXPECT_EQ(ledger.ClassifyAuthorizedRebuild(rebuild, authorize.flow_count_,
                                              true, kLeaseNow),
-            keylane::detail::SourceAuthorizationDisposition::kAuthorized);
+            lavik::detail::SourceAuthorizationDisposition::kAuthorized);
   EXPECT_TRUE(ledger.MatchesAuthorizedRebuild(rebuild, authorize.flow_count_,
                                               true, kLeaseNow));
 
   ledger.SuspendLeaseAdmission();
   EXPECT_EQ(ledger.ClassifyAuthorizedRebuild(rebuild, authorize.flow_count_,
                                              true, kLeaseNow),
-            keylane::detail::SourceAuthorizationDisposition::kLeaseSuspended);
+            lavik::detail::SourceAuthorizationDisposition::kLeaseSuspended);
 
   // Session replacement removes the capability but marks its replay pending,
   // so handshakes remain transiently suspended rather than terminally denied.
@@ -310,65 +309,65 @@ TEST(SourceAuthorizationLedgerTest,
   ledger.ClearActiveForSessionReplacement();
   EXPECT_EQ(ledger.ClassifyAuthorizedRebuild(rebuild, authorize.flow_count_,
                                              true, kLeaseNow),
-            keylane::detail::SourceAuthorizationDisposition::kLeaseSuspended);
+            lavik::detail::SourceAuthorizationDisposition::kLeaseSuspended);
   ASSERT_TRUE(ledger.Authorize(authorize).ok());
   EXPECT_EQ(ledger.ClassifyAuthorizedRebuild(rebuild, authorize.flow_count_,
                                              true, kLeaseNow),
-            keylane::detail::SourceAuthorizationDisposition::kLeaseSuspended);
+            lavik::detail::SourceAuthorizationDisposition::kLeaseSuspended);
   ledger.EnableLeaseAdmissionUntil(kLeaseDeadline);
   EXPECT_EQ(ledger.ClassifyAuthorizedRebuild(rebuild, authorize.flow_count_,
                                              true, kLeaseNow),
-            keylane::detail::SourceAuthorizationDisposition::kAuthorized);
+            lavik::detail::SourceAuthorizationDisposition::kAuthorized);
   ledger.RevokeAll();
-  const keylane::RebuildDirective next_authorize =
+  const lavik::RebuildDirective next_authorize =
       Directive(8, 12, "target-a", "operation-a", "authorize-next-attempt");
   ASSERT_TRUE(ledger.Authorize(next_authorize).ok());
-  keylane::RebuildIdentity next_rebuild = next_authorize.identity_;
+  lavik::RebuildIdentity next_rebuild = next_authorize.identity_;
   next_rebuild.directive_id_ = "rebuild-next-directive";
   next_rebuild.attempt_id_ = "rebuild-next-attempt";
   ++next_rebuild.directive_revision_;
   EXPECT_EQ(ledger.ClassifyAuthorizedRebuild(
                 next_rebuild, authorize.flow_count_, true, kLeaseNow),
-            keylane::detail::SourceAuthorizationDisposition::kLeaseSuspended);
+            lavik::detail::SourceAuthorizationDisposition::kLeaseSuspended);
   ledger.EnableLeaseAdmissionUntil(kLeaseDeadline);
   EXPECT_EQ(ledger.ClassifyAuthorizedRebuild(
                 next_rebuild, authorize.flow_count_, true, kLeaseNow),
-            keylane::detail::SourceAuthorizationDisposition::kAuthorized);
+            lavik::detail::SourceAuthorizationDisposition::kAuthorized);
 }
 
 TEST(SourceAuthorizationLedgerTest,
      LiveFdsReplacementMayReplayUnderTheStillValidLease) {
-  keylane::detail::SourceAuthorizationLedger ledger;
-  const keylane::RebuildDirective authorize =
+  lavik::detail::SourceAuthorizationLedger ledger;
+  const lavik::RebuildDirective authorize =
       Directive(7, 11, "target-a", "operation-a", "authorize-attempt");
   ASSERT_TRUE(ledger.Authorize(authorize).ok());
   ledger.EnableLeaseAdmissionUntil(kLeaseDeadline);
   ledger.ClearActiveForFdsReplacement(/*expected_replays=*/1);
   EXPECT_TRUE(ledger.RetainsSourceHistory());
 
-  keylane::RebuildIdentity rebuild = authorize.identity_;
+  lavik::RebuildIdentity rebuild = authorize.identity_;
   rebuild.directive_id_ = "rebuild-directive";
   rebuild.attempt_id_ = "rebuild-attempt";
   ++rebuild.directive_revision_;
   EXPECT_EQ(ledger.ClassifyAuthorizedRebuild(rebuild, authorize.flow_count_,
                                              true, kLeaseNow),
-            keylane::detail::SourceAuthorizationDisposition::kLeaseSuspended);
+            lavik::detail::SourceAuthorizationDisposition::kLeaseSuspended);
   ASSERT_TRUE(ledger.Authorize(authorize).ok());
 
   EXPECT_EQ(ledger.ClassifyAuthorizedRebuild(rebuild, authorize.flow_count_,
                                              true, kLeaseNow),
-            keylane::detail::SourceAuthorizationDisposition::kAuthorized);
+            lavik::detail::SourceAuthorizationDisposition::kAuthorized);
   EXPECT_EQ(ledger.ClassifyAuthorizedRebuild(rebuild, authorize.flow_count_,
                                              true, kLeaseDeadline),
-            keylane::detail::SourceAuthorizationDisposition::kLeaseSuspended);
+            lavik::detail::SourceAuthorizationDisposition::kLeaseSuspended);
 }
 
 TEST(SourceAuthorizationLedgerTest,
      FdsReplayGapRemainsSuspendedUntilEveryExpectedCapabilityArrives) {
-  keylane::detail::SourceAuthorizationLedger ledger;
-  const keylane::RebuildDirective first =
+  lavik::detail::SourceAuthorizationLedger ledger;
+  const lavik::RebuildDirective first =
       Directive(7, 11, "target-a", "operation-a", "attempt-a");
-  keylane::RebuildDirective second =
+  lavik::RebuildDirective second =
       Directive(7, 11, "target-b", "operation-b", "attempt-b");
   second.identity_.assignment_id_ = "assignment-b";
   second.identity_.authority_id_ = "authority-b";
@@ -380,7 +379,7 @@ TEST(SourceAuthorizationLedgerTest,
   ++first_rebuild.directive_revision_;
   EXPECT_EQ(ledger.ClassifyAuthorizedRebuild(first_rebuild, first.flow_count_,
                                              true, kLeaseNow),
-            keylane::detail::SourceAuthorizationDisposition::kLeaseSuspended);
+            lavik::detail::SourceAuthorizationDisposition::kLeaseSuspended);
   ASSERT_TRUE(ledger.Authorize(first).ok());
 
   auto second_rebuild = second.identity_;
@@ -388,38 +387,38 @@ TEST(SourceAuthorizationLedgerTest,
   ++second_rebuild.directive_revision_;
   EXPECT_EQ(ledger.ClassifyAuthorizedRebuild(second_rebuild, second.flow_count_,
                                              true, kLeaseNow),
-            keylane::detail::SourceAuthorizationDisposition::kLeaseSuspended);
+            lavik::detail::SourceAuthorizationDisposition::kLeaseSuspended);
   ASSERT_TRUE(ledger.Authorize(second).ok());
   auto unknown_rebuild = second_rebuild;
   unknown_rebuild.target_node_id_ = "target-c";
   EXPECT_EQ(ledger.ClassifyAuthorizedRebuild(
                 unknown_rebuild, second.flow_count_, true, kLeaseNow),
-            keylane::detail::SourceAuthorizationDisposition::kNotAuthorized);
+            lavik::detail::SourceAuthorizationDisposition::kNotAuthorized);
   EXPECT_EQ(ledger.ClassifyAuthorizedRebuild(second_rebuild, second.flow_count_,
                                              true, kLeaseNow),
-            keylane::detail::SourceAuthorizationDisposition::kLeaseSuspended);
+            lavik::detail::SourceAuthorizationDisposition::kLeaseSuspended);
 
   ledger.EnableLeaseAdmissionUntil(kLeaseDeadline);
   EXPECT_EQ(ledger.ClassifyAuthorizedRebuild(second_rebuild, second.flow_count_,
                                              true, kLeaseNow),
-            keylane::detail::SourceAuthorizationDisposition::kAuthorized);
+            lavik::detail::SourceAuthorizationDisposition::kAuthorized);
   ledger.ClearActiveForFdsReplacement(/*expected_replays=*/0);
   EXPECT_FALSE(ledger.RetainsSourceHistory());
   EXPECT_EQ(ledger.ClassifyAuthorizedRebuild(second_rebuild, second.flow_count_,
                                              true, kLeaseNow),
-            keylane::detail::SourceAuthorizationDisposition::kNotAuthorized);
+            lavik::detail::SourceAuthorizationDisposition::kNotAuthorized);
 }
 
 TEST(SourceAuthorizationLedgerTest, EmptyRevocationIsAnIdempotentNoOp) {
-  keylane::detail::SourceAuthorizationLedger ledger;
+  lavik::detail::SourceAuthorizationLedger ledger;
   ledger.RevokeAll();
   ledger.RevokeAll();
 
-  const keylane::RebuildDirective first =
+  const lavik::RebuildDirective first =
       Directive(99, 99, "target-a", "operation-a", "attempt-a");
   auto accepted = ledger.Authorize(first);
   ASSERT_TRUE(accepted.ok()) << accepted.status();
-  EXPECT_EQ(*accepted, keylane::detail::SourceAuthorizationAction::kAuthorized);
+  EXPECT_EQ(*accepted, lavik::detail::SourceAuthorizationAction::kAuthorized);
   EXPECT_TRUE(ledger.IsAuthorized(first.identity_));
 }
 

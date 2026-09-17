@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/cluster/authority.h"
+#include "lavik/cluster/authority.h"
 
 #include <algorithm>
 #include <limits>
@@ -22,9 +22,9 @@
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
-#include "keylane/metrics.h"
+#include "lavik/metrics.h"
 
-namespace keylane::cluster {
+namespace lavik::cluster {
 
 namespace {
 
@@ -506,4 +506,4 @@ void AuthorityGuard::InvalidateAll() {
   ++generation_;
 }
 
-}  // namespace keylane::cluster
+}  // namespace lavik::cluster

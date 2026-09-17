@@ -31,17 +31,16 @@
 #include "bycorf/runtime/cross_core.h"
 #include "bycorf/runtime/worker.h"
 #include "cluster_gate.h"
-#include "keylane/resp.h"
+#include "lavik/resp.h"
 
-namespace keylane {
+namespace lavik {
 namespace {
 
 // The current unreleased v1 layout includes macro-node counts. Earlier
 // development layouts are not decoded or reconstructed from live settings.
-constexpr std::string_view kMagic = "KXS1";
-constexpr std::string_view kGroupStateMagic = "KXG1";
-constexpr std::string_view kRestoreGroupSubcommand =
-    "__keylane_restore_group_v1";
+constexpr std::string_view kMagic = "LXS1";
+constexpr std::string_view kGroupStateMagic = "LXG1";
+constexpr std::string_view kRestoreGroupSubcommand = "__lavik_restore_group_v1";
 storage::StorageEngine* g_storage = nullptr;
 std::atomic<std::uint32_t> g_stream_node_max_entries{100};
 
@@ -2415,4 +2414,4 @@ Task<std::string> ExecuteStreamReadLocked(
   co_return std::string(reply.encoded_);
 }
 
-}  // namespace keylane
+}  // namespace lavik

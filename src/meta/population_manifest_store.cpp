@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/population_manifest_store.h"
+#include "lavik/meta/population_manifest_store.h"
 
 #include <algorithm>
 
-#include "keylane/meta/hash.h"
-#include "keylane/population_manifest_format.h"
+#include "lavik/meta/hash.h"
+#include "lavik/population_manifest_format.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
 bool IsCanonical(const std::vector<MetaPopulationManifestEntry>& entries) {
@@ -183,4 +183,4 @@ MetaPopulationManifestStore::Deserialize(std::string_view bytes) {
   return store;
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

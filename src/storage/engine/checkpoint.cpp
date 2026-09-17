@@ -18,11 +18,11 @@
 
 #include "impl.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 constexpr std::uint64_t kCheckpointChunkMagic =
-    0x3150434b48434c4bULL;  // KLCHKCP1
+    0x3150434b4843564cULL;  // LVCHKCP1
 constexpr std::uint32_t kCheckpointWireVersion = 1;
 // Version 1 is intentionally replaced in place during development. Requiring
 // this layout tag prevents an older same-sized entry header from being
@@ -1896,4 +1896,4 @@ Task<absl::Status> StorageEngine::Impl::LoadCheckpoint(
   co_return absl::OkStatus();
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

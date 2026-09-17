@@ -25,7 +25,7 @@
 #include "absl/strings/str_cat.h"
 #include "tests/cluster/reference_model.h"
 
-namespace keylane::test::cluster {
+namespace lavik::test::cluster {
 namespace {
 
 bool CanExerciseAuthority(const AuthorityObservation& observation) {
@@ -492,4 +492,4 @@ std::optional<Finding> CheckClusterInvariants(const ClusterSnapshot& snapshot) {
   return CheckWire(snapshot);
 }
 
-}  // namespace keylane::test::cluster
+}  // namespace lavik::test::cluster

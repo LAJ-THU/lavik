@@ -16,7 +16,7 @@
 
 #include "impl.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 Task<absl::Status> StorageEngine::Impl::RestoreGroupedViewLocked(
     WorkerStore& store, WorkerStore::PartitionStore& partition,
@@ -196,4 +196,4 @@ Task<absl::Status> StorageEngine::Impl::RestoreGroupedViewLocked(
   }
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

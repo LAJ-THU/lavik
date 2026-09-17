@@ -188,7 +188,7 @@ class InitialProjectionBarrier(H.Proxy):
                     if not chunk:
                         raise H.Failure("Meta closed before ServerHello")
                     prefix += chunk
-                if (struct.unpack_from(">IHH", prefix) != (0x4b4c4350, 1, 2) or
+                if (struct.unpack_from(">IHH", prefix) != (0x4c564350, 1, 2) or
                         prefix[28] != 1):
                     raise H.Failure("expected an accepted v1 ServerHello")
                 self.blocked.set()
@@ -531,7 +531,7 @@ def run_case(workdir, interactive):
             environment,
             [CTL, "--socket", meta.ctl_path, "getop",
              operation_match.group(1)])
-        if (f"principal=keylane://node/{DATA_NODE}" not in node_record or
+        if (f"principal=lavik://node/{DATA_NODE}" not in node_record or
                 "role=primary" not in node_record or
                 operation.strip() != "OK completed cluster-created"):
             raise H.Failure(
@@ -1179,7 +1179,7 @@ def run_multi_group_case(workdir, automatic, interactive,
 
     def start_data_nodes():
         for node in started_nodes:
-            variable = "KEYLANE_REPLICATION_PAUSE_FULLSYNC_BEFORE_CATALOG_ACK_MS"
+            variable = "LAVIK_REPLICATION_PAUSE_FULLSYNC_BEFORE_CATALOG_ACK_MS"
             old = os.environ.get(variable)
             try:
                 if restart_replica_during_create and node is nodes[0]:
@@ -1342,7 +1342,7 @@ def run_multi_group_case(workdir, automatic, interactive,
             for primary_id, replica_id, _, _ in GROUPS.values():
                 primary, replica = by_id[primary_id], by_id[replica_id]
                 info = redis_call(replica, ["INFO", "replication"])
-                for field in ("keylane_source_workers", "keylane_connected_flows"):
+                for field in ("lavik_source_workers", "lavik_connected_flows"):
                     if f"{field}:{primary.workers}\r\n" not in info:
                         raise H.Failure(f"source layout was not preserved: {info!r}")
                 values = snapshot_values[replica_id]
@@ -1382,9 +1382,9 @@ def run_tls_create_case(workdir, tls_only):
     certdir = os.path.join(scenario, "certs")
     ca, ca_key = make_ca(certdir)
     meta_cert, meta_key = make_leaf(
-        certdir, ca, ca_key, "meta", "keylane://meta/1")
+        certdir, ca, ca_key, "meta", "lavik://meta/1")
     operator_cert, operator_key = make_leaf(
-        certdir, ca, ca_key, "operator", "keylane://operator/create-test")
+        certdir, ca, ca_key, "operator", "lavik://operator/create-test")
     meta = H.Node(META, scenario, 1, args=(
         H.raft_args(snapshot_distance=100_000) +
         H.tls_args(ca, meta_cert, meta_key) +
@@ -1393,7 +1393,7 @@ def run_tls_create_case(workdir, tls_only):
     nodes = []
     for index, node_id in enumerate((PRIMARY_1, REPLICA_1)):
         cert, key = make_leaf(
-            certdir, ca, ca_key, f"data-{index}", f"keylane://node/{node_id}")
+            certdir, ca, ca_key, f"data-{index}", f"lavik://node/{node_id}")
         nodes.append(DataProcess(
             DATA, os.path.join(scenario, f"data-{index}"), node_id,
             meta.data_control_endpoint, tls=(ca, cert, key), tls_only=tls_only))
@@ -1529,7 +1529,7 @@ class DirectiveBarrier(H.Proxy):
                 header = exact(28)
                 magic, version, kind = struct.unpack_from(">IHH", header)
                 size = struct.unpack_from(">I", header, 12)[0]
-                if magic != 0x4b4c4350 or version != 1 or size > (1 << 20):
+                if magic != 0x4c564350 or version != 1 or size > (1 << 20):
                     raise H.Failure("unexpected control frame")
                 payload = exact(size)
                 # NodeControlUpdate starts with request id and optional task delta.
@@ -1597,7 +1597,7 @@ def run_recovery_case(workdir, phase, snapshot=False, wire=None, crash=False):
         "result-committed", "directive-removed", "child-completed")
     sentinel = False
     try:
-        variable = "KEYLANE_TEST_PAUSE_CLUSTER_CREATE_PHASE"
+        variable = "LAVIK_TEST_PAUSE_CLUSTER_CREATE_PHASE"
         old = os.environ.get(variable)
         if wire is None:
             os.environ[variable] = phase
@@ -1734,13 +1734,13 @@ def main():
         run_group_id_probe_case(workdir)
         run_tls_create_case(workdir, tls_only=False)
         run_tls_create_case(workdir, tls_only=True)
-        if has_fault(DATA, b"KEYLANE_REPLICATION_PAUSE_FULLSYNC_BEFORE_CATALOG_ACK_MS"):
+        if has_fault(DATA, b"LAVIK_REPLICATION_PAUSE_FULLSYNC_BEFORE_CATALOG_ACK_MS"):
             run_multi_group_case(workdir, automatic=True, interactive=False,
                                  restart_replica_during_create=True)
         else:
             H.log("SKIP replica restart cut: Data binary has no full-sync pause hook")
         run_case(workdir, interactive=False)
-        if has_fault(META, b"KEYLANE_TEST_PAUSE_CLUSTER_CREATE_PHASE"):
+        if has_fault(META, b"LAVIK_TEST_PAUSE_CLUSTER_CREATE_PHASE"):
             for phase, snapshot in (("submitted", False), ("create-groups", True),
                                     ("wait-data-projection", False),
                                     ("result-committed", True),

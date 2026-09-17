@@ -39,13 +39,13 @@
 #include "absl/status/statusor.h"
 #include "bycorf/runtime/cross_core.h"
 #include "bycorf/runtime/worker.h"
-#include "keylane/cluster/authority.h"
-#include "keylane/cluster/runtime.h"
-#include "keylane/metrics.h"
-#include "keylane/resp.h"
-#include "keylane/storage/engine.h"
+#include "lavik/cluster/authority.h"
+#include "lavik/cluster/runtime.h"
+#include "lavik/metrics.h"
+#include "lavik/resp.h"
+#include "lavik/storage/engine.h"
 
-namespace keylane {
+namespace lavik {
 using namespace bycorf;
 
 void BlockingWakeCascade::Done() noexcept {
@@ -1145,4 +1145,4 @@ Task<absl::Status> NotifyBlockingDb(std::uint8_t db_id) {
   co_return absl::OkStatus();
 }
 
-}  // namespace keylane
+}  // namespace lavik

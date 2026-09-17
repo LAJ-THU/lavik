@@ -200,7 +200,7 @@ void ExpectWatchOutcome(Client& watcher, Collection type,
 class CompactCollectionWriteE2e : public testing::TestWithParam<Collection> {};
 
 TEST_P(CompactCollectionWriteE2e, ColdPauseReleasesStateButSerializesSameKey) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires Debug/fault compact collection pause hook";
 #endif
   const auto type = GetParam();
@@ -221,8 +221,8 @@ TEST_P(CompactCollectionWriteE2e, ColdPauseReleasesStateButSerializesSameKey) {
   }
   ASSERT_TRUE(disk.Auxiliaries(key).empty());
   {
-    ScopedFault paused_key("KEYLANE_COMPACT_WRITE_PAUSE_KEY", key.c_str());
-    ScopedFault pause_ms("KEYLANE_COMPACT_WRITE_PAUSE_MS", "3000");
+    ScopedFault paused_key("LAVIK_COMPACT_WRITE_PAUSE_KEY", key.c_str());
+    ScopedFault pause_ms("LAVIK_COMPACT_WRITE_PAUSE_MS", "3000");
     Server server(disk, 1);
     server.PreserveOnFailure();
     Client client(server.port());
@@ -525,7 +525,7 @@ class GroupedWriteConcurrencyE2e : public testing::TestWithParam<GroupedCase> {
 };
 
 TEST_P(GroupedWriteConcurrencyE2e, ColdWriteYieldsWorkerButRetainsKey) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires grouped preparation/extent pause hooks";
 #endif
   const auto [kind, phase] = GetParam();
@@ -543,8 +543,8 @@ TEST_P(GroupedWriteConcurrencyE2e, ColdWriteYieldsWorkerButRetainsKey) {
   }
   ASSERT_FALSE(disk.Auxiliaries(key).empty());
   {
-    ScopedFault pause_key("KEYLANE_GROUPED_WRITE_PAUSE_KEY", key.c_str());
-    ScopedFault pause_phase("KEYLANE_GROUPED_WRITE_PAUSE_PHASE", phase);
+    ScopedFault pause_key("LAVIK_GROUPED_WRITE_PAUSE_KEY", key.c_str());
+    ScopedFault pause_phase("LAVIK_GROUPED_WRITE_PAUSE_PHASE", phase);
     Server server(disk, 1);
     server.PreserveOnFailure();
     Client client(server.port());
@@ -656,7 +656,7 @@ TEST(GroupedWriteSemanticsE2e, NoOpDeletionExecAndLuaRetainLogicalIdentity) {
 
 TEST(GroupedWriteSemanticsE2e,
      MemberPreparationAllocationFailureLeavesWorkerUsable) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires member preparation allocation-failure hook";
 #endif
   const std::string key = "member-prepare-failure";
@@ -671,7 +671,7 @@ TEST(GroupedWriteSemanticsE2e,
     ASSERT_EQ(server.Wait(true), 0) << server.Log();
   }
   {
-    ScopedFault fault("KEYLANE_FAIL_GROUP_MEMBER_PREPARE_KEY", key.c_str());
+    ScopedFault fault("LAVIK_FAIL_GROUP_MEMBER_PREPARE_KEY", key.c_str());
     Server server(disk, 1);
     server.PreserveOnFailure();
     Client client(server.port());
@@ -707,7 +707,7 @@ TEST(GroupedWriteSemanticsE2e,
 
 TEST(GroupedWriteSemanticsE2e,
      ShutdownDrainsUnlockedExtentBeforeDestroyingStore) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires grouped extent pause hook";
 #endif
   const std::string key = "extent-shutdown";
@@ -722,8 +722,8 @@ TEST(GroupedWriteSemanticsE2e,
     ASSERT_EQ(server.Wait(true), 0) << server.Log();
   }
   {
-    ScopedFault pause_key("KEYLANE_GROUPED_WRITE_PAUSE_KEY", key.c_str());
-    ScopedFault pause_phase("KEYLANE_GROUPED_WRITE_PAUSE_PHASE", "extent");
+    ScopedFault pause_key("LAVIK_GROUPED_WRITE_PAUSE_KEY", key.c_str());
+    ScopedFault pause_phase("LAVIK_GROUPED_WRITE_PAUSE_PHASE", "extent");
     Server server(disk, 1);
     server.PreserveOnFailure();
     Client ready(server.port());
@@ -749,7 +749,7 @@ class CollectionCreationE2e : public testing::TestWithParam<CreationCase> {};
 
 TEST_P(CollectionCreationE2e,
        PrivatePreparationYieldsButKeepsMissingKeyLocked) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires collection creation pause hook";
 #endif
   const auto [kind, layout, phase] = GetParam();
@@ -764,8 +764,8 @@ TEST_P(CollectionCreationE2e,
   PrivateDisk disk;
   disk.PreserveOnFailure();
   {
-    ScopedFault pause_key("KEYLANE_GROUPED_WRITE_PAUSE_KEY", key.c_str());
-    ScopedFault pause_phase("KEYLANE_GROUPED_WRITE_PAUSE_PHASE", phase);
+    ScopedFault pause_key("LAVIK_GROUPED_WRITE_PAUSE_KEY", key.c_str());
+    ScopedFault pause_phase("LAVIK_GROUPED_WRITE_PAUSE_PHASE", phase);
     Server server(disk, 1);
     server.PreserveOnFailure();
     Client client(server.port()), watcher(server.port());
@@ -874,7 +874,7 @@ TEST(CollectionCreationSemanticsE2e, TombstoneAndExpiredOtherTypeStartFresh) {
 
 TEST(CollectionCreationSemanticsE2e,
      AllocationFailureLeavesNoKeyOrWatchEffect) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires creation allocation fault hook";
 #endif
   const std::string key = "failed-create";
@@ -884,7 +884,7 @@ TEST(CollectionCreationSemanticsE2e,
     PrivateDisk disk;
     disk.PreserveOnFailure();
     {
-      ScopedFault fault("KEYLANE_FAIL_COLLECTION_CREATE_PREPARE_KEY",
+      ScopedFault fault("LAVIK_FAIL_COLLECTION_CREATE_PREPARE_KEY",
                         key.c_str());
       Server server(disk, 1);
       server.PreserveOnFailure();
@@ -915,7 +915,7 @@ TEST(CollectionCreationSemanticsE2e,
 
 TEST(CollectionCreationSemanticsE2e,
      MemberPreparationFailurePublishesNeitherGraph) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires member preparation allocation fault hook";
 #endif
   const std::string key = "failed-members";
@@ -923,7 +923,7 @@ TEST(CollectionCreationSemanticsE2e,
   PrivateDisk disk;
   disk.PreserveOnFailure();
   {
-    ScopedFault fault("KEYLANE_FAIL_GROUP_MEMBER_PREPARE_KEY", key.c_str());
+    ScopedFault fault("LAVIK_FAIL_GROUP_MEMBER_PREPARE_KEY", key.c_str());
     Server server(disk, 1);
     server.PreserveOnFailure();
     Client client(server.port());

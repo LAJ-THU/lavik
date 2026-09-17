@@ -272,7 +272,7 @@ the authoritative record scan; ordinary record media is unchanged.
 
 | Claim | Repository source |
 |---|---|
-| Configuration and default | `include/keylane/server.h`, `app/keylane.cpp`, `src/config.cpp`, `src/redis/server.cpp` |
-| Durable generation, root, bitmap, and block kind | `include/keylane/storage/format.h`, `src/storage/format.cpp` |
+| Configuration and default | `include/lavik/server.h`, `app/lavik.cpp`, `src/config.cpp`, `src/redis/server.cpp` |
+| Durable generation, root, bitmap, and block kind | `include/lavik/storage/format.h`, `src/storage/format.cpp` |
 | Shutdown barriers, transaction promotion, shard construction, bitmap/root publication, and best-effort failure | `src/storage/engine/flush.cpp`, `src/storage/engine/tx_cleaner.cpp`, `src/storage/engine/checkpoint.cpp` |
 | Startup consumption, validation, fallback, bitmap retirement, and ordinary-body skipping | `src/storage/engine/init.cpp`, `src/storage/engine/checkpoint.cpp`, `src/storage/engine/recovery.cpp` |

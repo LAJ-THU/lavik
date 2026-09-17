@@ -13,11 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Integration gate: mTLS transport for keylane-meta.
+"""Integration gate: mTLS transport for lavik-meta.
 
 The gate creates one CA and a distinct leaf per member. Every leaf covers the
 numeric endpoint and carries exactly one canonical URI SAN
-(`keylane://meta/<server-id>`). The ctl surface stays on its authenticated
+(`lavik://meta/<server-id>`). The ctl surface stays on its authenticated
 Unix socket, independent of Raft TLS.
 
 Scenarios (each with hard assertions):
@@ -48,9 +48,9 @@ N5. trusted CA and correct endpoint SAN, but a URI SAN naming another member
 Every negative scenario asserts the isolated node is still ALIVE with a
 working ctl surface (a crash would itself be a finding) and that the
 cluster's writes never stop. Handshake and URI-binding evidence is taken from
-NuRaft's native Asio and Keylane peer-verification log paths.
+NuRaft's native Asio and Lavik peer-verification log paths.
 
-Usage: gate_mtls.py /path/to/keylane-meta [workdir]
+Usage: gate_mtls.py /path/to/lavik-meta [workdir]
 """
 
 import os
@@ -108,7 +108,7 @@ def member_tls_args(workdir, ca_crt, ca_key, node_id, name_prefix="member",
     cert, key = make_leaf(
         workdir, ca_crt, ca_key, f"{name_prefix}-{node_id}",
         san=(f"IP:{san_ip},DNS:localhost,"
-             f"URI:keylane://meta/{principal_id}"))
+             f"URI:lavik://meta/{principal_id}"))
     return H.raft_args() + H.tls_args(ca_crt, cert, key)
 
 
@@ -128,7 +128,7 @@ def make_expired_leaf(workdir, ca_dir, ca_crt, ca_key, name, node_id):
                  "-keyout", f"{name}.key", "-out", f"{name}.csr",
                  "-subj", "/CN=localhost",
                  "-addext", ("subjectAltName=IP:127.0.0.1,DNS:localhost,"
-                             f"URI:keylane://meta/{node_id}")],
+                             f"URI:lavik://meta/{node_id}")],
                 workdir)
     index = os.path.join(ca_dir, "index.txt")
     serial = os.path.join(ca_dir, "serial")
@@ -268,7 +268,7 @@ def main():
     joiners = []    # isolated nodes, for teardown + log dumps
     try:
         main_ca_dir = os.path.join(workdir, "main_ca")
-        main_ca, main_ca_key = make_ca(main_ca_dir, "Keylane-Gate-Main-CA")
+        main_ca, main_ca_key = make_ca(main_ca_dir, "Lavik-Gate-Main-CA")
 
         # ---- scenario P: full positive flow on an all-TLS cluster -------
         dir_a = os.path.join(workdir, "tls_cluster")
@@ -302,10 +302,10 @@ def main():
 
         # ---- scenario N2: wrong-CA joiner vs TLS cluster ----------------
         wrong_dir = os.path.join(workdir, "wrong_ca")
-        wrong_ca, wrong_key = make_ca(wrong_dir, "Keylane-Wrong-CA")
+        wrong_ca, wrong_key = make_ca(wrong_dir, "Lavik-Wrong-CA")
         wrong_crt, wrong_leaf_key = make_leaf(
             wrong_dir, wrong_ca, wrong_key, "server",
-            san="IP:127.0.0.1,DNS:localhost,URI:keylane://meta/5")
+            san="IP:127.0.0.1,DNS:localhost,URI:lavik://meta/5")
         wrong_args = H.raft_args() + H.tls_args(wrong_ca, wrong_crt,
                                                 wrong_leaf_key)
         wrong_joiner = H.Node(BINARY, dir_a, 5, args=wrong_args)
@@ -341,7 +341,7 @@ def main():
         # AND whose private key the gate controls (tests/tls ships no
         # ca.key), so the gate builds ca2 itself.
         ca2_dir = os.path.join(workdir, "ca2")
-        ca2_crt, ca2_key = make_ca(ca2_dir, "Keylane-Gate6-CA2")
+        ca2_crt, ca2_key = make_ca(ca2_dir, "Lavik-Gate6-CA2")
         dir_c = os.path.join(workdir, "ca2_cluster")
         os.makedirs(dir_c, exist_ok=True)
         cluster_c = make_tls_nodes(BINARY, dir_c, 3, ca2_crt, ca2_key)
@@ -372,7 +372,7 @@ def main():
         badsan_crt, badsan_key = make_leaf(workdir, ca2_crt, ca2_key,
                                            "badsan",
                                            san=("IP:10.9.9.9,"
-                                                "URI:keylane://meta/5"))
+                                                "URI:lavik://meta/5"))
         badsan_args = H.raft_args() + H.tls_args(ca2_crt, badsan_crt,
                                                  badsan_key)
         badsan_joiner = H.Node(BINARY, dir_c, 5, args=badsan_args)

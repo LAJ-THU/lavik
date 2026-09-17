@@ -22,7 +22,7 @@
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 
-namespace keylane::test::cluster {
+namespace lavik::test::cluster {
 namespace {
 
 char HashHexDigit(unsigned value) {
@@ -69,7 +69,7 @@ absl::StatusOr<std::vector<Action>> TraceActions(const Trace& trace) {
     auto decoded = DecodeAction(record.payload_);
     if (!decoded.ok()) {
       return absl::InvalidArgumentError(absl::StrCat(
-          "invalid choice action in KFT1 trace: ", decoded.status()));
+          "invalid choice action in LFT1 trace: ", decoded.status()));
     }
     actions.push_back(std::move(*decoded));
   }
@@ -434,4 +434,4 @@ RunResult ScenarioRunner::Minimize(const MinimizeRequest& request) const {
   return best;
 }
 
-}  // namespace keylane::test::cluster
+}  // namespace lavik::test::cluster

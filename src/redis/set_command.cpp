@@ -36,13 +36,13 @@
 #include "bycorf/runtime/cross_core.h"
 #include "bycorf/runtime/worker.h"
 #include "cluster_gate.h"
-#include "keylane/command_table.h"
-#include "keylane/memory.h"
-#include "keylane/resp.h"
-#include "keylane/storage/engine.h"
-#include "keylane/tx/transaction.h"
+#include "lavik/command_table.h"
+#include "lavik/memory.h"
+#include "lavik/resp.h"
+#include "lavik/storage/engine.h"
+#include "lavik/tx/transaction.h"
 
-namespace keylane {
+namespace lavik {
 using namespace bycorf;
 
 namespace {
@@ -928,4 +928,4 @@ Task<CommandReply> ExecuteSetMultiKey(const CommandRequest& request,
   }
 }
 
-}  // namespace keylane
+}  // namespace lavik

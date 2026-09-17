@@ -26,9 +26,9 @@
 #include <memory>
 
 #include "absl/status/status.h"
-#include "keylane/cluster/node_control.h"
+#include "lavik/cluster/node_control.h"
 
-namespace keylane::cluster::testing {
+namespace lavik::cluster::testing {
 
 class TestTopologyInstaller {
  public:
@@ -108,4 +108,4 @@ class TestTopologyInstaller {
   std::uint64_t next_source_index_ = 1;
 };
 
-}  // namespace keylane::cluster::testing
+}  // namespace lavik::cluster::testing

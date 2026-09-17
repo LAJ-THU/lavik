@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/value_codec.h"
+#include "lavik/meta/value_codec.h"
 
 #include <string>
 
-namespace keylane::meta {
+namespace lavik::meta {
 
 void WriteActorContext(MetaWriter& writer, const ActorContext& actor) {
   writer.WriteString(actor.principal_);
@@ -113,4 +113,4 @@ absl::StatusOr<MetaDirectiveSpec> ReadMetaDirectiveSpec(MetaReader& reader) {
   return directive;
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

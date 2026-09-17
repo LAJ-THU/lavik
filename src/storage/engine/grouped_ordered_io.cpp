@@ -16,7 +16,7 @@
 
 #include "impl.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 Task<absl::StatusOr<HashGroupLocation>>
 StorageEngine::Impl::WriteOrderedGroupRecordLocked(
@@ -53,7 +53,7 @@ StorageEngine::Impl::WriteOrderedGroupRecordLocked(
     if (!written.ok()) co_return written.status();
     extents = std::move(*written);
     payload = EncodeManifest(*extents);
-    KEYLANE_MAYBE_CRASH_AT("group-extents-durable-before-record");
+    LAVIK_MAYBE_CRASH_AT("group-extents-durable-before-record");
   } else {
     payload.resize(encoder->encoded_bytes());
     RecordPayloadCursor cursor(*encoder);
@@ -84,7 +84,7 @@ StorageEngine::Impl::WriteOrderedGroupRecordLocked(
     if (extents != nullptr) SpawnExtentReclaim(store, extents);
     co_return status;
   }
-  KEYLANE_MAYBE_CRASH_AT("group-record-staged-before-root");
+  LAVIK_MAYBE_CRASH_AT("group-record-staged-before-root");
   co_return HashGroupLocation{.id_ = id,
                               .location_ = location,
                               .extents_ = std::move(extents),
@@ -242,4 +242,4 @@ StorageEngine::Impl::LoadGroupedOrderedValue(
   co_return result;
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

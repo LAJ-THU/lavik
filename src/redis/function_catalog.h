@@ -22,10 +22,10 @@
 
 #include "absl/status/statusor.h"
 #include "bycorf/runtime/task.h"
-#include "keylane/storage/engine.h"
+#include "lavik/storage/engine.h"
 #include "lua_eval.h"
 
-namespace keylane {
+namespace lavik {
 
 class FunctionCatalogOperationGuard {
  public:
@@ -106,4 +106,4 @@ class FunctionCatalog {
 void InitFunctionCatalog(storage::StorageEngine* storage);
 FunctionCatalog& GlobalFunctionCatalog();
 
-}  // namespace keylane
+}  // namespace lavik

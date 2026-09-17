@@ -30,10 +30,10 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "bycorf/runtime/task.h"
-#include "keylane/cluster/authority.h"
-#include "keylane/command.h"
+#include "lavik/cluster/authority.h"
+#include "lavik/command.h"
 
-namespace keylane {
+namespace lavik {
 
 // One client command owns a cascade. Every asynchronous readiness hop holds
 // one pending unit, so the command can yield until nested blocking operations
@@ -197,4 +197,4 @@ bycorf::Task<absl::Status> FlushBlockingNotifications(
     BlockingWakeCascade* cascade = nullptr);
 bycorf::Task<absl::Status> NotifyBlockingDb(std::uint8_t db_id);
 
-}  // namespace keylane
+}  // namespace lavik

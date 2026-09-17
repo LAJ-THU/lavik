@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/cluster_create_reconciler.h"
+#include "lavik/meta/cluster_create_reconciler.h"
 
 #include <algorithm>
 #include <array>
@@ -30,16 +30,16 @@
 #include "absl/strings/str_cat.h"
 #include "bycorf/io/storage.h"
 #include "bycorf/runtime/worker.h"
-#include "keylane/cluster/control_protocol.h"
-#include "keylane/fault_injection.h"
-#include "keylane/meta/cluster_create.h"
-#include "keylane/meta/hash.h"
-#include "keylane/meta/population_manifest_store.h"
+#include "lavik/cluster/control_protocol.h"
+#include "lavik/fault_injection.h"
+#include "lavik/meta/cluster_create.h"
+#include "lavik/meta/hash.h"
+#include "lavik/meta/population_manifest_store.h"
 #include "libnuraft/raft_params.hxx"
 #include "libnuraft/raft_server.hxx"
 #include "spdlog/spdlog.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 constexpr std::string_view kRootPhaseWaitMetaBarrier = "wait-meta-barrier";
 constexpr std::string_view kRootPhaseRegisterData = "register-data";
@@ -153,8 +153,7 @@ absl::Status ValidateMetaSet(const MetaCommittedView& view,
     if (peer.id_ != expected.server_id_ ||
         peer.endpoint_ !=
             StripValidatedTcpEndpointScheme(expected.raft_endpoint_) ||
-        peer.principal_ !=
-            absl::StrCat("keylane://meta/", expected.server_id_) ||
+        peer.principal_ != absl::StrCat("lavik://meta/", expected.server_id_) ||
         peer.data_control_endpoint_ !=
             StripValidatedTcpEndpointScheme(expected.data_control_endpoint_) ||
         peer.ctl_endpoint_ !=
@@ -314,7 +313,7 @@ absl::Status ValidateV1Nodes(const MetaStores& stores,
   for (const MetaNodeRecord& node : stores.identity_.Nodes()) {
     const auto* declaration = FindData(manifest, node.node_id_);
     if (declaration == nullptr || node.retired_ ||
-        node.principal_ != absl::StrCat("keylane://node/", node.node_id_) ||
+        node.principal_ != absl::StrCat("lavik://node/", node.node_id_) ||
         node.role_ != DeclaredRole(manifest, node.node_id_) ||
         node.endpoints_ != V1DataEndpoints(*declaration)) {
       return absl::FailedPreconditionError(absl::StrCat(
@@ -976,7 +975,7 @@ Plan PlanV1ClusterCreateStep(const MetaCommittedView& view,
       if (!stores.identity_.FindNode(node.node_id_).has_value()) {
         RegisterNode command;
         command.node_id_ = node.node_id_;
-        command.principal_ = absl::StrCat("keylane://node/", node.node_id_);
+        command.principal_ = absl::StrCat("lavik://node/", node.node_id_);
         command.role_ = DeclaredRole(*manifest, node.node_id_);
         command.endpoints_ = V1DataEndpoints(node);
         return Emit(std::move(command));
@@ -1381,9 +1380,8 @@ bycorf::Task<absl::Status> MetaClusterCreateReconciler::Run(
         // Debug pauses occur on the owner coroutine and still obey shutdown;
         // tests can stop at durable cuts without killing unrelated processes.
         bool paused = false;
-        KEYLANE_FAULT_INJECT(
-            paused = KEYLANE_FAULT_MATCHES(
-                "KEYLANE_TEST_PAUSE_CLUSTER_CREATE_PHASE", cut););
+        LAVIK_FAULT_INJECT(paused = LAVIK_FAULT_MATCHES(
+                               "LAVIK_TEST_PAUSE_CLUSTER_CREATE_PHASE", cut););
         if (!paused) {
           MetaClusterCreateRaftView raft_view;
           raft_view.local_server_id_ = core->server_->get_id();
@@ -1459,4 +1457,4 @@ bycorf::Task<absl::Status> MetaClusterCreateReconciler::Run(
   core->waiters_.clear();
   co_return absl::OkStatus();
 }
-}  // namespace keylane::meta
+}  // namespace lavik::meta

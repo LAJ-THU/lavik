@@ -174,7 +174,7 @@ RespClient Connect(std::uint16_t port) {
     ::close(fd);
     std::this_thread::sleep_for(10ms);
   }
-  Fail("timed out connecting to Keylane");
+  Fail("timed out connecting to Lavik");
 }
 
 void CreateDataFile(const std::string& path) {
@@ -355,9 +355,9 @@ void ExpectExecPublishPrecedesLaterUnsubscribe(RespClient* subscriber,
 
 int main(int argc, char** argv) {
   try {
-    if (argc != 2) Fail("usage: pubsub_e2e_test KEYLANE_BINARY");
+    if (argc != 2) Fail("usage: pubsub_e2e_test LAVIK_BINARY");
     std::string directory =
-        keylane::test::TestDataPath("keylane-pubsub-e2e-XXXXXX");
+        lavik::test::TestDataPath("lavik-pubsub-e2e-XXXXXX");
     if (::mkdtemp(directory.data()) == nullptr) Fail("mkdtemp failed");
     const std::string root(directory);
     const std::string source_data = root + "/source.data";
@@ -371,7 +371,7 @@ int main(int argc, char** argv) {
     std::vector<std::pair<std::string, std::string>> source_environment;
 #if !defined(NDEBUG)
     source_environment.emplace_back(
-        "KEYLANE_EXEC_REJECT_EPHEMERAL_FINAL_RECHECK_ONCE", "1");
+        "LAVIK_EXEC_REJECT_EPHEMERAL_FINAL_RECHECK_ONCE", "1");
 #endif
     Server source(argv[1], source_port, source_data, root + "/source.log", {},
                   std::move(source_environment));
@@ -394,21 +394,20 @@ int main(int argc, char** argv) {
     RespClient resp3_client = Connect(source_port);
     const std::string hello3 =
         resp3_client.Command({"HELLO", "3", "SETNAME", "resp3-client"});
-    ExpectContains(hello3, "%7\r\n$6\r\nserver\r\n$7\r\nkeylane",
-                   "HELLO 3 map");
+    ExpectContains(hello3, "%7\r\n$6\r\nserver\r\n$7\r\nlavik", "HELLO 3 map");
     ExpectContains(hello3, "$5\r\nproto\r\n:3", "HELLO 3 protocol");
     ExpectContains(resp3_client.Command({"CLIENT", "LIST"}),
                    "name=resp3-client", "RESP3 client name");
     ExpectContains(resp3_client.Command({"CLIENT", "LIST"}), "resp=3",
                    "RESP3 client metadata");
     Expect(
-        resp3_client.Command({"CLIENT", "SETINFO", "lib-name", "keylane-test"}),
+        resp3_client.Command({"CLIENT", "SETINFO", "lib-name", "lavik-test"}),
         "+OK", "RESP3 CLIENT SETINFO");
     const std::string resp3_client_info =
         resp3_client.Command({"CLIENT", "INFO"});
     ExpectContains(resp3_client_info, "=", "RESP3 CLIENT INFO verbatim");
     ExpectContains(resp3_client_info, "txt:id=", "RESP3 CLIENT INFO format");
-    ExpectContains(resp3_client_info, "lib-name=keylane-test",
+    ExpectContains(resp3_client_info, "lib-name=lavik-test",
                    "RESP3 CLIENT INFO metadata");
     Expect(resp3_client.Command({"GET", "resp3-missing"}), "_", "RESP3 null");
     Expect(resp3_client.Command({"HSET", "resp3-hash", "field", "value"}), ":1",

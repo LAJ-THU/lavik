@@ -16,7 +16,7 @@
 
 #include "impl.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 struct StorageEngine::Impl::SnapshotReadJoin {
   std::size_t pending_ = 0;
@@ -2349,4 +2349,4 @@ Task<absl::Status> StorageEngine::Impl::AbortReplicaRoot(
   co_return absl::OkStatus();
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

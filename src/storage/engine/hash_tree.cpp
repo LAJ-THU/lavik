@@ -21,13 +21,13 @@
 #include <set>
 
 #include "impl.h"
-#include "keylane/glob.h"
-#include "keylane/memory.h"
-#include "keylane/random_sample.h"
-#include "keylane/redis_parse.h"
-#include "keylane/storage/detail/grouped_scratch.h"
+#include "lavik/glob.h"
+#include "lavik/memory.h"
+#include "lavik/random_sample.h"
+#include "lavik/redis_parse.h"
+#include "lavik/storage/detail/grouped_scratch.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 namespace {
 
@@ -205,8 +205,8 @@ Task<absl::StatusOr<HashResult>> StorageEngine::Impl::ExecuteHashLikeLocked(
     const bool read_only = !IsWrite(operation);
     // Exercise the command's storage-error reply path independently of the
     // outer maxmemory preflight. No mutation has been staged at this boundary.
-    KEYLANE_FAULT_INJECT(
-        if (KEYLANE_FAULT_MATCHES("KEYLANE_FAIL_HASH_ADMISSION_KEY", key) &&
+    LAVIK_FAULT_INJECT(
+        if (LAVIK_FAULT_MATCHES("LAVIK_FAIL_HASH_ADMISSION_KEY", key) &&
             !read_only && value_type == ValueType::kHash) {
           co_return absl::ResourceExhaustedError(
               "OOM injected Hash storage admission failure");
@@ -289,21 +289,19 @@ Task<absl::StatusOr<HashResult>> StorageEngine::Impl::ExecuteHashLikeLocked(
       found = nullptr;
       unlock.Unlock();
     }
-    KEYLANE_FAULT_INJECT(if (unlocked_create) {
-      KEYLANE_FAULT_BAD_ALLOC("KEYLANE_FAIL_COLLECTION_CREATE_PREPARE_KEY",
-                              key);
+    LAVIK_FAULT_INJECT(if (unlocked_create) {
+      LAVIK_FAULT_BAD_ALLOC("LAVIK_FAIL_COLLECTION_CREATE_PREPARE_KEY", key);
     });
-    KEYLANE_FAULT_INJECT(if (unlocked_grouped_write) {
+    LAVIK_FAULT_INJECT(if (unlocked_grouped_write) {
       const auto paused =
           co_await PauseGroupedWriteForTest(*store.worker_, key, "prepare");
       if (!paused.ok()) co_return paused;
     });
-    KEYLANE_FAULT_INJECT(if (unlocked_compact_write &&
-                             value_type == ValueType::kHash) {
+    LAVIK_FAULT_INJECT(if (unlocked_compact_write &&
+                           value_type == ValueType::kHash) {
       const char* paused_key =
-          std::getenv("KEYLANE_COMPACT_HASH_WRITE_PAUSE_KEY");
-      const char* configured =
-          std::getenv("KEYLANE_COMPACT_HASH_WRITE_PAUSE_MS");
+          std::getenv("LAVIK_COMPACT_HASH_WRITE_PAUSE_KEY");
+      const char* configured = std::getenv("LAVIK_COMPACT_HASH_WRITE_PAUSE_MS");
       if (paused_key != nullptr && key == paused_key && configured != nullptr) {
         std::int64_t milliseconds = 0;
         const char* end = configured + std::strlen(configured);
@@ -318,13 +316,13 @@ Task<absl::StatusOr<HashResult>> StorageEngine::Impl::ExecuteHashLikeLocked(
         }
       }
     });
-    KEYLANE_FAULT_INJECT(if (unlocked_compact_write) {
+    LAVIK_FAULT_INJECT(if (unlocked_compact_write) {
       const auto paused =
           co_await PauseCompactWriteForTest(*store.worker_, key);
       if (!paused.ok()) co_return paused;
     });
-    KEYLANE_FAULT_INJECT(if (read_only) {
-      if (const char* configured = std::getenv("KEYLANE_HASH_READ_PAUSE_MS");
+    LAVIK_FAULT_INJECT(if (read_only) {
+      if (const char* configured = std::getenv("LAVIK_HASH_READ_PAUSE_MS");
           configured != nullptr) {
         std::uint64_t milliseconds = 0;
         const char* end = configured + std::strlen(configured);
@@ -394,7 +392,7 @@ Task<absl::StatusOr<HashResult>> StorageEngine::Impl::ExecuteHashLikeLocked(
       for (auto i = begin; i < end; ++i) {
         auto& field = fields[i];
         if (operation.match_ != "*" &&
-            !keylane::RedisGlobMatch(operation.match_, field.field_))
+            !lavik::RedisGlobMatch(operation.match_, field.field_))
           continue;
         result.values_.emplace_back(std::move(field.field_));
         if (value_type == ValueType::kHash)
@@ -876,8 +874,8 @@ Task<absl::StatusOr<HashResult>> StorageEngine::Impl::ExecuteHashLikeLocked(
         }
         for (std::size_t i = begin; i < end; ++i) {
           if (operation.match_ == "*" ||
-              keylane::RedisGlobMatch(operation.match_,
-                                      compact.entries_[i].field_)) {
+              lavik::RedisGlobMatch(operation.match_,
+                                    compact.entries_[i].field_)) {
             result.values_.push_back(compact.entries_[i].field_);
             if (value_type == ValueType::kHash)
               result.values_.push_back(compact.entries_[i].value_);
@@ -934,7 +932,7 @@ Task<absl::StatusOr<HashResult>> StorageEngine::Impl::ExecuteHashLikeLocked(
         }
       }
 
-      KEYLANE_FAULT_INJECT(if (unlocked_create) {
+      LAVIK_FAULT_INJECT(if (unlocked_create) {
         const auto paused =
             co_await PauseGroupedWriteForTest(*store.worker_, key, "create");
         if (!paused.ok()) co_return paused;
@@ -1034,4 +1032,4 @@ Task<absl::StatusOr<HashResult>> StorageEngine::Impl::ExecuteHashLikeLocked(
   }
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

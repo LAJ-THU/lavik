@@ -16,7 +16,7 @@
 
 #include "impl.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 Task<absl::Status> StorageEngine::Impl::FlushDbDetach(std::uint8_t db_id) {
   assert(db_id < kLogicalDatabaseCount);
@@ -523,4 +523,4 @@ Task<absl::Status> StorageEngine::Impl::AwaitDetachedReclaim(
   co_return absl::OkStatus();
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

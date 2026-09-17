@@ -16,7 +16,7 @@
 
 #include "impl.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 using RetiredExtentIdentity = std::pair<std::uint64_t, std::uint64_t>;
@@ -345,4 +345,4 @@ Task<absl::Status> StorageEngine::Impl::ClearGroupedUndoSlots(
   co_return absl::OkStatus();
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

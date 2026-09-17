@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/coordinator.h"
+#include "lavik/meta/coordinator.h"
 
 #include <algorithm>
 #include <chrono>
@@ -33,8 +33,8 @@
 #include <utility>
 #include <variant>
 
-#include "keylane/meta/nuraft_log_store.h"
-#include "keylane/meta/state_machine.h"
+#include "lavik/meta/nuraft_log_store.h"
+#include "lavik/meta/state_machine.h"
 #include "spdlog/spdlog.h"
 // NuRaft's headers are not -Wpedantic-clean.
 #pragma GCC diagnostic push
@@ -46,7 +46,7 @@
 #include "libnuraft/srv_config.hxx"
 #pragma GCC diagnostic pop
 
-namespace keylane::meta {
+namespace lavik::meta {
 
 // Shared because a Raft completion may arrive after the proposing coroutine
 // timed out or was dropped. Reservations therefore never call back through a
@@ -1452,4 +1452,4 @@ const MetaObservationStore& MetaLeaderContext::Observations() const {
   return coordinator_->Observations();
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

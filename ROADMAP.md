@@ -14,9 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# keylane Roadmap
+# lavik Roadmap
 
-Durable backlog for the keylane Redis-compatible server. Runtime-level items live
+Durable backlog for the lavik Redis-compatible server. Runtime-level items live
 in `bycorf/ROADMAP.md`.
 
 - **Phase 2: pipeline command batching / squashing.** Coalesce pipelined commands

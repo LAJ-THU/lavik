@@ -26,28 +26,28 @@
 #include <vector>
 
 #include "cluster/test_topology_installer.h"
-#include "keylane/cluster/authority.h"
-#include "keylane/cluster/node_control.h"
-#include "keylane/cluster/topology.h"
+#include "lavik/cluster/authority.h"
+#include "lavik/cluster/node_control.h"
+#include "lavik/cluster/topology.h"
 
 namespace {
 
-using keylane::cluster::Admit;
-using keylane::cluster::AuthorityGuard;
-using keylane::cluster::AuthorityInFlightGuards;
-using keylane::cluster::AuthorityUnchanged;
-using keylane::cluster::Decision;
-using keylane::cluster::GroupInFlight;
-using keylane::cluster::GroupView;
-using keylane::cluster::InFlightGuard;
-using keylane::cluster::NodeDescriptor;
-using keylane::cluster::NodeId;
-using keylane::cluster::NodeIndex;
-using keylane::cluster::RecheckResult;
-using keylane::cluster::RequestView;
-using keylane::cluster::ServingState;
-using keylane::cluster::ServingStateBuilder;
-using keylane::cluster::SlotRange;
+using lavik::cluster::Admit;
+using lavik::cluster::AuthorityGuard;
+using lavik::cluster::AuthorityInFlightGuards;
+using lavik::cluster::AuthorityUnchanged;
+using lavik::cluster::Decision;
+using lavik::cluster::GroupInFlight;
+using lavik::cluster::GroupView;
+using lavik::cluster::InFlightGuard;
+using lavik::cluster::NodeDescriptor;
+using lavik::cluster::NodeId;
+using lavik::cluster::NodeIndex;
+using lavik::cluster::RecheckResult;
+using lavik::cluster::RequestView;
+using lavik::cluster::ServingState;
+using lavik::cluster::ServingStateBuilder;
+using lavik::cluster::SlotRange;
 
 // 40-hex node ids, as the builder validates.
 constexpr std::string_view kNodeA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -149,11 +149,11 @@ struct TestAuthorityControl {
         installer(cache, authority, actions),
         topology(installer, cache) {}
 
-  keylane::cluster::TopologyCache cache;
+  lavik::cluster::TopologyCache cache;
   AuthorityGuard authority;
-  keylane::cluster::NullNodeControlActions actions;
-  keylane::cluster::NodeControlInstaller installer;
-  keylane::cluster::testing::TestTopologyInstaller topology;
+  lavik::cluster::NullNodeControlActions actions;
+  lavik::cluster::NodeControlInstaller installer;
+  lavik::cluster::testing::TestTopologyInstaller topology;
 };
 
 // MOVED targets always carry the concrete advertised host plus both ports;
@@ -533,12 +533,12 @@ TEST(AuthorityGuardTest, RegistrationHandshakeOwnsOneGuardPerGroup) {
   const std::array<std::uint16_t, 2> duplicate_slots{kSlotInA, kSlotInA};
   const auto admission = control.authority.CaptureAndAdmit(
       MakeRequest(duplicate_slots, /*is_write=*/true),
-      keylane::cluster::MonotonicTime{});
+      lavik::cluster::MonotonicTime{});
 
   AuthorityInFlightGuards guards;
   EXPECT_EQ(control.authority.RegisterAndRecheck(
-                admission, /*worker_stripe=*/2,
-                keylane::cluster::MonotonicTime{}, &guards),
+                admission, /*worker_stripe=*/2, lavik::cluster::MonotonicTime{},
+                &guards),
             RecheckResult::kOk);
   EXPECT_EQ(guards.size(), 1U);
   EXPECT_EQ(admission.state()->GroupInFlightCount(kGroupA), 1U);
@@ -553,7 +553,7 @@ TEST(AuthorityGuardTest,
   ASSERT_TRUE(control.topology.Install(BuildState(kNodeA), {}).ok());
   const std::array<std::uint16_t, 1> slots{kSlotInA};
   const auto admission = control.authority.CaptureAndAdmit(
-      MakeRequest(slots, /*is_write=*/true), keylane::cluster::MonotonicTime{});
+      MakeRequest(slots, /*is_write=*/true), lavik::cluster::MonotonicTime{});
 
   GroupView fenced = GroupA();
   fenced.granted_ = false;
@@ -562,8 +562,8 @@ TEST(AuthorityGuardTest,
                   .ok());
   AuthorityInFlightGuards guards;
   EXPECT_EQ(control.authority.RegisterAndRecheck(
-                admission, /*worker_stripe=*/0,
-                keylane::cluster::MonotonicTime{}, &guards),
+                admission, /*worker_stripe=*/0, lavik::cluster::MonotonicTime{},
+                &guards),
             RecheckResult::kReject);
   EXPECT_TRUE(guards.empty());
   EXPECT_EQ(admission.state()->GroupInFlightCount(kGroupA), 0U);
@@ -574,12 +574,12 @@ TEST(AuthorityGuardTest, FinalMutationRecheckTracksAggregateOutcome) {
   ASSERT_TRUE(control.topology.Install(BuildState(kNodeA), {}).ok());
   const std::array<std::uint16_t, 1> slots{kSlotInA};
   const auto started = control.authority.CaptureAndAdmit(
-      MakeRequest(slots, /*is_write=*/true), keylane::cluster::MonotonicTime{});
+      MakeRequest(slots, /*is_write=*/true), lavik::cluster::MonotonicTime{});
   const auto rejected = control.authority.CaptureAndAdmit(
-      MakeRequest(slots, /*is_write=*/true), keylane::cluster::MonotonicTime{});
+      MakeRequest(slots, /*is_write=*/true), lavik::cluster::MonotonicTime{});
 
   EXPECT_EQ(control.authority.RecheckAtMutation(
-                started, keylane::cluster::MonotonicTime{}),
+                started, lavik::cluster::MonotonicTime{}),
             RecheckResult::kOk);
   EXPECT_TRUE(started.mutation_started());
   EXPECT_FALSE(started.final_recheck_failed());
@@ -590,13 +590,13 @@ TEST(AuthorityGuardTest, FinalMutationRecheckTracksAggregateOutcome) {
                   .Install(BuildState(kNodeA, std::move(fenced), GroupB()), {})
                   .ok());
   EXPECT_EQ(control.authority.RecheckAtMutation(
-                started, keylane::cluster::MonotonicTime{}),
+                started, lavik::cluster::MonotonicTime{}),
             RecheckResult::kReject);
   EXPECT_TRUE(started.mutation_started());
   EXPECT_TRUE(started.final_recheck_failed());
 
   EXPECT_EQ(control.authority.RecheckAtMutation(
-                rejected, keylane::cluster::MonotonicTime{}),
+                rejected, lavik::cluster::MonotonicTime{}),
             RecheckResult::kReject);
   EXPECT_FALSE(rejected.mutation_started());
   EXPECT_TRUE(rejected.final_recheck_failed());

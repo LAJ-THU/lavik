@@ -40,7 +40,7 @@
 #include <utility>
 #include <vector>
 
-#include "keylane/storage/format.h"
+#include "lavik/storage/format.h"
 #include "support/test_data_path.h"
 
 namespace {
@@ -187,7 +187,7 @@ RespClient Connect(std::uint16_t port) {
     }
     std::this_thread::sleep_for(10ms);
   }
-  Fail("timed out connecting to Keylane");
+  Fail("timed out connecting to Lavik");
 }
 
 class ServerProcess {
@@ -248,7 +248,7 @@ class ServerProcess {
       return;
     }
     if (::kill(pid_, SIGINT) != 0 && errno != ESRCH) {
-      Fail("failed to signal Keylane");
+      Fail("failed to signal Lavik");
     }
     const auto deadline = std::chrono::steady_clock::now() + 60s;
     while (std::chrono::steady_clock::now() < deadline) {
@@ -257,7 +257,7 @@ class ServerProcess {
       if (waited == pid_) {
         pid_ = -1;
         if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-          Fail("Keylane exited unsuccessfully");
+          Fail("Lavik exited unsuccessfully");
         }
         return;
       }
@@ -266,7 +266,7 @@ class ServerProcess {
       }
       std::this_thread::sleep_for(10ms);
     }
-    Fail("Keylane did not stop after SIGINT");
+    Fail("Lavik did not stop after SIGINT");
   }
 
   void Crash() {
@@ -274,7 +274,7 @@ class ServerProcess {
       return;
     }
     if (::kill(pid_, SIGKILL) != 0 && errno != ESRCH) {
-      Fail("failed to kill Keylane");
+      Fail("failed to kill Lavik");
     }
     int status = 0;
     if (::waitpid(pid_, &status, 0) != pid_) {
@@ -296,7 +296,7 @@ class ServerProcess {
       if (waited == pid_) {
         pid_ = -1;
         if (!WIFEXITED(status)) {
-          Fail("Keylane terminated without an exit status");
+          Fail("Lavik terminated without an exit status");
         }
         return WEXITSTATUS(status);
       }
@@ -305,7 +305,7 @@ class ServerProcess {
       }
       std::this_thread::sleep_for(10ms);
     }
-    Fail("Keylane did not exit before the deadline");
+    Fail("Lavik did not exit before the deadline");
   }
 
  private:
@@ -337,23 +337,23 @@ std::vector<std::uint64_t> ReadAllocatedRecordBlocks(const std::string& path) {
     Fail("failed to size data file for block scan");
   }
   const std::uint64_t capacity_blocks =
-      static_cast<std::uint64_t>(bytes) / keylane::storage::kStorageBlockBytes;
-  const std::uint32_t begin = keylane::storage::DataBlockBegin(capacity_blocks);
-  alignas(keylane::storage::kDirectIoAlignment)
-      std::array<std::byte, keylane::storage::kBlockHeaderBytes>
+      static_cast<std::uint64_t>(bytes) / lavik::storage::kStorageBlockBytes;
+  const std::uint32_t begin = lavik::storage::DataBlockBegin(capacity_blocks);
+  alignas(lavik::storage::kDirectIoAlignment)
+      std::array<std::byte, lavik::storage::kBlockHeaderBytes>
           header{};
   std::vector<std::uint64_t> blocks;
   for (std::uint32_t local = begin; local < capacity_blocks; ++local) {
     const off_t offset =
-        static_cast<off_t>(local) * keylane::storage::kStorageBlockBytes;
+        static_cast<off_t>(local) * lavik::storage::kStorageBlockBytes;
     const ssize_t read = ::pread(fd, header.data(), header.size(), offset);
     if (read != static_cast<ssize_t>(header.size())) {
       ::close(fd);
       Fail("failed to read block header during test scan");
     }
-    keylane::storage::BlockHeader decoded{};
-    if (keylane::storage::DecodeBlockHeaderPages(header, &decoded) &&
-        decoded.kind_ == keylane::storage::BlockKind::kRecords) {
+    lavik::storage::BlockHeader decoded{};
+    if (lavik::storage::DecodeBlockHeaderPages(header, &decoded) &&
+        decoded.kind_ == lavik::storage::BlockKind::kRecords) {
       blocks.push_back(decoded.block_id_);
     }
   }
@@ -366,32 +366,31 @@ bool BlockBitmapBitIsClear(const std::string& path, std::uint64_t block_id) {
   if (fd < 0) {
     Fail("failed to open data file while reading allocation bitmap");
   }
-  const std::uint32_t local_block = keylane::storage::LocalBlockId(block_id);
+  const std::uint32_t local_block = lavik::storage::LocalBlockId(block_id);
   const std::size_t byte_index = local_block / 8;
   const std::uint32_t page_index = static_cast<std::uint32_t>(
-      byte_index / keylane::storage::kMetadataPagePayloadBytes);
+      byte_index / lavik::storage::kMetadataPagePayloadBytes);
   const std::size_t payload_byte =
-      byte_index % keylane::storage::kMetadataPagePayloadBytes;
-  alignas(keylane::storage::kDirectIoAlignment)
-      std::array<std::byte, keylane::storage::kDirectIoAlignment>
+      byte_index % lavik::storage::kMetadataPagePayloadBytes;
+  alignas(lavik::storage::kDirectIoAlignment)
+      std::array<std::byte, lavik::storage::kDirectIoAlignment>
           page{};
-  std::array<std::byte, keylane::storage::kMetadataPagePayloadBytes>
+  std::array<std::byte, lavik::storage::kMetadataPagePayloadBytes>
       selected_payload{};
   std::uint64_t selected_generation = 0;
   for (unsigned slot = 0; slot < 2; ++slot) {
     const off_t offset =
-        static_cast<off_t>(keylane::storage::MetadataPageSlotOffset(
-            keylane::storage::kScanBitmapMetadataOffset, page_index, slot));
+        static_cast<off_t>(lavik::storage::MetadataPageSlotOffset(
+            lavik::storage::kScanBitmapMetadataOffset, page_index, slot));
     const ssize_t read = ::pread(fd, page.data(), page.size(), offset);
     if (read != static_cast<ssize_t>(page.size())) {
       ::close(fd);
       Fail("failed to read allocation bitmap page");
     }
-    std::array<std::byte, keylane::storage::kMetadataPagePayloadBytes>
-        payload{};
+    std::array<std::byte, lavik::storage::kMetadataPagePayloadBytes> payload{};
     std::uint64_t generation = 0;
-    if (keylane::storage::DecodeMetadataPage(
-            page, keylane::storage::MetadataPageKind::kScanBitmap, page_index,
+    if (lavik::storage::DecodeMetadataPage(
+            page, lavik::storage::MetadataPageKind::kScanBitmap, page_index,
             &generation, payload) &&
         generation > selected_generation) {
       selected_generation = generation;
@@ -419,26 +418,26 @@ std::uint64_t CopyCommittedHeaderToUnusedAllocatedBlock(
     Fail("failed to size data file while injecting a stale block header");
   }
   const std::uint64_t capacity_blocks =
-      static_cast<std::uint64_t>(bytes) / keylane::storage::kStorageBlockBytes;
-  const std::uint32_t begin = keylane::storage::DataBlockBegin(capacity_blocks);
-  alignas(keylane::storage::kDirectIoAlignment)
-      std::array<std::byte, keylane::storage::kBlockHeaderBytes>
+      static_cast<std::uint64_t>(bytes) / lavik::storage::kStorageBlockBytes;
+  const std::uint32_t begin = lavik::storage::DataBlockBegin(capacity_blocks);
+  alignas(lavik::storage::kDirectIoAlignment)
+      std::array<std::byte, lavik::storage::kBlockHeaderBytes>
           candidate{};
-  std::array<std::byte, keylane::storage::kBlockHeaderBytes> committed{};
+  std::array<std::byte, lavik::storage::kBlockHeaderBytes> committed{};
   std::uint32_t committed_local = 0;
   std::uint32_t unused_local = 0;
   for (std::uint32_t local = begin; local < capacity_blocks; ++local) {
     const off_t offset =
-        static_cast<off_t>(local) * keylane::storage::kStorageBlockBytes;
+        static_cast<off_t>(local) * lavik::storage::kStorageBlockBytes;
     const ssize_t read =
         ::pread(fd, candidate.data(), candidate.size(), offset);
     if (read != static_cast<ssize_t>(candidate.size())) {
       ::close(fd);
       Fail("failed to scan headers while injecting a stale block header");
     }
-    keylane::storage::BlockHeader decoded{};
-    if (keylane::storage::DecodeBlockHeaderPages(candidate, &decoded) &&
-        decoded.kind_ == keylane::storage::BlockKind::kRecords) {
+    lavik::storage::BlockHeader decoded{};
+    if (lavik::storage::DecodeBlockHeaderPages(candidate, &decoded) &&
+        decoded.kind_ == lavik::storage::BlockKind::kRecords) {
       if (committed_local == 0) {
         committed = candidate;
         committed_local = local;
@@ -455,13 +454,13 @@ std::uint64_t CopyCommittedHeaderToUnusedAllocatedBlock(
     ::close(fd);
     Fail("test data file lacks a committed and an unused block");
   }
-  const std::uint64_t target = keylane::storage::MakeBlockId(0, unused_local);
+  const std::uint64_t target = lavik::storage::MakeBlockId(0, unused_local);
   if (BlockBitmapBitIsClear(path, target)) {
     ::close(fd);
     Fail("stale-header target was not activated in the allocation bitmap");
   }
   const off_t target_offset =
-      static_cast<off_t>(unused_local) * keylane::storage::kStorageBlockBytes;
+      static_cast<off_t>(unused_local) * lavik::storage::kStorageBlockBytes;
   const ssize_t written =
       ::pwrite(fd, committed.data(), committed.size(), target_offset);
   const int sync_error =
@@ -482,13 +481,13 @@ int main(int argc, char** argv) {
   const bool paused_defrag_only =
       argc == 3 && std::string_view(argv[2]) == "--paused-defrag-only";
   if (argc != 2 && !stale_header_only && !paused_defrag_only) {
-    std::cerr << "usage: flushdb_reclaim_e2e_test /path/to/keylane "
+    std::cerr << "usage: flushdb_reclaim_e2e_test /path/to/lavik "
                  "[--stale-header-only|--paused-defrag-only]\n";
     return 2;
   }
 
-  const std::string prefix = keylane::test::TestDataPath(
-      "keylane-flushdb-reclaim-" + std::to_string(::getpid()));
+  const std::string prefix = lavik::test::TestDataPath(
+      "lavik-flushdb-reclaim-" + std::to_string(::getpid()));
   const std::string data_path = prefix + ".data";
   const std::string unequal_path_a = prefix + "-unequal-a.data";
   const std::string unequal_path_b = prefix + "-unequal-b.data";
@@ -714,9 +713,9 @@ int main(int argc, char** argv) {
     constexpr unsigned kDefragKeys = 12000;
     CreateDataFile(defrag_crash_path, 128ULL * 1024 * 1024);
     {
-      ::setenv("KEYLANE_CRASH_POINT", "defrag-source-retired", 1);
+      ::setenv("LAVIK_CRASH_POINT", "defrag-source-retired", 1);
       ServerProcess server(argv[1], port, {defrag_crash_path}, log_path, 60000);
-      ::unsetenv("KEYLANE_CRASH_POINT");
+      ::unsetenv("LAVIK_CRASH_POINT");
       RespClient client = Connect(port);
       const std::string small_value(2000, 'd');
       for (unsigned i = 0; i < kDefragKeys; ++i) {
@@ -810,7 +809,7 @@ int main(int argc, char** argv) {
     std::cerr << error.what() << '\n';
     const std::string log = ReadFile(log_path);
     if (!log.empty()) {
-      std::cerr << "--- Keylane log ---\n" << log;
+      std::cerr << "--- Lavik log ---\n" << log;
     }
     (void)::unlink(data_path.c_str());
     (void)::unlink(unequal_path_a.c_str());

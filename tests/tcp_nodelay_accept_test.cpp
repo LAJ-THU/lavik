@@ -224,8 +224,8 @@ class AcceptUnixService final : public Service {
 
 std::filesystem::path MakeSecureUnixTestDirectory(std::string_view suffix) {
   const std::filesystem::path directory =
-      keylane::test::TestDataDirectory() /
-      ("keylane-bycorf-uds-" + std::to_string(::getpid()) + "-" +
+      lavik::test::TestDataDirectory() /
+      ("lavik-bycorf-uds-" + std::to_string(::getpid()) + "-" +
        std::string(suffix));
   std::filesystem::remove_all(directory);
   std::filesystem::create_directory(directory);

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/storage/buffer_pool.h"
+#include "lavik/storage/buffer_pool.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -26,7 +26,7 @@
 #include "bycorf/runtime/worker.h"
 #include "gtest/gtest.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 class BufferPoolWaitService final : public bycorf::Service {
@@ -195,4 +195,4 @@ TEST(BufferPoolTest, StorageWriteBufferWaiterIsReusable) {
 }
 
 }  // namespace
-}  // namespace keylane::storage
+}  // namespace lavik::storage

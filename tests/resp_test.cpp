@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/resp.h"
+#include "lavik/resp.h"
 
 #include <gtest/gtest.h>
 
@@ -23,9 +23,9 @@
 #include <string_view>
 #include <vector>
 
-#include "keylane/memory.h"
+#include "lavik/memory.h"
 
-namespace keylane {
+namespace lavik {
 namespace {
 
 TEST(RespParserTest, AcceptsMoreThan1024ArrayElements) {
@@ -357,4 +357,4 @@ TEST(ClusterErrorTest, MessageBuildersMatchBuilderForms) {
 }
 
 }  // namespace
-}  // namespace keylane
+}  // namespace lavik

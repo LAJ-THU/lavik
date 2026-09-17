@@ -237,7 +237,7 @@ RespClient Connect(std::uint16_t port) {
     ::close(fd);
     std::this_thread::sleep_for(10ms);
   }
-  Fail("timed out connecting to Keylane");
+  Fail("timed out connecting to Lavik");
 }
 
 RespClient ConnectReady(std::uint16_t port) {
@@ -253,7 +253,7 @@ RespClient ConnectReady(std::uint16_t port) {
     }
     std::this_thread::sleep_for(10ms);
   }
-  Fail("timed out waiting for Keylane readiness");
+  Fail("timed out waiting for Lavik readiness");
 }
 
 class ServerProcess {
@@ -315,14 +315,14 @@ class ServerProcess {
       if (result == pid_) {
         pid_ = -1;
         if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-          Fail("Keylane exited unsuccessfully");
+          Fail("Lavik exited unsuccessfully");
         }
         return;
       }
       if (result < 0) Fail("waitpid failed");
       std::this_thread::sleep_for(10ms);
     }
-    Fail("Keylane did not stop");
+    Fail("Lavik did not stop");
   }
 
  private:
@@ -457,14 +457,14 @@ void PairReader(std::uint16_t port) {
 
 int main(int argc, char** argv) {
   if (argc != 2) {
-    std::cerr << "usage: atomicity_stress_e2e_test /path/to/keylane\n";
+    std::cerr << "usage: atomicity_stress_e2e_test /path/to/lavik\n";
     return 1;
   }
   const std::string suffix = std::to_string(::getpid());
   const std::string data_path =
-      keylane::test::TestDataPath("keylane-stress-" + suffix + ".data");
+      lavik::test::TestDataPath("lavik-stress-" + suffix + ".data");
   const std::string log_path =
-      keylane::test::TestDataPath("keylane-stress-" + suffix + ".log");
+      lavik::test::TestDataPath("lavik-stress-" + suffix + ".log");
   (void)::unlink(data_path.c_str());
   (void)::unlink(log_path.c_str());
 
@@ -525,7 +525,7 @@ int main(int argc, char** argv) {
       }
     }
   } catch (const std::exception& error) {
-    std::cerr << error.what() << "\n--- Keylane log ---\n"
+    std::cerr << error.what() << "\n--- Lavik log ---\n"
               << ReadFile(log_path) << std::flush;
     exit_code = 1;
   }

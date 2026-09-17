@@ -29,30 +29,30 @@
 
 #include "absl/status/status.h"
 #include "gtest/gtest.h"
-#include "keylane/cluster/control_protocol.h"
-#include "keylane/meta/audit_store.h"
-#include "keylane/meta/commands.h"
-#include "keylane/meta/encoding.h"
-#include "keylane/meta/hash.h"
-#include "keylane/meta/operation_store.h"
-#include "keylane/meta/topology_store.h"
+#include "lavik/cluster/control_protocol.h"
+#include "lavik/meta/audit_store.h"
+#include "lavik/meta/commands.h"
+#include "lavik/meta/encoding.h"
+#include "lavik/meta/hash.h"
+#include "lavik/meta/operation_store.h"
+#include "lavik/meta/topology_store.h"
 
 namespace {
 
-using keylane::meta::MetaAuditPolicy;
-using keylane::meta::MetaAuditRecord;
-using keylane::meta::MetaAuditStore;
-using keylane::meta::MetaAuditVerdict;
-using keylane::meta::MetaFailureClass;
-using keylane::meta::MetaFailureClassOf;
-using keylane::meta::MetaHash256;
+using lavik::meta::MetaAuditPolicy;
+using lavik::meta::MetaAuditRecord;
+using lavik::meta::MetaAuditStore;
+using lavik::meta::MetaAuditVerdict;
+using lavik::meta::MetaFailureClass;
+using lavik::meta::MetaFailureClassOf;
+using lavik::meta::MetaHash256;
 
 MetaAuditRecord MakeAuditRecord(
     std::uint64_t index, std::string summary = "CreateGroup(g1)",
     MetaAuditVerdict verdict = MetaAuditVerdict::kAccepted) {
   MetaAuditRecord record;
   record.log_index_ = index;
-  record.actor_principal_ = "keylane://operator/alice";
+  record.actor_principal_ = "lavik://operator/alice";
   record.command_summary_ = std::move(summary);
   record.verdict_ = verdict;
   record.verdict_detail_ =
@@ -127,7 +127,7 @@ TEST(MetaAuditStore, RejectsOverCapFields) {
   MetaAuditStore store;
   MetaAuditRecord record = MakeAuditRecord(1);
   record.command_summary_ =
-      std::string(keylane::meta::kMaxMetaAuditSummaryBytes + 1, 'x');
+      std::string(lavik::meta::kMaxMetaAuditSummaryBytes + 1, 'x');
   const absl::Status status = store.Append(record);
   ASSERT_FALSE(status.ok());
   EXPECT_EQ(MetaFailureClassOf(status), MetaFailureClass::kDomainReject);
@@ -178,7 +178,7 @@ TEST(MetaAuditStore, ExportContainsCompleteOrderedRecords) {
   }
   const auto bytes = store.ExportThrough(2);
   ASSERT_TRUE(bytes.ok()) << bytes.status();
-  const auto decoded = keylane::meta::DecodeMetaAuditExport(*bytes);
+  const auto decoded = lavik::meta::DecodeMetaAuditExport(*bytes);
   ASSERT_TRUE(decoded.ok()) << decoded.status();
   ASSERT_EQ(decoded->records_.size(), 2);
   // Each export is independently readable and includes complete records.
@@ -204,25 +204,25 @@ TEST(MetaAuditStore, PrunePreservesRemainingRecords) {
 }
 
 TEST(MetaOperationStore, PruneArchiveFreesCapacityAfterExternalExport) {
-  keylane::meta::MetaOperationStore store(/*max_active=*/4,
-                                          /*max_archived=*/1);
-  keylane::meta::SubmitOperation submit;
+  lavik::meta::MetaOperationStore store(/*max_active=*/4,
+                                        /*max_archived=*/1);
+  lavik::meta::SubmitOperation submit;
   submit.operation_id_[0] = 1;
   submit.kind_ = "test";
   submit.intent_hash_[0] = 9;
   ASSERT_TRUE(store.SubmitOperation(submit, /*operation_seq=*/10).ok());
-  keylane::meta::CompleteOperation complete;
+  lavik::meta::CompleteOperation complete;
   complete.operation_id_ = submit.operation_id_;
   complete.expected_revision_ = 0;
   complete.result_ = "done";
   ASSERT_TRUE(store.CompleteOperation(complete).ok());
-  keylane::meta::ArchiveOperations archive;
+  lavik::meta::ArchiveOperations archive;
   archive.operation_seqs_ = {10};
   ASSERT_TRUE(store.ArchiveOperations(archive).ok());
   ASSERT_EQ(store.ArchivedCount(), 1u);
   ASSERT_TRUE(store.ExportArchive().ok());
 
-  keylane::meta::PruneOperationArchive prune;
+  lavik::meta::PruneOperationArchive prune;
   prune.operation_seqs_ = {10};
   EXPECT_TRUE(store.PruneArchive(prune).ok());
   EXPECT_EQ(store.ArchivedCount(), 0u);
@@ -297,10 +297,10 @@ TEST(MetaAuditStore, DeserializeRejectsMalformedEncoding) {
 // MetaTopologyAuthority: per-group term, grant, and fencing.
 // ---------------------------------------------------------------------------
 
-using keylane::meta::ActivateAuthority;
-using keylane::meta::BeginGroupTerm;
-using keylane::meta::MetaFailoverActionId;
-using keylane::meta::MetaTopologyStore;
+using lavik::meta::ActivateAuthority;
+using lavik::meta::BeginGroupTerm;
+using lavik::meta::MetaFailoverActionId;
+using lavik::meta::MetaTopologyStore;
 
 BeginGroupTerm MakeBeginTerm(std::string group_id, std::uint64_t expected,
                              std::uint64_t new_term) {
@@ -337,7 +337,7 @@ TEST(MetaTopologyAuthority, CommandsOnUnknownGroupReject) {
 TEST(MetaTopologyAuthority, BeginGroupTermPromotesOnceAndFences) {
   MetaTopologyStore store;
   ASSERT_TRUE(store
-                  .Apply(keylane::meta::CreateGroup{
+                  .Apply(lavik::meta::CreateGroup{
                       .group_id_ = "g1",
                       .new_topology_epoch_ = store.TopologyEpoch() + 1})
                   .ok());
@@ -365,7 +365,7 @@ TEST(MetaTopologyAuthority, BeginGroupTermPromotesOnceAndFences) {
 TEST(MetaTopologyAuthority, ActivateInstallsGrantWithoutMovingTerm) {
   MetaTopologyStore store;
   ASSERT_TRUE(store
-                  .Apply(keylane::meta::CreateGroup{
+                  .Apply(lavik::meta::CreateGroup{
                       .group_id_ = "g1",
                       .new_topology_epoch_ = store.TopologyEpoch() + 1})
                   .ok());
@@ -386,7 +386,7 @@ TEST(MetaTopologyAuthority,
      ActivationActionIdentityIsInstalledPreservedAndCleared) {
   MetaTopologyStore store;
   ASSERT_TRUE(store
-                  .Apply(keylane::meta::CreateGroup{
+                  .Apply(lavik::meta::CreateGroup{
                       .group_id_ = "g1",
                       .new_topology_epoch_ = store.TopologyEpoch() + 1})
                   .ok());
@@ -421,7 +421,7 @@ TEST(MetaTopologyAuthority,
 TEST(MetaTopologyAuthority, RejectsZeroPresentActivationActionIdentity) {
   MetaTopologyStore store;
   ASSERT_TRUE(store
-                  .Apply(keylane::meta::CreateGroup{
+                  .Apply(lavik::meta::CreateGroup{
                       .group_id_ = "g1",
                       .new_topology_epoch_ = store.TopologyEpoch() + 1})
                   .ok());
@@ -437,7 +437,7 @@ TEST(MetaTopologyAuthority, RejectsZeroPresentActivationActionIdentity) {
 TEST(MetaTopologyAuthority, ActivateRejectsZeroServingTerm) {
   MetaTopologyStore store;
   ASSERT_TRUE(store
-                  .Apply(keylane::meta::CreateGroup{
+                  .Apply(lavik::meta::CreateGroup{
                       .group_id_ = "g1",
                       .new_topology_epoch_ = store.TopologyEpoch() + 1})
                   .ok());
@@ -451,7 +451,7 @@ TEST(MetaTopologyAuthority, ActivateRejectsZeroServingTerm) {
 TEST(MetaTopologyAuthority, ActivateWithStaleTermRejects) {
   MetaTopologyStore store;
   ASSERT_TRUE(store
-                  .Apply(keylane::meta::CreateGroup{
+                  .Apply(lavik::meta::CreateGroup{
                       .group_id_ = "g1",
                       .new_topology_epoch_ = store.TopologyEpoch() + 1})
                   .ok());
@@ -469,7 +469,7 @@ TEST(MetaTopologyAuthority, ActivateWithStaleTermRejects) {
 TEST(MetaTopologyAuthority, EachTermInstallsAtMostOneGrant) {
   MetaTopologyStore store;
   ASSERT_TRUE(store
-                  .Apply(keylane::meta::CreateGroup{
+                  .Apply(lavik::meta::CreateGroup{
                       .group_id_ = "g1",
                       .new_topology_epoch_ = store.TopologyEpoch() + 1})
                   .ok());
@@ -500,7 +500,7 @@ TEST(MetaTopologyAuthority, EachTermInstallsAtMostOneGrant) {
 TEST(MetaTopologyAuthority, FactQueriesTrackGrantState) {
   MetaTopologyStore store;
   ASSERT_TRUE(store
-                  .Apply(keylane::meta::CreateGroup{
+                  .Apply(lavik::meta::CreateGroup{
                       .group_id_ = "g1",
                       .new_topology_epoch_ = store.TopologyEpoch() + 1})
                   .ok());
@@ -522,14 +522,14 @@ TEST(MetaTopologyAuthority, FactQueriesTrackGrantState) {
 // tombstone archival.
 // ---------------------------------------------------------------------------
 
-using keylane::meta::AbortOperation;
-using keylane::meta::ArchiveOperations;
-using keylane::meta::CompleteOperation;
-using keylane::meta::MetaOperationId;
-using keylane::meta::MetaOperationLifecycle;
-using keylane::meta::MetaOperationStore;
-using keylane::meta::SubmitOperation;
-using keylane::meta::TransitionOperationPhase;
+using lavik::meta::AbortOperation;
+using lavik::meta::ArchiveOperations;
+using lavik::meta::CompleteOperation;
+using lavik::meta::MetaOperationId;
+using lavik::meta::MetaOperationLifecycle;
+using lavik::meta::MetaOperationStore;
+using lavik::meta::SubmitOperation;
+using lavik::meta::TransitionOperationPhase;
 
 MetaOperationId MakeOperationId(std::uint8_t tag) {
   MetaOperationId id{};
@@ -551,11 +551,10 @@ SubmitOperation MakeSubmit(const MetaOperationId& id, std::uint8_t intent_tag,
   cmd.intent_ = "intent-bytes";
   cmd.intent_hash_ = MakeIntentHash(intent_tag);
   cmd.replication_history_id_.fill(22);
-  cmd.actor_.principal_ = "keylane://operator/alice";
+  cmd.actor_.principal_ = "lavik://operator/alice";
   cmd.actor_.readable_time_ = "2026-09-04T17:00:00Z";
   return cmd;
 }
-
 
 TEST(MetaOperationStore, SubmitCreatesSubmittedRecordKeyedByClientId) {
   MetaOperationStore store;
@@ -575,14 +574,14 @@ TEST(MetaOperationStore, SubmitCreatesSubmittedRecordKeyedByClientId) {
   EXPECT_EQ(record->intent_hash_, MakeIntentHash(42));
   EXPECT_EQ(record->lifecycle_, MetaOperationLifecycle::kSubmitted);
   EXPECT_EQ(record->revision_, 0);
-  EXPECT_EQ(record->actor_.principal_, "keylane://operator/alice");
+  EXPECT_EQ(record->actor_.principal_, "lavik://operator/alice");
   // The seq index resolves the same record.
   ASSERT_TRUE(store.FindOperationBySeq(100).has_value());
   EXPECT_EQ(store.FindOperationBySeq(100)->operation_id_, id);
   EXPECT_EQ(store.ActiveCount(), 1);
   EXPECT_TRUE(store.HasActiveKind("failover"));
   EXPECT_FALSE(
-      store.HasActiveKind(keylane::meta::kMetaClusterCreateOperationKind));
+      store.HasActiveKind(lavik::meta::kMetaClusterCreateOperationKind));
   EXPECT_TRUE(store.OperationKnown(id));
   EXPECT_FALSE(store.OperationKnown(MakeOperationId(9)));
 }
@@ -612,7 +611,7 @@ TEST(MetaOperationStore, DirectiveRevisionTracksOnlySemanticChanges) {
   const MetaOperationId id = MakeOperationId(1);
   ASSERT_TRUE(store.SubmitOperation(MakeSubmit(id, 42), 100).ok());
 
-  keylane::meta::MetaDirectiveSpec directive;
+  lavik::meta::MetaDirectiveSpec directive;
   directive.directive_id_.fill(1);
   directive.attempt_id_.fill(2);
   directive.assignment_id_.fill(3);
@@ -627,16 +626,16 @@ TEST(MetaOperationStore, DirectiveRevisionTracksOnlySemanticChanges) {
   directive.group_term_ = 7;
   directive.partition_replication_epoch_ = 10;
   directive.kind_ = "rebuild";
-  directive.payload_ = *keylane::cluster::control::EncodeRebuildRequest({3});
+  directive.payload_ = *lavik::cluster::control::EncodeRebuildRequest({3});
 
   TransitionOperationPhase first;
   first.operation_id_ = id;
-  keylane::meta::MetaDirectiveSpec ambiguous = directive;
+  lavik::meta::MetaDirectiveSpec ambiguous = directive;
   ambiguous.directive_id_.fill(10);
   first.current_directives_ = {directive, ambiguous};
   EXPECT_EQ(MetaFailureClassOf(store.TransitionOperationPhase(first, 101)),
             MetaFailureClass::kDomainReject);
-  keylane::meta::MetaDirectiveSpec misrouted = directive;
+  lavik::meta::MetaDirectiveSpec misrouted = directive;
   misrouted.recipient_node_id_ = misrouted.source_node_id_;
   first.current_directives_ = {misrouted};
   EXPECT_EQ(MetaFailureClassOf(store.TransitionOperationPhase(first, 101)),
@@ -681,7 +680,7 @@ TEST(MetaOperationStore,
   const MetaOperationId id = MakeOperationId(1);
   ASSERT_TRUE(store.SubmitOperation(MakeSubmit(id, 42), 100).ok());
 
-  keylane::meta::MetaDirectiveSpec directive;
+  lavik::meta::MetaDirectiveSpec directive;
   directive.directive_id_.fill(1);
   directive.attempt_id_.fill(2);
   directive.recipient_node_id_ = std::string(40, 'b');
@@ -698,13 +697,13 @@ TEST(MetaOperationStore,
   directive.group_term_ = 7;
   directive.partition_replication_epoch_ = 10;
   directive.kind_ = "authorize-source";
-  directive.payload_ = *keylane::cluster::control::EncodeRebuildRequest({3});
+  directive.payload_ = *lavik::cluster::control::EncodeRebuildRequest({3});
   TransitionOperationPhase transition;
   transition.operation_id_ = id;
   transition.current_directives_ = {directive};
   ASSERT_TRUE(store.TransitionOperationPhase(transition, 101).ok());
 
-  keylane::meta::CommitDirectiveResult commit;
+  lavik::meta::CommitDirectiveResult commit;
   commit.operation_id_ = id;
   commit.directive_id_ = directive.directive_id_;
   commit.attempt_id_ = directive.attempt_id_;
@@ -712,13 +711,13 @@ TEST(MetaOperationStore,
   commit.recipient_node_id_ = directive.recipient_node_id_;
   commit.recipient_boot_id_ = directive.source_boot_id_;
   commit.assignment_id_ = directive.assignment_id_;
-  commit.status_ = keylane::meta::MetaDirectiveResultStatus::kSucceeded;
+  commit.status_ = lavik::meta::MetaDirectiveResultStatus::kSucceeded;
   commit.result_ = "installed";
   auto wrong_role_boot = commit;
   wrong_role_boot.recipient_boot_id_ = directive.target_boot_id_;
-  EXPECT_EQ(keylane::meta::MetaFailureClassOf(
+  EXPECT_EQ(lavik::meta::MetaFailureClassOf(
                 store.CommitDirectiveResult(wrong_role_boot, 102)),
-            keylane::meta::MetaFailureClass::kDomainReject);
+            lavik::meta::MetaFailureClass::kDomainReject);
   ASSERT_TRUE(store.CommitDirectiveResult(commit, 102).ok());
   ASSERT_EQ(store.FindOperation(id)->revision_, 2u);
 
@@ -732,8 +731,8 @@ TEST(MetaOperationStore,
       MetaFailureClassOf(store.TransitionOperationPhase(stale_transition, 103)),
       MetaFailureClass::kDomainReject);
 
-  const keylane::meta::MetaTerminalReceiptKey key{id, directive.directive_id_,
-                                                  directive.attempt_id_, 101};
+  const lavik::meta::MetaTerminalReceiptKey key{id, directive.directive_id_,
+                                                directive.attempt_id_, 101};
   auto receipt = store.FindTerminalReceipt(key);
   ASSERT_TRUE(receipt.has_value());
   EXPECT_EQ(receipt->committed_index_, 102u);
@@ -767,7 +766,7 @@ TEST(MetaOperationStore,
   const MetaOperationId id = MakeOperationId(1);
   ASSERT_TRUE(store.SubmitOperation(MakeSubmit(id, 42), 100).ok());
 
-  keylane::meta::MetaDirectiveSpec directive;
+  lavik::meta::MetaDirectiveSpec directive;
   directive.directive_id_.fill(1);
   directive.attempt_id_.fill(2);
   directive.recipient_node_id_ = std::string(40, 'a');
@@ -782,13 +781,13 @@ TEST(MetaOperationStore,
   directive.group_term_ = 7;
   directive.partition_replication_epoch_ = 10;
   directive.kind_ = "rebuild";
-  directive.payload_ = *keylane::cluster::control::EncodeRebuildRequest({3});
+  directive.payload_ = *lavik::cluster::control::EncodeRebuildRequest({3});
   TransitionOperationPhase transition;
   transition.operation_id_ = id;
   transition.current_directives_ = {directive};
   ASSERT_TRUE(store.TransitionOperationPhase(transition, 101).ok());
 
-  keylane::meta::CommitDirectiveResult commit;
+  lavik::meta::CommitDirectiveResult commit;
   commit.operation_id_ = id;
   commit.directive_id_ = directive.directive_id_;
   commit.attempt_id_ = directive.attempt_id_;
@@ -796,37 +795,36 @@ TEST(MetaOperationStore,
   commit.recipient_node_id_ = directive.recipient_node_id_;
   commit.recipient_boot_id_ = directive.target_boot_id_;
   commit.assignment_id_ = directive.assignment_id_;
-  commit.status_ = keylane::meta::MetaDirectiveResultStatus::kSucceeded;
+  commit.status_ = lavik::meta::MetaDirectiveResultStatus::kSucceeded;
   commit.result_ = "installed";
   ASSERT_TRUE(store.CommitDirectiveResult(commit, 102).ok());
   EXPECT_EQ(store.FindOperation(id)->revision_, 2u);
 
-  keylane::meta::CommitDirectiveResult conflict = commit;
+  lavik::meta::CommitDirectiveResult conflict = commit;
   // An attempt has one immutable result, even without a result digest.
   conflict.result_ = "different terminal result";
-  EXPECT_EQ(keylane::meta::MetaFailureClassOf(
+  EXPECT_EQ(lavik::meta::MetaFailureClassOf(
                 store.CommitDirectiveResult(conflict, 103)),
-            keylane::meta::MetaFailureClass::kDomainReject);
+            lavik::meta::MetaFailureClass::kDomainReject);
   EXPECT_EQ(store.FindOperation(id)->terminal_receipts_.front().result_,
             "installed");
   conflict = commit;
-  conflict.status_ = keylane::meta::MetaDirectiveResultStatus::kFailed;
-  EXPECT_EQ(keylane::meta::MetaFailureClassOf(
+  conflict.status_ = lavik::meta::MetaDirectiveResultStatus::kFailed;
+  EXPECT_EQ(lavik::meta::MetaFailureClassOf(
                 store.CommitDirectiveResult(conflict, 103)),
-            keylane::meta::MetaFailureClass::kDomainReject);
+            lavik::meta::MetaFailureClass::kDomainReject);
 
-  const keylane::meta::MetaTerminalReceiptKey key{id, directive.directive_id_,
-                                                  directive.attempt_id_, 101};
-  keylane::meta::PruneTerminalReceipts prune;
+  const lavik::meta::MetaTerminalReceiptKey key{id, directive.directive_id_,
+                                                directive.attempt_id_, 101};
+  lavik::meta::PruneTerminalReceipts prune;
   prune.receipts_ = {key};
-  keylane::meta::PruneTerminalReceipts missing_directive = prune;
+  lavik::meta::PruneTerminalReceipts missing_directive = prune;
   missing_directive.receipts_[0].directive_id_.fill(0);
-  EXPECT_EQ(keylane::meta::MetaFailureClassOf(
+  EXPECT_EQ(lavik::meta::MetaFailureClassOf(
                 store.PruneTerminalReceipts(missing_directive)),
-            keylane::meta::MetaFailureClass::kDomainReject);
-  EXPECT_EQ(
-      keylane::meta::MetaFailureClassOf(store.PruneTerminalReceipts(prune)),
-      keylane::meta::MetaFailureClass::kDomainReject);
+            lavik::meta::MetaFailureClass::kDomainReject);
+  EXPECT_EQ(lavik::meta::MetaFailureClassOf(store.PruneTerminalReceipts(prune)),
+            lavik::meta::MetaFailureClass::kDomainReject);
   EXPECT_TRUE(store.FindTerminalReceipt(key).has_value());
 
   CompleteOperation complete;
@@ -839,8 +837,8 @@ TEST(MetaOperationStore,
   ASSERT_TRUE(store.PruneTerminalReceipts(prune).ok());
   EXPECT_FALSE(store.FindTerminalReceipt(key).has_value());
   const absl::Status replay = store.CommitDirectiveResult(commit, 104);
-  EXPECT_EQ(keylane::meta::MetaFailureClassOf(replay),
-            keylane::meta::MetaFailureClass::kDomainReject);
+  EXPECT_EQ(lavik::meta::MetaFailureClassOf(replay),
+            lavik::meta::MetaFailureClass::kDomainReject);
   EXPECT_NE(replay.message().find("no longer tracked"), std::string_view::npos);
   ASSERT_TRUE(store.PruneTerminalReceipts(prune).ok());
 }
@@ -851,7 +849,7 @@ TEST(MetaOperationStore, TerminalReceiptRetentionIsBoundedPerOperation) {
   const MetaOperationId id = MakeOperationId(1);
   ASSERT_TRUE(store.SubmitOperation(MakeSubmit(id, 42), 100).ok());
 
-  keylane::meta::MetaDirectiveSpec first;
+  lavik::meta::MetaDirectiveSpec first;
   first.directive_id_.fill(1);
   first.attempt_id_.fill(2);
   first.recipient_node_id_ = std::string(40, 'a');
@@ -866,8 +864,8 @@ TEST(MetaOperationStore, TerminalReceiptRetentionIsBoundedPerOperation) {
   first.group_term_ = 7;
   first.partition_replication_epoch_ = 10;
   first.kind_ = "rebuild";
-  first.payload_ = *keylane::cluster::control::EncodeRebuildRequest({3});
-  keylane::meta::MetaDirectiveSpec second = first;
+  first.payload_ = *lavik::cluster::control::EncodeRebuildRequest({3});
+  lavik::meta::MetaDirectiveSpec second = first;
   second.directive_id_.fill(10);
   second.attempt_id_.fill(11);
   second.target_node_id_ = std::string(40, 'c');
@@ -879,8 +877,8 @@ TEST(MetaOperationStore, TerminalReceiptRetentionIsBoundedPerOperation) {
   transition.current_directives_ = {first, second};
   ASSERT_TRUE(store.TransitionOperationPhase(transition, 101).ok());
 
-  const auto make_result = [&](const keylane::meta::MetaDirectiveSpec& spec) {
-    keylane::meta::CommitDirectiveResult result;
+  const auto make_result = [&](const lavik::meta::MetaDirectiveSpec& spec) {
+    lavik::meta::CommitDirectiveResult result;
     result.operation_id_ = id;
     result.directive_id_ = spec.directive_id_;
     result.attempt_id_ = spec.attempt_id_;
@@ -891,9 +889,9 @@ TEST(MetaOperationStore, TerminalReceiptRetentionIsBoundedPerOperation) {
     return result;
   };
   ASSERT_TRUE(store.CommitDirectiveResult(make_result(first), 102).ok());
-  EXPECT_EQ(keylane::meta::MetaFailureClassOf(
+  EXPECT_EQ(lavik::meta::MetaFailureClassOf(
                 store.CommitDirectiveResult(make_result(second), 103)),
-            keylane::meta::MetaFailureClass::kDomainReject);
+            lavik::meta::MetaFailureClass::kDomainReject);
   EXPECT_TRUE(store.CommitDirectiveResult(make_result(first), 104)
                   .ok());  // replay bypasses capacity
 }
@@ -1069,7 +1067,7 @@ TEST(MetaOperationStore, ArchiveMovesTerminalOpsToTombstonesNonContiguously) {
   ASSERT_TRUE(tombstone.has_value());
   EXPECT_EQ(tombstone->operation_seq_, 100);
   EXPECT_EQ(tombstone->intent_hash_, MakeIntentHash(1));
-  EXPECT_EQ(tombstone->actor_.principal_, "keylane://operator/alice");
+  EXPECT_EQ(tombstone->actor_.principal_, "lavik://operator/alice");
   EXPECT_EQ(tombstone->terminal_lifecycle_, MetaOperationLifecycle::kCompleted);
   EXPECT_EQ(tombstone->terminal_result_, "done-a");
   EXPECT_TRUE(tombstone->data_loss_possible_);
@@ -1192,7 +1190,6 @@ TEST(MetaOperationStore, LiveRecordBoundFailsSafe) {
       store.SubmitOperation(MakeSubmit(MakeOperationId(4), 4), 104).ok());
 }
 
-
 TEST(MetaOperationStore, ReusedOrZeroSeqFailsStop) {
   MetaOperationStore store;
   ASSERT_TRUE(
@@ -1215,7 +1212,7 @@ TEST(MetaOperationStore, ExportArchiveDrainsSummaries) {
   ASSERT_TRUE(store.ArchiveOperations(MakeArchive({100})).ok());
   const auto bytes = store.ExportArchive();
   ASSERT_TRUE(bytes.ok()) << bytes.status();
-  const auto decoded = keylane::meta::DecodeMetaOperationArchiveExport(*bytes);
+  const auto decoded = lavik::meta::DecodeMetaOperationArchiveExport(*bytes);
   ASSERT_TRUE(decoded.ok()) << decoded.status();
   ASSERT_EQ(decoded->summaries_.size(), 1);
   EXPECT_EQ(decoded->summaries_[0], *store.FindArchived(id));

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/monitor.h"
+#include "lavik/monitor.h"
 
 #include <poll.h>
 #include <sys/socket.h>
@@ -39,18 +39,18 @@
 #include "bycorf/runtime/cross_core.h"
 #include "bycorf/runtime/sync.h"
 #include "bycorf/runtime/worker.h"
-#include "keylane/command.h"
-#include "keylane/command_table.h"
-#include "keylane/session.h"
+#include "lavik/command.h"
+#include "lavik/command_table.h"
+#include "lavik/session.h"
 
-namespace keylane {
+namespace lavik {
 using namespace bycorf;
 
 namespace {
 
 // These protect a worker from aggregate queued monitor output and a single
 // connection from an excessive number of tiny messages. They intentionally
-// mirror the two-dimensional shape of Keylane's other bounded queues.
+// mirror the two-dimensional shape of Lavik's other bounded queues.
 constexpr std::size_t kWorkerMonitorBufferLimit = 128ULL * 1024 * 1024;
 constexpr std::size_t kMonitorQueueLimit = 10'000;
 constexpr auto kPeerCheckInterval = std::chrono::milliseconds(250);
@@ -338,4 +338,4 @@ Task<absl::Status> StreamMonitorMessages(
   co_return absl::OkStatus();
 }
 
-}  // namespace keylane
+}  // namespace lavik

@@ -22,10 +22,10 @@
 
 #include "absl/status/status.h"
 #include "gtest/gtest.h"
-#include "keylane/meta/cluster_create.h"
-#include "keylane/meta/cluster_status.h"
+#include "lavik/meta/cluster_create.h"
+#include "lavik/meta/cluster_status.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
 constexpr std::string_view kNodeA = "0123456789abcdef0123456789abcdef01234567";
@@ -893,4 +893,4 @@ TEST(ClusterCreateOperatorTest,
 }
 
 }  // namespace
-}  // namespace keylane::meta
+}  // namespace lavik::meta

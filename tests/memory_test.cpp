@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/memory.h"
+#include "lavik/memory.h"
 
 #include <gtest/gtest.h>
 
@@ -30,145 +30,143 @@
 TEST(MemoryTest, RetainedAdmissionLeavesTenPercentOutsideRetainedState) {
   constexpr std::uint64_t kInitialLimit = 1024ULL * 1024 * 1024;
   constexpr std::uint64_t kSteadyGrowth = 16ULL * 1024 * 1024;
-  ASSERT_TRUE(keylane::InitMemoryLimit(kInitialLimit, 1).ok());
-  keylane::BindMemoryAccountingShard(0);
-  keylane::RefreshMemoryStats();
-  const std::uint64_t used = keylane::GetMemoryStats().used_bytes_;
+  ASSERT_TRUE(lavik::InitMemoryLimit(kInitialLimit, 1).ok());
+  lavik::BindMemoryAccountingShard(0);
+  lavik::RefreshMemoryStats();
+  const std::uint64_t used = lavik::GetMemoryStats().used_bytes_;
   const std::uint64_t target_steady = used + kSteadyGrowth;
 
   // Solve max - floor(max / 10) >= target_steady without exposing the policy
   // calculation as mutable runtime state.
   std::uint64_t maximum = (target_steady * 10 + 8) / 9;
   while (maximum - maximum / 10 < target_steady) ++maximum;
-  ASSERT_TRUE(keylane::InitMemoryLimit(maximum, 1).ok());
+  ASSERT_TRUE(lavik::InitMemoryLimit(maximum, 1).ok());
   const std::uint64_t steady = maximum - maximum / 10;
   const std::size_t steady_remaining = static_cast<std::size_t>(steady - used);
 
-  EXPECT_FALSE(keylane::WouldExceedMemoryLimit(steady_remaining));
-  EXPECT_TRUE(keylane::WouldExceedMemoryLimit(steady_remaining + 1));
-  auto retained = keylane::TryReserveMemory(steady_remaining);
+  EXPECT_FALSE(lavik::WouldExceedMemoryLimit(steady_remaining));
+  EXPECT_TRUE(lavik::WouldExceedMemoryLimit(steady_remaining + 1));
+  auto retained = lavik::TryReserveMemory(steady_remaining);
   ASSERT_TRUE(retained.has_value());
-  EXPECT_TRUE(keylane::WouldExceedMemoryLimit(1));
-  EXPECT_FALSE(keylane::TryReserveFullSyncMemory(1));
+  EXPECT_TRUE(lavik::WouldExceedMemoryLimit(1));
+  EXPECT_FALSE(lavik::TryReserveFullSyncMemory(1));
 
   // Client buffers have an independent abuse-control quota. At its default 5%,
   // a full client quota still leaves 5% outside both admitted classes.
   {
-    keylane::ClientBufferReservation client;
+    lavik::ClientBufferReservation client;
     EXPECT_TRUE(client.TryAcquire(1));
   }
 
   retained.reset();
-  keylane::BindMemoryAccountingShard(keylane::kMaxMemoryWorkers);
+  lavik::BindMemoryAccountingShard(lavik::kMaxMemoryWorkers);
 }
 
 TEST(MemoryTest, ClientBuffersHaveAWorkerLocalFivePercentLimit) {
   constexpr std::uint64_t kMaximum = 1024ULL * 1024 * 1024;
   constexpr std::size_t kClientCapacity = kMaximum / 20;
-  ASSERT_TRUE(keylane::InitMemoryLimit(kMaximum, 1).ok());
-  keylane::BindMemoryAccountingShard(0);
+  ASSERT_TRUE(lavik::InitMemoryLimit(kMaximum, 1).ok());
+  lavik::BindMemoryAccountingShard(0);
 
   {
-    keylane::ClientBufferReservation reservation;
+    lavik::ClientBufferReservation reservation;
     EXPECT_TRUE(reservation.TryAcquire(kClientCapacity));
     EXPECT_FALSE(reservation.TryAcquire(1));
     EXPECT_EQ(reservation.bytes(), kClientCapacity);
-    EXPECT_EQ(keylane::GetMemoryStats().client_buffered_bytes_,
-              kClientCapacity);
+    EXPECT_EQ(lavik::GetMemoryStats().client_buffered_bytes_, kClientCapacity);
 
     reservation.Release(kClientCapacity - 1);
     EXPECT_TRUE(reservation.TryAcquire(kClientCapacity - 1));
   }
 
-  EXPECT_EQ(keylane::GetMemoryStats().client_buffered_bytes_, 0);
-  keylane::BindMemoryAccountingShard(keylane::kMaxMemoryWorkers);
+  EXPECT_EQ(lavik::GetMemoryStats().client_buffered_bytes_, 0);
+  lavik::BindMemoryAccountingShard(lavik::kMaxMemoryWorkers);
 }
 
 TEST(MemoryTest, TinyLimitsRetainAProtocolRecoveryAllowance) {
-  ASSERT_TRUE(keylane::InitMemoryLimit(1, 1).ok());
-  keylane::BindMemoryAccountingShard(0);
+  ASSERT_TRUE(lavik::InitMemoryLimit(1, 1).ok());
+  lavik::BindMemoryAccountingShard(0);
 
   {
-    keylane::ClientBufferReservation reservation;
+    lavik::ClientBufferReservation reservation;
     EXPECT_TRUE(reservation.TryAcquire(128 * 1024));
     EXPECT_FALSE(reservation.TryAcquire(1));
   }
 
-  keylane::BindMemoryAccountingShard(keylane::kMaxMemoryWorkers);
+  lavik::BindMemoryAccountingShard(lavik::kMaxMemoryWorkers);
 }
 
 TEST(MemoryTest, FullSyncCreditMovesBetweenReservationAndLiveAllocation) {
   constexpr std::uint64_t kMaximum = 1024ULL * 1024 * 1024;
   constexpr std::size_t kReserved = 4 * 1024 * 1024;
   constexpr std::size_t kConsumed = 1024 * 1024;
-  ASSERT_TRUE(keylane::InitMemoryLimit(kMaximum, 1).ok());
-  keylane::BindMemoryAccountingShard(0);
-  const std::uint64_t before =
-      keylane::GetMemoryStats().fullsync_reserved_bytes_;
+  ASSERT_TRUE(lavik::InitMemoryLimit(kMaximum, 1).ok());
+  lavik::BindMemoryAccountingShard(0);
+  const std::uint64_t before = lavik::GetMemoryStats().fullsync_reserved_bytes_;
 
-  ASSERT_TRUE(keylane::TryReserveFullSyncMemory(kReserved));
-  EXPECT_EQ(keylane::GetMemoryStats().fullsync_reserved_bytes_,
+  ASSERT_TRUE(lavik::TryReserveFullSyncMemory(kReserved));
+  EXPECT_EQ(lavik::GetMemoryStats().fullsync_reserved_bytes_,
             before + kReserved);
 
-  keylane::ConsumeFullSyncMemory(kConsumed);
-  EXPECT_EQ(keylane::GetMemoryStats().fullsync_reserved_bytes_,
+  lavik::ConsumeFullSyncMemory(kConsumed);
+  EXPECT_EQ(lavik::GetMemoryStats().fullsync_reserved_bytes_,
             before + kReserved - kConsumed);
 
-  keylane::RestoreFullSyncMemory(kConsumed);
-  EXPECT_EQ(keylane::GetMemoryStats().fullsync_reserved_bytes_,
+  lavik::RestoreFullSyncMemory(kConsumed);
+  EXPECT_EQ(lavik::GetMemoryStats().fullsync_reserved_bytes_,
             before + kReserved);
 
-  keylane::ReleaseFullSyncMemory(kReserved);
-  EXPECT_EQ(keylane::GetMemoryStats().fullsync_reserved_bytes_, before);
-  keylane::BindMemoryAccountingShard(keylane::kMaxMemoryWorkers);
+  lavik::ReleaseFullSyncMemory(kReserved);
+  EXPECT_EQ(lavik::GetMemoryStats().fullsync_reserved_bytes_, before);
+  lavik::BindMemoryAccountingShard(lavik::kMaxMemoryWorkers);
 }
 
 TEST(MemoryTest, ClientBufferLimitAcceptsPercentAbsoluteAndDisabledModes) {
   constexpr std::uint64_t kMaximum = 1024ULL * 1024 * 1024;
-  keylane::BindMemoryAccountingShard(keylane::kMaxMemoryWorkers);
+  lavik::BindMemoryAccountingShard(lavik::kMaxMemoryWorkers);
 
-  ASSERT_TRUE(keylane::InitMemoryLimit(
+  ASSERT_TRUE(lavik::InitMemoryLimit(
                   kMaximum, 1,
-                  keylane::ClientBufferLimit{.value_ = 1, .percentage_ = true})
+                  lavik::ClientBufferLimit{.value_ = 1, .percentage_ = true})
                   .ok());
-  keylane::BindMemoryAccountingShard(0);
+  lavik::BindMemoryAccountingShard(0);
   {
-    keylane::ClientBufferReservation reservation;
+    lavik::ClientBufferReservation reservation;
     const std::size_t capacity = kMaximum / 100;
     EXPECT_TRUE(reservation.TryAcquire(capacity));
     EXPECT_FALSE(reservation.TryAcquire(1));
-    EXPECT_EQ(keylane::GetMemoryStats().client_buffer_limit_bytes_, capacity);
+    EXPECT_EQ(lavik::GetMemoryStats().client_buffer_limit_bytes_, capacity);
   }
 
-  keylane::BindMemoryAccountingShard(keylane::kMaxMemoryWorkers);
+  lavik::BindMemoryAccountingShard(lavik::kMaxMemoryWorkers);
   ASSERT_TRUE(
-      keylane::InitMemoryLimit(kMaximum, 1,
-                               keylane::ClientBufferLimit{.value_ = 256 * 1024,
-                                                          .percentage_ = false})
+      lavik::InitMemoryLimit(
+          kMaximum, 1,
+          lavik::ClientBufferLimit{.value_ = 256 * 1024, .percentage_ = false})
           .ok());
-  keylane::BindMemoryAccountingShard(0);
+  lavik::BindMemoryAccountingShard(0);
   {
-    keylane::ClientBufferReservation reservation;
+    lavik::ClientBufferReservation reservation;
     EXPECT_TRUE(reservation.TryAcquire(256 * 1024));
     EXPECT_FALSE(reservation.TryAcquire(1));
   }
 
-  keylane::BindMemoryAccountingShard(keylane::kMaxMemoryWorkers);
-  ASSERT_TRUE(keylane::InitMemoryLimit(
+  lavik::BindMemoryAccountingShard(lavik::kMaxMemoryWorkers);
+  ASSERT_TRUE(lavik::InitMemoryLimit(
                   kMaximum, 1,
-                  keylane::ClientBufferLimit{.value_ = 0, .percentage_ = false})
+                  lavik::ClientBufferLimit{.value_ = 0, .percentage_ = false})
                   .ok());
-  keylane::BindMemoryAccountingShard(0);
+  lavik::BindMemoryAccountingShard(0);
   {
-    keylane::ClientBufferReservation reservation;
+    lavik::ClientBufferReservation reservation;
     EXPECT_TRUE(reservation.TryAcquire(kMaximum));
-    EXPECT_EQ(keylane::GetMemoryStats().client_buffer_limit_bytes_, 0);
+    EXPECT_EQ(lavik::GetMemoryStats().client_buffer_limit_bytes_, 0);
   }
-  keylane::BindMemoryAccountingShard(keylane::kMaxMemoryWorkers);
+  lavik::BindMemoryAccountingShard(lavik::kMaxMemoryWorkers);
 }
 
 TEST(MemoryTest, CrossWorkerRetainedReleaseReturnsBytesToExplicitOrigin) {
-  ASSERT_TRUE(keylane::InitMemoryLimit(1024ULL * 1024 * 1024, 2).ok());
+  ASSERT_TRUE(lavik::InitMemoryLimit(1024ULL * 1024 * 1024, 2).ok());
 
   std::mutex mutex;
   std::condition_variable ready;
@@ -182,32 +180,32 @@ TEST(MemoryTest, CrossWorkerRetainedReleaseReturnsBytesToExplicitOrigin) {
   std::int64_t releaser_after = 0;
 
   std::thread owner([&] {
-    keylane::BindMemoryAccountingShard(0);
-    const unsigned owner_shard = keylane::CurrentMemoryAccountingShard();
-    owner_before = keylane::WorkerMemoryAccountingBytes(0);
-    keylane::AccountRetainedMemory(owner_shard, kRetainedBytes);
+    lavik::BindMemoryAccountingShard(0);
+    const unsigned owner_shard = lavik::CurrentMemoryAccountingShard();
+    owner_before = lavik::WorkerMemoryAccountingBytes(0);
+    lavik::AccountRetainedMemory(owner_shard, kRetainedBytes);
     {
       std::lock_guard lock(mutex);
-      owner_after_allocate = keylane::WorkerMemoryAccountingBytes(0);
+      owner_after_allocate = lavik::WorkerMemoryAccountingBytes(0);
       allocated = true;
     }
     ready.notify_all();
     std::unique_lock lock(mutex);
     ready.wait(lock, [&] { return released; });
-    owner_after_release = keylane::WorkerMemoryAccountingBytes(0);
+    owner_after_release = lavik::WorkerMemoryAccountingBytes(0);
   });
 
   std::thread releaser([&] {
-    keylane::BindMemoryAccountingShard(1);
+    lavik::BindMemoryAccountingShard(1);
     {
       std::unique_lock lock(mutex);
       ready.wait(lock, [&] { return allocated; });
     }
-    releaser_before = keylane::WorkerMemoryAccountingBytes(1);
+    releaser_before = lavik::WorkerMemoryAccountingBytes(1);
     // The retained owner carries worker 0's slot; the freeing thread does not
     // infer ownership from its current worker or the allocation address.
-    keylane::ReleaseRetainedMemory(/*owner_shard=*/1, kRetainedBytes);
-    releaser_after = keylane::WorkerMemoryAccountingBytes(1);
+    lavik::ReleaseRetainedMemory(/*owner_shard=*/1, kRetainedBytes);
+    releaser_after = lavik::WorkerMemoryAccountingBytes(1);
     {
       std::lock_guard lock(mutex);
       released = true;
@@ -225,11 +223,11 @@ TEST(MemoryTest, CrossWorkerRetainedReleaseReturnsBytesToExplicitOrigin) {
 
 TEST(MemoryTest, WorkerSnapshotsMatchAdmissionShares) {
   constexpr std::uint64_t kMaximum = 1024ULL * 1024 * 1024;
-  ASSERT_TRUE(keylane::InitMemoryLimit(kMaximum, 2).ok());
-  ASSERT_EQ(keylane::MemoryAccountingWorkerCount(), 2u);
+  ASSERT_TRUE(lavik::InitMemoryLimit(kMaximum, 2).ok());
+  ASSERT_EQ(lavik::MemoryAccountingWorkerCount(), 2u);
 
-  const keylane::WorkerMemoryStats before0 = keylane::GetWorkerMemoryStats(0);
-  const keylane::WorkerMemoryStats before1 = keylane::GetWorkerMemoryStats(1);
+  const lavik::WorkerMemoryStats before0 = lavik::GetWorkerMemoryStats(0);
+  const lavik::WorkerMemoryStats before1 = lavik::GetWorkerMemoryStats(1);
   EXPECT_EQ(before0.retained_limit_bytes_ + before1.retained_limit_bytes_,
             kMaximum - kMaximum / 10);
 
@@ -237,71 +235,70 @@ TEST(MemoryTest, WorkerSnapshotsMatchAdmissionShares) {
   // every worker's admission decision even though it has no worker owner.
   constexpr std::size_t kFallbackBytes = 4;
   constexpr std::size_t kOwnedBytes = 5;
-  keylane::AccountRetainedMemory(/*owner_shard=*/0, kFallbackBytes);
-  keylane::AccountRetainedMemory(/*owner_shard=*/1, kOwnedBytes);
-  const keylane::WorkerMemoryStats after0 = keylane::GetWorkerMemoryStats(0);
-  const keylane::WorkerMemoryStats after1 = keylane::GetWorkerMemoryStats(1);
+  lavik::AccountRetainedMemory(/*owner_shard=*/0, kFallbackBytes);
+  lavik::AccountRetainedMemory(/*owner_shard=*/1, kOwnedBytes);
+  const lavik::WorkerMemoryStats after0 = lavik::GetWorkerMemoryStats(0);
+  const lavik::WorkerMemoryStats after1 = lavik::GetWorkerMemoryStats(1);
   EXPECT_EQ(after0.retained_bytes_ - before0.retained_bytes_, 7u);
   EXPECT_EQ(after1.retained_bytes_ - before1.retained_bytes_, 2u);
 
-  keylane::ReleaseRetainedMemory(/*owner_shard=*/1, kOwnedBytes);
-  keylane::ReleaseRetainedMemory(/*owner_shard=*/0, kFallbackBytes);
-  EXPECT_EQ(keylane::GetWorkerMemoryStats(0).retained_bytes_,
+  lavik::ReleaseRetainedMemory(/*owner_shard=*/1, kOwnedBytes);
+  lavik::ReleaseRetainedMemory(/*owner_shard=*/0, kFallbackBytes);
+  EXPECT_EQ(lavik::GetWorkerMemoryStats(0).retained_bytes_,
             before0.retained_bytes_);
-  EXPECT_EQ(keylane::GetWorkerMemoryStats(1).retained_bytes_,
+  EXPECT_EQ(lavik::GetWorkerMemoryStats(1).retained_bytes_,
             before1.retained_bytes_);
-  EXPECT_EQ(keylane::GetWorkerMemoryStats(2).retained_limit_bytes_, 0u);
+  EXPECT_EQ(lavik::GetWorkerMemoryStats(2).retained_limit_bytes_, 0u);
 }
 
 TEST(MemoryTest, RetainedChargeTransfersOwnershipWithoutGlobalNewHooks) {
-  ASSERT_TRUE(keylane::InitMemoryLimit(1024ULL * 1024 * 1024, 1).ok());
-  keylane::BindMemoryAccountingShard(0);
-  const std::int64_t before = keylane::WorkerMemoryAccountingBytes(0);
+  ASSERT_TRUE(lavik::InitMemoryLimit(1024ULL * 1024 * 1024, 1).ok());
+  lavik::BindMemoryAccountingShard(0);
+  const std::int64_t before = lavik::WorkerMemoryAccountingBytes(0);
 
   {
     // Ordinary temporary C++ allocations are deliberately outside retained
     // accounting even though the final server executable routes them through
     // mimalloc's official global override.
     std::string temporary(1024 * 1024, 'x');
-    EXPECT_EQ(keylane::WorkerMemoryAccountingBytes(0), before);
+    EXPECT_EQ(lavik::WorkerMemoryAccountingBytes(0), before);
 
-    auto reservation = keylane::TryReserveMemory(4096);
+    auto reservation = lavik::TryReserveMemory(4096);
     ASSERT_TRUE(reservation.has_value());
-    keylane::RetainedMemoryCharge charge;
+    lavik::RetainedMemoryCharge charge;
     charge.Adopt(&*reservation, 4096);
-    EXPECT_EQ(keylane::WorkerMemoryAccountingBytes(0), before + 4096);
+    EXPECT_EQ(lavik::WorkerMemoryAccountingBytes(0), before + 4096);
 
-    keylane::RetainedMemoryCharge moved(std::move(charge));
+    lavik::RetainedMemoryCharge moved(std::move(charge));
     EXPECT_EQ(charge.bytes(), 0);
     EXPECT_EQ(moved.bytes(), 4096);
   }
 
-  EXPECT_EQ(keylane::WorkerMemoryAccountingBytes(0), before);
-  keylane::BindMemoryAccountingShard(keylane::kMaxMemoryWorkers);
+  EXPECT_EQ(lavik::WorkerMemoryAccountingBytes(0), before);
+  lavik::BindMemoryAccountingShard(lavik::kMaxMemoryWorkers);
 }
 
 TEST(MemoryTest, SharedReservationIsDischargedBeforeCrossWorkerDestruction) {
-  ASSERT_TRUE(keylane::InitMemoryLimit(1024ULL * 1024 * 1024, 2).ok());
-  keylane::BindMemoryAccountingShard(0);
-  const std::uint64_t before =
-      keylane::GetMemoryStats().admission_pending_bytes_;
+  ASSERT_TRUE(lavik::InitMemoryLimit(1024ULL * 1024 * 1024, 2).ok());
+  lavik::BindMemoryAccountingShard(0);
+  const std::uint64_t before = lavik::GetMemoryStats().admission_pending_bytes_;
 
-  auto reservation = keylane::TryReserveMemory(4096);
+  auto reservation = lavik::TryReserveMemory(4096);
   ASSERT_TRUE(reservation.has_value());
   auto shared =
-      std::make_shared<keylane::MemoryReservation>(std::move(*reservation));
-  EXPECT_EQ(keylane::GetMemoryStats().admission_pending_bytes_, before + 4096);
+      std::make_shared<lavik::MemoryReservation>(std::move(*reservation));
+  EXPECT_EQ(lavik::GetMemoryStats().admission_pending_bytes_, before + 4096);
 
   // Publisher release executes on the allocation owner. The public fan-out
   // envelope may then carry an inert shared_ptr back to another worker.
   shared->Release();
-  EXPECT_EQ(keylane::GetMemoryStats().admission_pending_bytes_, before);
+  EXPECT_EQ(lavik::GetMemoryStats().admission_pending_bytes_, before);
   std::thread coordinator([token = std::move(shared)]() mutable {
-    keylane::BindMemoryAccountingShard(1);
+    lavik::BindMemoryAccountingShard(1);
     token.reset();
   });
   coordinator.join();
 
-  EXPECT_EQ(keylane::GetMemoryStats().admission_pending_bytes_, before);
-  keylane::BindMemoryAccountingShard(keylane::kMaxMemoryWorkers);
+  EXPECT_EQ(lavik::GetMemoryStats().admission_pending_bytes_, before);
+  lavik::BindMemoryAccountingShard(lavik::kMaxMemoryWorkers);
 }

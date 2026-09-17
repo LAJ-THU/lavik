@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-#include "keylane/storage/tx_cleaner.h"
+#include "lavik/storage/tx_cleaner.h"
 
 #include "gtest/gtest.h"
 
-namespace keylane::storage::internal {
+namespace lavik::storage::internal {
 namespace {
 
 TEST(TxCleanerTest, ReclaimsOnlyACompletelySettledGeneration) {
@@ -39,4 +39,4 @@ TEST(TxCleanerTest, ReclaimsOnlyACompletelySettledGeneration) {
 }
 
 }  // namespace
-}  // namespace keylane::storage::internal
+}  // namespace lavik::storage::internal

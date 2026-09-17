@@ -39,23 +39,23 @@
 #include <vector>
 
 #include "gtest/gtest.h"
-#include "keylane/meta/identity_verifier.h"
-#include "keylane/meta/nuraft_log_store.h"
-#include "keylane/meta/nuraft_state_mgr.h"
-#include "keylane/meta/state_machine.h"
+#include "lavik/meta/identity_verifier.h"
+#include "lavik/meta/nuraft_log_store.h"
+#include "lavik/meta/nuraft_state_mgr.h"
+#include "lavik/meta/state_machine.h"
 #include "libnuraft/nuraft.hxx"
 #include "support/test_data_path.h"
 
 namespace {
 
-using keylane::meta::MetaMemberIdentity;
-using keylane::meta::NuraftLogFaultInjector;
-using keylane::meta::NuraftLogFaultPoint;
-using keylane::meta::NuraftLogStore;
-using keylane::meta::NuraftMemberConfig;
-using keylane::meta::NuraftStartupMode;
-using keylane::meta::NuraftStateMgr;
-using keylane::meta::NuraftStateMgrOpenOptions;
+using lavik::meta::MetaMemberIdentity;
+using lavik::meta::NuraftLogFaultInjector;
+using lavik::meta::NuraftLogFaultPoint;
+using lavik::meta::NuraftLogStore;
+using lavik::meta::NuraftMemberConfig;
+using lavik::meta::NuraftStartupMode;
+using lavik::meta::NuraftStateMgr;
+using lavik::meta::NuraftStateMgrOpenOptions;
 
 class OneShotLogFault final : public NuraftLogFaultInjector {
  public:
@@ -77,8 +77,8 @@ class OneShotLogFault final : public NuraftLogFaultInjector {
 std::filesystem::path MakeTestDir(const char* suite, const char* name) {
   const ::testing::TestInfo* info =
       ::testing::UnitTest::GetInstance()->current_test_info();
-  std::filesystem::path dir = keylane::test::TestDataDirectory() /
-                              ("keylane_meta_test_" + std::string(suite) + "_" +
+  std::filesystem::path dir = lavik::test::TestDataDirectory() /
+                              ("lavik_meta_test_" + std::string(suite) + "_" +
                                name + "_" + info->test_suite_name() + "_" +
                                info->name() + "_" + std::to_string(::getpid()));
   std::filesystem::remove_all(dir);
@@ -741,7 +741,7 @@ class StateMgrTest : public ::testing::Test {
     return NuraftMemberConfig{
         .server_id_ = static_cast<std::int32_t>(id),
         .raft_endpoint_ = "127.0.0.1:" + std::to_string(9700 + id),
-        .principal_ = "keylane://meta/" + std::to_string(id),
+        .principal_ = "lavik://meta/" + std::to_string(id),
         .data_control_endpoint_ = "127.0.0.1:" + std::to_string(9800 + id),
         .ctl_endpoint_ = "127.0.0.1:" + std::to_string(9900 + id),
     };
@@ -775,9 +775,9 @@ class StateMgrTest : public ::testing::Test {
     ASSERT_TRUE(log->flush());
   }
 
-  static keylane::meta::BindMetaMember Binding(std::uint32_t id) {
+  static lavik::meta::BindMetaMember Binding(std::uint32_t id) {
     const auto member = Member(id);
-    keylane::meta::BindMetaMember binding;
+    lavik::meta::BindMetaMember binding;
     binding.request_id_[0] = static_cast<std::uint8_t>(id);
     binding.server_id_ = id;
     binding.principal_ = member.principal_;
@@ -807,21 +807,20 @@ class StateMgrTest : public ::testing::Test {
                        std::uint64_t index,
                        std::initializer_list<std::uint32_t> bindings,
                        std::optional<std::uint32_t> retired = std::nullopt) {
-    auto opened = keylane::meta::MetaStateMachine::Open(dir_.string());
+    auto opened = lavik::meta::MetaStateMachine::Open(dir_.string());
     ASSERT_TRUE(opened.ok()) << opened.status();
     auto& machine = **opened;
     std::uint64_t applied = 0;
     for (const auto id : bindings) {
-      auto command =
-          keylane::meta::MetaStateMachine::EncodeCommand(Binding(id));
+      auto command = lavik::meta::MetaStateMachine::EncodeCommand(Binding(id));
       ASSERT_TRUE(command.ok()) << command.status();
       machine.commit(++applied, **command);
     }
     if (retired) {
-      keylane::meta::RetireMetaMember retirement;
+      lavik::meta::RetireMetaMember retirement;
       retirement.request_id_[0] = 99;
       retirement.server_id_ = *retired;
-      auto command = keylane::meta::MetaStateMachine::EncodeCommand(retirement);
+      auto command = lavik::meta::MetaStateMachine::EncodeCommand(retirement);
       ASSERT_TRUE(command.ok()) << command.status();
       machine.commit(++applied, **command);
     }
@@ -846,11 +845,11 @@ TEST_F(StateMgrTest, CommittedApplyClosesGenesisWithoutTransportCallbacks) {
   auto opened = OpenInitial({Member(7), Member(8), Member(9)});
   ASSERT_TRUE(opened.ok()) << opened.status();
   nuraft::ptr<NuraftStateMgr> manager(std::move(*opened));
-  auto machine = keylane::meta::MetaStateMachine::Open(dir_.string());
+  auto machine = lavik::meta::MetaStateMachine::Open(dir_.string());
   ASSERT_TRUE(machine.ok()) << machine.status();
   (*machine)->AttachStateMgr(manager);
   for (const auto id : {7U, 8U, 9U}) {
-    auto command = keylane::meta::MetaStateMachine::EncodeCommand(Binding(id));
+    auto command = lavik::meta::MetaStateMachine::EncodeCommand(Binding(id));
     ASSERT_TRUE(command.ok()) << command.status();
     (*machine)->commit(id - 6, **command);
     EXPECT_EQ(manager->initial_bindings_pending(), id != 9);
@@ -1120,10 +1119,12 @@ TEST_F(StateMgrTest,
       {.data_dir_ = dir_.string(), .local_member_ = std::move(rebound)});
   ASSERT_TRUE(restarted.ok()) << restarted.status();
   EXPECT_FALSE((*restarted)->initial_bindings_pending());
-  EXPECT_TRUE((*restarted)->transport_binding_replay_pending(
-      /*applied_index=*/0));
-  EXPECT_FALSE((*restarted)->transport_binding_replay_pending(
-      /*applied_index=*/1));
+  EXPECT_TRUE((*restarted)
+                  ->transport_binding_replay_pending(
+                      /*applied_index=*/0));
+  EXPECT_FALSE((*restarted)
+                   ->transport_binding_replay_pending(
+                       /*applied_index=*/1));
 }
 
 TEST_F(StateMgrTest, CompletedZeroIndexGenesisDoesNotResurrectGrace) {
@@ -1132,8 +1133,7 @@ TEST_F(StateMgrTest, CompletedZeroIndexGenesisDoesNotResurrectGrace) {
   PersistInitializedRaftEvidence(**opened);
   ASSERT_TRUE((*opened)->CompleteInitialBindings(/*applied_index=*/1).ok());
   EXPECT_FALSE(std::filesystem::exists(dir_ / "initial_bindings.dat"));
-  EXPECT_TRUE(
-      std::filesystem::exists(dir_ / "initial_bindings_complete.dat"));
+  EXPECT_TRUE(std::filesystem::exists(dir_ / "initial_bindings_complete.dat"));
   opened->reset();
 
   auto restarted = OpenRestart();
@@ -1156,8 +1156,7 @@ TEST_F(StateMgrTest,
   EXPECT_TRUE((*recovered)->initial_bindings_pending());
   EXPECT_TRUE(std::filesystem::exists(dir_ / "initial_bindings.dat"));
   PersistInitializedRaftEvidence(**recovered);
-  ASSERT_TRUE(
-      (*recovered)->CompleteInitialBindings(/*applied_index=*/1).ok());
+  ASSERT_TRUE((*recovered)->CompleteInitialBindings(/*applied_index=*/1).ok());
 
   auto changed = nuraft::cs_new<nuraft::cluster_config>(
       /*log_idx=*/9, /*prev_log_idx=*/5);
@@ -1440,8 +1439,7 @@ TEST_F(StateMgrTest, RecoversBothTransportBaselineTransactionPrefixes) {
   auto opened = OpenInitial();
   ASSERT_TRUE(opened.ok()) << opened.status();
   PersistInitializedRaftEvidence(**opened);
-  ASSERT_TRUE(
-      (*opened)->CompleteInitialBindings(/*applied_index=*/1).ok());
+  ASSERT_TRUE((*opened)->CompleteInitialBindings(/*applied_index=*/1).ok());
   const std::string old_config = ReadFileBytes(dir_ / "cluster_config.dat");
   const std::string old_baseline =
       ReadFileBytes(dir_ / "transport_bindings.dat");

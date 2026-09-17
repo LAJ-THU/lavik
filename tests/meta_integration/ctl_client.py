@@ -13,9 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""End-to-end gate for keylane-ctl over Unix and TCP transports.
+"""End-to-end gate for lavik-ctl over Unix and TCP transports.
 
-Usage: ctl_client.py /path/to/keylane-meta /path/to/keylane-ctl [workdir]
+Usage: ctl_client.py /path/to/lavik-meta /path/to/lavik-ctl [workdir]
 """
 
 import os
@@ -86,7 +86,7 @@ def ctl_characterization_gate(workdir):
             "Exit status is 0 for an OK reply, 2 for an ERR reply" not in
             help_result.stderr):
         raise H.Failure(
-            "keylane-ctl help contract changed: "
+            "lavik-ctl help contract changed: "
             f"exit={help_result.returncode} stdout={help_result.stdout!r} "
             f"stderr={help_result.stderr!r}")
     bad_args = subprocess.run(
@@ -95,7 +95,7 @@ def ctl_characterization_gate(workdir):
     if (bad_args.returncode != 1 or bad_args.stdout or
             "a Meta command is required" not in bad_args.stderr):
         raise H.Failure(
-            "keylane-ctl argument contract changed: "
+            "lavik-ctl argument contract changed: "
             f"exit={bad_args.returncode} stdout={bad_args.stdout!r} "
             f"stderr={bad_args.stderr!r}")
 
@@ -132,11 +132,11 @@ def ctl_characterization_gate(workdir):
             "timed out" not in deadline.stderr or elapsed > 1.0 or
             thread.is_alive() or errors):
         raise H.Failure(
-            "keylane-ctl absolute deadline contract changed: "
+            "lavik-ctl absolute deadline contract changed: "
             f"elapsed={elapsed:.3f}s exit={deadline.returncode} "
             f"stdout={deadline.stdout!r} stderr={deadline.stderr!r} "
             f"server_errors={errors}")
-    H.log("keylane-ctl help, arguments, deadline, and exit contract — OK")
+    H.log("lavik-ctl help, arguments, deadline, and exit contract — OK")
 
 
 def raw_argument_gate(workdir):
@@ -343,7 +343,7 @@ def scripted_cluster_gate(workdir):
         raise H.Failure(
             "empty connection close omitted retry guidance: "
             f"stdout={empty_close.stdout!r} stderr={empty_close.stderr!r}")
-    H.log("keylane-ctl cluster-status scripted READY/0 and RETRYABLE/3 — OK")
+    H.log("lavik-ctl cluster-status scripted READY/0 and RETRYABLE/3 — OK")
 
 
 def scripted_cluster_create_gate(workdir):
@@ -534,7 +534,7 @@ def scripted_cluster_create_gate(workdir):
             re.search(r"operation=[0-9a-f]{32}", malformed.stderr) is None):
         raise H.Failure(
             "post-mutation protocol failure was not treated as uncertain")
-    H.log("keylane-ctl cluster-create atomic acceptance and exit gates — OK")
+    H.log("lavik-ctl cluster-create atomic acceptance and exit gates — OK")
 
 
 def scripted_failover_gate(workdir):
@@ -720,7 +720,7 @@ def scripted_failover_gate(workdir):
          "--failover-timeout-ms", "0"], expected=1)
     if (bad_timeout.stdout or "1 through 86400000" not in bad_timeout.stderr):
         raise H.Failure("failover accepted an invalid transition timeout")
-    H.log("keylane-ctl failover request, deadline, and exit gates — OK")
+    H.log("lavik-ctl failover request, deadline, and exit gates — OK")
 
 
 def dual_listener_rollback_gate(workdir):
@@ -774,7 +774,7 @@ def admin_slow_reader_gate(node):
     # socket's send buffer after the binary status is hex-wrapped.
     node_count = 2_500
     commands = [
-        "registernode " + f"{index:040x}" + " keylane://node/" +
+        "registernode " + f"{index:040x}" + " lavik://node/" +
         f"{index:040x}" + " primary 127.0.0.1:9000\n"
         for index in range(node_count)]
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as populate:
@@ -874,7 +874,7 @@ def unix_gate(workdir):
                 "ERR unknown-command":
             raise H.Failure("ERR reply did not produce exit status 2")
         admin_slow_reader_gate(node)
-        H.log("keylane-ctl Unix transport and exit statuses — OK")
+        H.log("lavik-ctl Unix transport and exit statuses — OK")
     finally:
         node.terminate()
 
@@ -932,9 +932,9 @@ def plaintext_gate(workdir):
         export = run(client_args + ["exportaudit", reply.split()[1]])
         if not export.startswith("OK "):
             raise H.Failure(f"plaintext exportaudit: {export}")
-        if b"keylane://operator/plaintext" not in bytes.fromhex(export[3:]):
+        if b"lavik://operator/plaintext" not in bytes.fromhex(export[3:]):
             raise H.Failure("plaintext audit actor was not persisted")
-        H.log("keylane-ctl remote plaintext transport — OK")
+        H.log("lavik-ctl remote plaintext transport — OK")
     finally:
         if server.poll() is None:
             server.terminate()
@@ -966,10 +966,10 @@ def mtls_gate(workdir):
 
     server_cert, server_key = make_leaf(
         directory, ca_crt, ca_key, "server",
-        "IP:127.0.0.1,URI:keylane://meta/1")
+        "IP:127.0.0.1,URI:lavik://meta/1")
     client_cert, client_key = make_leaf(
         directory, ca_crt, ca_key, "operator",
-        "URI:keylane://operator/ctl-gate")
+        "URI:lavik://operator/ctl-gate")
     raft_port = H.free_port()
     data_control_port = H.free_port()
     ctl_port = H.free_port()
@@ -1085,7 +1085,7 @@ def mtls_gate(workdir):
         if (bad_certificate.stdout or not bad_certificate.stderr or
                 "check the CA" not in bad_certificate.stderr):
             raise H.Failure(
-                "keylane-ctl cluster-status certificate failure did not stay fatal and "
+                "lavik-ctl cluster-status certificate failure did not stay fatal and "
                 f"stdout-clean: stdout={bad_certificate.stdout!r} "
                 f"stderr={bad_certificate.stderr!r}")
         wrong_name = subprocess.run(
@@ -1097,7 +1097,7 @@ def mtls_gate(workdir):
                 "mTLS server-name mismatch was not rejected: "
                 f"exit={wrong_name.returncode} stdout={wrong_name.stdout!r} "
                 f"stderr={wrong_name.stderr!r}")
-        H.log("keylane-ctl remote mTLS transport — OK")
+        H.log("lavik-ctl remote mTLS transport — OK")
     finally:
         if server.poll() is None:
             server.terminate()

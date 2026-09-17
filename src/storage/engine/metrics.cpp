@@ -22,7 +22,7 @@
 
 #include "impl.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 Task<StorageDurabilityStats> StorageEngine::Impl::DurabilityStats() const {
   StorageDurabilityStats result{
@@ -138,4 +138,4 @@ Task<StorageMetricsSnapshot> StorageEngine::Impl::CollectMetrics() const {
   co_return result;
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

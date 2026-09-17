@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-#include "keylane/storage/detail/grouped_object_index.h"
+#include "lavik/storage/detail/grouped_object_index.h"
 
 #include <algorithm>
 #include <array>
 #include <bit>
 #include <tuple>
 
-#include "keylane/local_shared_ptr.h"
+#include "lavik/local_shared_ptr.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 // The binary identity includes prefix length: splitting a zero-prefixed
@@ -1234,4 +1234,4 @@ GroupedObjectIndex GroupedObjectIndex::Detach() noexcept {
   return GroupedObjectIndex(objects_.Detach());
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

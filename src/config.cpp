@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/config.h"
+#include "lavik/config.h"
 
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -37,9 +37,9 @@
 #include "absl/strings/ascii.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
-#include "keylane/numeric_endpoint.h"
+#include "lavik/numeric_endpoint.h"
 
-namespace keylane {
+namespace lavik {
 namespace {
 
 template <typename T>
@@ -631,10 +631,10 @@ absl::Status ValidateServerOptions(const ServerOptions& options) {
     return absl::InvalidArgumentError("network must be kernel or dpdk");
   if (options.storage_backend_ != "uring" && options.storage_backend_ != "spdk")
     return absl::InvalidArgumentError("storage must be uring or spdk");
-#ifndef KEYLANE_KERNEL_BYPASS
+#ifndef LAVIK_KERNEL_BYPASS
   if (options.network_backend_ == "dpdk" || options.storage_backend_ == "spdk")
     return absl::InvalidArgumentError(
-        "DPDK/SPDK support requires a build with KEYLANE_KERNEL_BYPASS=ON");
+        "DPDK/SPDK support requires a build with LAVIK_KERNEL_BYPASS=ON");
 #endif
   for (const auto& path : options.data_files_) {
     if (path.starts_with("spdk://") != (options.storage_backend_ == "spdk"))
@@ -966,4 +966,4 @@ absl::Status RewriteRedisConfigFile(const std::string& path,
   return absl::OkStatus();
 }
 
-}  // namespace keylane
+}  // namespace lavik

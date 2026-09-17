@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/config.h"
+#include "lavik/config.h"
 
 #include <gtest/gtest.h>
 
@@ -26,30 +26,30 @@
 #include <string_view>
 #include <vector>
 
-#include "keylane/command.h"
-#include "keylane/server.h"
+#include "lavik/command.h"
+#include "lavik/server.h"
 #include "support/test_data_path.h"
 
 namespace {
 
-using keylane::ApplyRedisConfigDirective;
-using keylane::LoadRedisConfigFile;
-using keylane::ParseClientBufferLimit;
-using keylane::ParseClientQueryBufferLimit;
-using keylane::ParseMemorySize;
-using keylane::ParseRedisConfigLine;
-using keylane::ParseReplicaOfRequest;
-using keylane::RewriteRedisConfigFile;
-using keylane::ServerOptions;
-using keylane::ValidateServerOptions;
+using lavik::ApplyRedisConfigDirective;
+using lavik::LoadRedisConfigFile;
+using lavik::ParseClientBufferLimit;
+using lavik::ParseClientQueryBufferLimit;
+using lavik::ParseMemorySize;
+using lavik::ParseRedisConfigLine;
+using lavik::ParseReplicaOfRequest;
+using lavik::RewriteRedisConfigFile;
+using lavik::ServerOptions;
+using lavik::ValidateServerOptions;
 
 class TempConfigFile {
  public:
   explicit TempConfigFile(std::string_view contents) {
     const auto suffix =
         std::chrono::steady_clock::now().time_since_epoch().count();
-    path_ = keylane::test::TestDataDirectory() /
-            ("keylane-config-test-" + std::to_string(suffix) + ".conf");
+    path_ = lavik::test::TestDataDirectory() /
+            ("lavik-config-test-" + std::to_string(suffix) + ".conf");
     std::ofstream output(path_);
     output << contents;
   }
@@ -239,8 +239,7 @@ TEST(RedisConfigTest, AppliesLoggingDirectivesAndAliases) {
   ASSERT_TRUE(
       ApplyRedisConfigDirective({"alsologtostderr", "yes"}, &options).ok());
   ASSERT_TRUE(
-      ApplyRedisConfigDirective({"log_dir", "/var/log/keylane"}, &options)
-          .ok());
+      ApplyRedisConfigDirective({"log_dir", "/var/log/lavik"}, &options).ok());
   ASSERT_TRUE(
       ApplyRedisConfigDirective({"max_log_size_mb", "256"}, &options).ok());
   ASSERT_TRUE(
@@ -248,7 +247,7 @@ TEST(RedisConfigTest, AppliesLoggingDirectivesAndAliases) {
 
   EXPECT_TRUE(options.logging_.log_to_stderr_);
   EXPECT_TRUE(options.logging_.also_log_to_stderr_);
-  EXPECT_EQ(options.logging_.log_dir_, "/var/log/keylane");
+  EXPECT_EQ(options.logging_.log_dir_, "/var/log/lavik");
   EXPECT_EQ(options.logging_.max_log_size_mb_, 256u);
   EXPECT_EQ(options.logging_.max_log_files_, 12u);
 
@@ -289,7 +288,7 @@ TEST(RedisConfigTest, RejectsInvalidAndUnsupportedDirectives) {
   ServerOptions options;
   options.max_clients_ = 0;
   EXPECT_FALSE(ValidateServerOptions(options).ok());
-  options.max_clients_ = keylane::kDefaultMaxClients;
+  options.max_clients_ = lavik::kDefaultMaxClients;
   EXPECT_FALSE(ApplyRedisConfigDirective({"port", "70000"}, &options).ok());
   EXPECT_FALSE(
       ApplyRedisConfigDirective({"replicaof", "host", "zero"}, &options).ok());
@@ -374,21 +373,21 @@ TEST(RedisConfigTest, ClusterModeRejectsStandalonePopulationSources) {
   ServerOptions options;
   ASSERT_TRUE(
       ApplyRedisConfigDirective({"cluster-enabled", "yes"}, &options).ok());
-  ASSERT_TRUE(ApplyRedisConfigDirective(
-                  {"cluster-node-id",
-                   "0123456789abcdef0123456789abcdef01234567"},
-                  &options)
-                  .ok());
+  ASSERT_TRUE(
+      ApplyRedisConfigDirective(
+          {"cluster-node-id", "0123456789abcdef0123456789abcdef01234567"},
+          &options)
+          .ok());
   ASSERT_TRUE(ApplyRedisConfigDirective(
                   {"cluster-meta-seed", "127.0.0.1:17001"}, &options)
                   .ok());
   EXPECT_TRUE(ValidateServerOptions(options).ok());
 
-  options.replicaof_ = keylane::ReplicaOfConfig{"keylane.local", 6379};
+  options.replicaof_ = lavik::ReplicaOfConfig{"lavik.local", 6379};
   EXPECT_FALSE(ValidateServerOptions(options).ok());
   options.replicaof_.reset();
 
-  options.redis_replicaof_ = keylane::ReplicaOfConfig{"redis.local", 6380};
+  options.redis_replicaof_ = lavik::ReplicaOfConfig{"redis.local", 6380};
   EXPECT_FALSE(ValidateServerOptions(options).ok());
   options.redis_replicaof_.reset();
 
@@ -435,7 +434,7 @@ TEST(RedisConfigTest, AppliesAndValidatesTlsAndPasswordDirectives) {
 TEST(RedisConfigTest, RejectsLoadRdbWithReplicaOf) {
   ServerOptions options;
   options.load_rdb_file_ = "/backup/dump.rdb";
-  options.replicaof_ = keylane::ReplicaOfConfig{"redis.local", 6379};
+  options.replicaof_ = lavik::ReplicaOfConfig{"redis.local", 6379};
   EXPECT_FALSE(ValidateServerOptions(options).ok());
 }
 
@@ -455,8 +454,8 @@ TEST(RedisConfigTest, ParsesRedisPsyncFollower) {
 
 TEST(RedisConfigTest, RejectsConflictingRedisPsyncSources) {
   ServerOptions options;
-  options.replicaof_ = keylane::ReplicaOfConfig{"keylane.local", 6379};
-  options.redis_replicaof_ = keylane::ReplicaOfConfig{"redis.local", 6380};
+  options.replicaof_ = lavik::ReplicaOfConfig{"lavik.local", 6379};
+  options.redis_replicaof_ = lavik::ReplicaOfConfig{"redis.local", 6380};
   EXPECT_FALSE(ValidateServerOptions(options).ok());
 
   options.replicaof_.reset();
@@ -485,7 +484,7 @@ TEST(RedisConfigTest, RejectsInvalidRdbOutputNames) {
 
 TEST(RedisConfigTest, LoadsFileAndReportsLineNumber) {
   TempConfigFile valid(
-      "# keylane test\nport 6381\nio-threads 2\n"
+      "# lavik test\nport 6381\nio-threads 2\n"
       "registered-buffer-mb-per-worker 128\n"
       "storage-write-buffers-per-worker 3\n"
       "replication-publish-queue-mb-per-worker 12\n"
@@ -516,7 +515,7 @@ TEST(RedisConfigTest, AtomicallyRewritesFailoverManagedDirectives) {
       "replica-priority 80\n");
 
   absl::Status rewritten = RewriteRedisConfigFile(
-      config.path().string(), keylane::ReplicaOfConfig{"new upstream#1", 6380},
+      config.path().string(), lavik::ReplicaOfConfig{"new upstream#1", 6380},
       false, 20);
   ASSERT_TRUE(rewritten.ok()) << rewritten;
 
@@ -604,11 +603,11 @@ TEST(RedisConfigTest, AppliesClusterDirectives) {
   ServerOptions options;
   ASSERT_TRUE(
       ApplyRedisConfigDirective({"cluster-enabled", "yes"}, &options).ok());
-  ASSERT_TRUE(ApplyRedisConfigDirective(
-                  {"cluster-node-id",
-                   "0123456789abcdef0123456789abcdef01234567"},
-                  &options)
-                  .ok());
+  ASSERT_TRUE(
+      ApplyRedisConfigDirective(
+          {"cluster-node-id", "0123456789abcdef0123456789abcdef01234567"},
+          &options)
+          .ok());
   ASSERT_TRUE(ApplyRedisConfigDirective(
                   {"cluster-meta-seed", "127.0.0.1:17001"}, &options)
                   .ok());
@@ -751,11 +750,11 @@ TEST(RedisConfigTest, RejectsClusterWithReplicationUpstream) {
   options.cluster_enabled_ = true;
   options.cluster_node_id_ = "0123456789abcdef0123456789abcdef01234567";
   options.cluster_meta_seeds_ = {"127.0.0.1:17001"};
-  options.replicaof_ = keylane::ReplicaOfConfig{"keylane.local", 6379};
+  options.replicaof_ = lavik::ReplicaOfConfig{"lavik.local", 6379};
   EXPECT_FALSE(ValidateServerOptions(options).ok());
 
   options.replicaof_.reset();
-  options.redis_replicaof_ = keylane::ReplicaOfConfig{"redis.local", 6380};
+  options.redis_replicaof_ = lavik::ReplicaOfConfig{"redis.local", 6380};
   EXPECT_FALSE(ValidateServerOptions(options).ok());
 
   options.redis_replicaof_.reset();

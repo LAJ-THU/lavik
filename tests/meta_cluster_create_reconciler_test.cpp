@@ -17,12 +17,12 @@
 #include <limits>
 
 #include "gtest/gtest.h"
-#include "keylane/meta/cluster_create.h"
-#include "keylane/meta/cluster_create_reconciler.h"
-#include "keylane/meta/control_projector.h"
-#include "keylane/meta/hash.h"
+#include "lavik/meta/cluster_create.h"
+#include "lavik/meta/cluster_create_reconciler.h"
+#include "lavik/meta/control_projector.h"
+#include "lavik/meta/hash.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 class ClusterCreateV1RecoveryTest : public testing::Test {
  protected:
@@ -31,7 +31,7 @@ class ClusterCreateV1RecoveryTest : public testing::Test {
                                       MetaCommandTagOf(command))));
     std::visit([&](auto& c) { c.request_id_.fill(1); }, command);
     const auto result = ApplyCommitted(stores_, ++index_, command,
-                                       "keylane://operator/test", "now");
+                                       "lavik://operator/test", "now");
     ASSERT_EQ(result.verdict_, MetaAuditVerdict::kAccepted) << result.detail_;
     auto bytes = stores_.Serialize();
     ASSERT_TRUE(bytes.ok()) << bytes.status();
@@ -43,13 +43,13 @@ class ClusterCreateV1RecoveryTest : public testing::Test {
   void SetUp() override {
     BindMetaMember member;
     member.server_id_ = 1;
-    member.principal_ = "keylane://meta/1";
+    member.principal_ = "lavik://meta/1";
     member.data_control_endpoint_ = "127.0.0.1:7301";
     member.ctl_endpoint_ = "127.0.0.1:7201";
     Apply(member);
     for (const std::uint32_t id : {2U, 3U}) {
       member.server_id_ = id;
-      member.principal_ = "keylane://meta/" + std::to_string(id);
+      member.principal_ = "lavik://meta/" + std::to_string(id);
       member.data_control_endpoint_ = "127.0.0.1:" + std::to_string(7300 + id);
       member.ctl_endpoint_ = "127.0.0.1:" + std::to_string(7200 + id);
       Apply(member);
@@ -64,7 +64,7 @@ class ClusterCreateV1RecoveryTest : public testing::Test {
       raft_.members_.push_back({
           .id_ = id,
           .endpoint_ = "127.0.0.1:" + std::to_string(7100 + id),
-          .principal_ = "keylane://meta/" + std::to_string(id),
+          .principal_ = "lavik://meta/" + std::to_string(id),
           .data_control_endpoint_ = "127.0.0.1:" + std::to_string(7300 + id),
           .ctl_endpoint_ = "127.0.0.1:" + std::to_string(7200 + id),
       });
@@ -657,7 +657,7 @@ TEST_F(ClusterCreateV1RecoveryTest,
   const auto failed = GroupOperation("group-a");
   late.request_id_.fill(2);
   const auto result =
-      ApplyCommitted(stores_, ++index_, late, "keylane://operator/test", "now");
+      ApplyCommitted(stores_, ++index_, late, "lavik://operator/test", "now");
   EXPECT_EQ(result.verdict_, MetaAuditVerdict::kRejected) << result.detail_;
   EXPECT_EQ(GroupOperation("group-a").kind_phase_blob_,
             failed.kind_phase_blob_);
@@ -700,4 +700,4 @@ TEST_F(ClusterCreateV1RecoveryTest,
             MetaOperationLifecycle::kAborted);
 }
 }  // namespace
-}  // namespace keylane::meta
+}  // namespace lavik::meta

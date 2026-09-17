@@ -15,9 +15,9 @@
  */
 
 #include "impl.h"
-#include "keylane/metrics.h"
+#include "lavik/metrics.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 void StorageEngine::Impl::SpawnExtentReclaim(
     WorkerStore& store, std::shared_ptr<const std::vector<ExtentRef>> extents) {
@@ -496,7 +496,7 @@ StorageEngine::Impl::RelocateIfCurrent(unsigned key_owner, std::string_view key,
       if (!dead.ok()) co_return dead;
       co_return published;
     }
-    KEYLANE_MAYBE_CRASH_AT("hash-group-defrag-copy-staged");
+    LAVIK_MAYBE_CRASH_AT("hash-group-defrag-copy-staged");
     // The salvage caller retains the source block and owes this destination
     // fence before clearing its bitmap bit, just as for a top-level record.
     // Unchanged extent ownership transfers to the new group record.
@@ -587,10 +587,10 @@ StorageEngine::Impl::RelocateIfCurrent(unsigned key_owner, std::string_view key,
   // The index now names the copied record, but its relocation fence has
   // not been awaited. A crash here must still find a complete durable source.
   if (record.grouped_) {
-    KEYLANE_MAYBE_CRASH_AT("grouped-root-defrag-copy-staged");
+    LAVIK_MAYBE_CRASH_AT("grouped-root-defrag-copy-staged");
   }
   if (record.value_type_ == ValueType::kHash) {
-    KEYLANE_MAYBE_CRASH_AT("hash-defrag-copy-staged");
+    LAVIK_MAYBE_CRASH_AT("hash-defrag-copy-staged");
   }
   co_return std::optional<RelocationDurabilityFence>(RelocationDurabilityFence{
       .block_id_ = relocated.block_id(),
@@ -1034,7 +1034,7 @@ Task<absl::Status> StorageEngine::Impl::ReleaseEmptyBlock(
     // The source's cleared allocation bit is now durable while its stale
     // records are still on disk — the exact window the relocation durability
     // fence exists to protect. Crash-safety tests arm this point.
-    KEYLANE_MAYBE_CRASH_AT("defrag-source-retired");
+    LAVIK_MAYBE_CRASH_AT("defrag-source-retired");
     auto deferred = store.deferred_dependent_extent_reclaims_.find(block_id);
     if (deferred != store.deferred_dependent_extent_reclaims_.end()) {
       std::vector<ExtentManifest> manifests = std::move(deferred->second);
@@ -1047,4 +1047,4 @@ Task<absl::Status> StorageEngine::Impl::ReleaseEmptyBlock(
   co_return returned;
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

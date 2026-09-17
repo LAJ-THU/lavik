@@ -16,7 +16,7 @@
 
 #include "impl.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 using IngestPhysical = std::tuple<std::uint64_t, std::uint64_t, std::uint32_t>;
@@ -469,7 +469,7 @@ StorageEngine::Impl::RestoreCollectionValueLocked(
     status = co_await CommitTxWrites(batch.txid_, {&batch});
     if (status.ok()) {
       decision_committed = true;
-      KEYLANE_MAYBE_CRASH_AT("group-batch-durable-before-outer-decision");
+      LAVIK_MAYBE_CRASH_AT("group-batch-durable-before-outer-decision");
       if (outer == nullptr)
         status = co_await CommitTxWrites(writes.txid_, {&writes});
     }
@@ -592,4 +592,4 @@ StorageEngine::Impl::RestoreCollectionValueLocked(
   co_return RestoreRawResult{.changed_ = true};
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

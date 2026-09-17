@@ -38,7 +38,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
-#include "keylane/resp.h"
+#include "lavik/resp.h"
 #include "spdlog/spdlog.h"
 
 extern "C" {
@@ -52,7 +52,7 @@ int luaopen_cmsgpack(lua_State* state);
 int luaopen_struct(lua_State* state);
 }
 
-namespace keylane {
+namespace lavik {
 namespace {
 
 constexpr int kMaxReplyDepth = 128;
@@ -490,8 +490,8 @@ int Sha1Hex(lua_State* state) {
 constexpr std::string_view kRedisLibrary = R"LUA(
 redis = {}
 
-local function keylane_dispatch(protected_call, ...)
-  local result = {__keylane_call(protected_call, ...)}
+local function lavik_dispatch(protected_call, ...)
+  local result = {__lavik_call(protected_call, ...)}
   if not result[1] then
     if protected_call then
       return {err = result[2]}
@@ -502,11 +502,11 @@ local function keylane_dispatch(protected_call, ...)
 end
 
 function redis.call(...)
-  return keylane_dispatch(false, ...)
+  return lavik_dispatch(false, ...)
 end
 
 function redis.pcall(...)
-  return keylane_dispatch(true, ...)
+  return lavik_dispatch(true, ...)
 end
 
 function redis.error_reply(message)
@@ -518,7 +518,7 @@ function redis.status_reply(message)
   return {ok = message}
 end
 
-redis.sha1hex = __keylane_sha1hex
+redis.sha1hex = __lavik_sha1hex
 redis.REDIS_VERSION = "7.2.4"
 redis.REDIS_VERSION_NUM = 0x00070204
 redis.LOG_DEBUG = 0
@@ -715,11 +715,11 @@ class LuaWorkerRuntime {
       lua_setglobal(state, unsafe);
     }
     lua_pushcfunction(state, YieldRedisCall);
-    lua_setglobal(state, "__keylane_call");
+    lua_setglobal(state, "__lavik_call");
     lua_pushcfunction(state, Sha1Hex);
-    lua_setglobal(state, "__keylane_sha1hex");
+    lua_setglobal(state, "__lavik_sha1hex");
     if (luaL_loadbuffer(state, kRedisLibrary.data(), kRedisLibrary.size(),
-                        "@keylane_redis") != 0 ||
+                        "@lavik_redis") != 0 ||
         lua_pcall(state, 0, 0, 0) != 0) {
       return absl::InternalError(LuaError(state));
     }
@@ -1856,4 +1856,4 @@ std::uint64_t LuaScriptBusyThresholdMs() {
   return g_script_busy_threshold_ms.load(std::memory_order_acquire);
 }
 
-}  // namespace keylane
+}  // namespace lavik

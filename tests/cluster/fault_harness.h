@@ -29,7 +29,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 
-namespace keylane::test::cluster {
+namespace lavik::test::cluster {
 
 // Exact-model traces are replayed byte-for-byte. Process action scripts retain
 // intended external actions but permit observation drift from OS scheduling.
@@ -90,7 +90,7 @@ struct Trace {
   bool operator==(const Trace&) const = default;
 };
 
-// KFT1 is a canonical, line-oriented format. Exact-model traces are durable
+// LFT1 is a canonical, line-oriented format. Exact-model traces are durable
 // regression inputs; process-action traces are diagnostic scripts and may
 // record observation drift when the real scheduler takes a different path.
 // Writes replace a trace through a sibling temporary file. A failed write
@@ -227,4 +227,4 @@ class StableRandom {
 std::string EncodeAction(const Action& action);
 absl::StatusOr<Action> DecodeAction(std::string_view encoded);
 
-}  // namespace keylane::test::cluster
+}  // namespace lavik::test::cluster

@@ -40,15 +40,15 @@ def prove_write(nodes, leader, value):
 
 
 def start_with_crash(node, point):
-    previous = os.environ.get("KEYLANE_CRASH_POINT")
+    previous = os.environ.get("LAVIK_CRASH_POINT")
     try:
-        os.environ["KEYLANE_CRASH_POINT"] = point
+        os.environ["LAVIK_CRASH_POINT"] = point
         node.start(wait_ready=False)
     finally:
         if previous is None:
-            os.environ.pop("KEYLANE_CRASH_POINT", None)
+            os.environ.pop("LAVIK_CRASH_POINT", None)
         else:
-            os.environ["KEYLANE_CRASH_POINT"] = previous
+            os.environ["LAVIK_CRASH_POINT"] = previous
     H.wait_until(f"node {node.id} reaches {point}", 20,
                  lambda: not node.alive())
     if node.proc.returncode != 86:

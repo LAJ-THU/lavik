@@ -21,7 +21,7 @@
 #include <cstdint>
 #include <memory>
 
-namespace keylane {
+namespace lavik {
 
 // Tracks commands that may outlive the socket read which admitted them. The
 // shutdown thread closes the gate before stopping workers, then waits until all
@@ -94,7 +94,7 @@ class RequestGate {
   static constexpr std::uint64_t kClosed = 1ULL << 63;
   static constexpr std::uint64_t kCountMask = ~kClosed;
 
-  // Keylane's supported CPUs have 64-byte cache lines. Array stride matters:
+  // Lavik's supported CPUs have 64-byte cache lines. Array stride matters:
   // alignment alone would not prevent adjacent workers sharing a line if this
   // object were ever extended with another small field.
   struct alignas(64) Counter {
@@ -117,4 +117,4 @@ class RequestGate {
   unsigned worker_count_ = 0;
 };
 
-}  // namespace keylane
+}  // namespace lavik

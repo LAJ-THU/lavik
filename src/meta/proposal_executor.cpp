@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/proposal_executor.h"
+#include "lavik/meta/proposal_executor.h"
 
 #include <utility>
 
 #include "absl/status/status.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 
 MetaProposalExecutor::MetaProposalExecutor(std::size_t capacity)
     : capacity_(capacity), thread_(&MetaProposalExecutor::Run, this) {}
@@ -85,4 +85,4 @@ void MetaMembershipGate::Release() noexcept {
   held_ = false;
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

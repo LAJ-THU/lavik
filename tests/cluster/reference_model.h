@@ -28,7 +28,7 @@
 
 #include "tests/cluster/fault_harness.h"
 
-namespace keylane::test::cluster {
+namespace lavik::test::cluster {
 
 // StrongId prevents accidental comparisons across independently versioned HA
 // identities while keeping the model cheap and trivially serializable.
@@ -335,4 +335,4 @@ const ScenarioDescriptor* FindClusterScenario(std::string_view name);
 // reuse the same invariant identities.
 std::unique_ptr<Scenario> MakeClusterScenario(Counterexample counterexample);
 
-}  // namespace keylane::test::cluster
+}  // namespace lavik::test::cluster

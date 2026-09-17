@@ -15,9 +15,9 @@
  */
 
 #include "gtest/gtest.h"
-#include "keylane/storage/detail/grouped_object_index.h"
+#include "lavik/storage/detail/grouped_object_index.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 RecordLocation OrderedLocation(std::uint64_t block, std::uint64_t sequence,
@@ -290,4 +290,4 @@ TEST(GroupedOrderedObjectTest, InvalidTypeMissingMarkerAndOomCannotPublish) {
 }
 
 }  // namespace
-}  // namespace keylane::storage
+}  // namespace lavik::storage

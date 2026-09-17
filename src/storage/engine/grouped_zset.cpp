@@ -19,11 +19,11 @@
 #include <set>
 
 #include "impl.h"
-#include "keylane/glob.h"
-#include "keylane/storage/detail/grouped_scratch.h"
-#include "keylane/storage/detail/ordered_compact_codec.h"
+#include "lavik/glob.h"
+#include "lavik/storage/detail/grouped_scratch.h"
+#include "lavik/storage/detail/ordered_compact_codec.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 constexpr auto kNoPage = std::numeric_limits<std::size_t>::max();
@@ -491,7 +491,7 @@ StorageEngine::Impl::ExecuteSortedSetLocked(
         SortedSetMemberMutation members;
         found = nullptr;
         unlock.Unlock();
-        KEYLANE_FAULT_INJECT({
+        LAVIK_FAULT_INJECT({
           const auto paused =
               co_await PauseGroupedWriteForTest(*store.worker_, key, "prepare");
           if (!paused.ok()) co_return paused;
@@ -504,7 +504,7 @@ StorageEngine::Impl::ExecuteSortedSetLocked(
           // The member-index builder also reads old ordered/prefix pages. Keep
           // it in the unlocked phase; both plans still publish through one
           // root.
-          KEYLANE_FAULT_INJECT({
+          LAVIK_FAULT_INJECT({
             const auto paused = co_await PauseGroupedWriteForTest(
                 *store.worker_, key, "members");
             if (!paused.ok()) co_return paused;
@@ -774,16 +774,14 @@ StorageEngine::Impl::ExecuteGroupedSortedSetLocked(
       LoadedOrderedGroup page_;
     };
     auto read_page = [&](std::size_t i) -> Task<absl::StatusOr<ScanPage>> {
-      KEYLANE_FAULT_INJECT(
+      LAVIK_FAULT_INJECT(
           // An optional one-based directory page isolates routing tests from
           // the existing fail-all-ordered-reads member-index test.
-          if (KEYLANE_FAULT_MATCHES("KEYLANE_FAIL_ZSET_ORDERED_READ_KEY",
-                                    key) &&
-              (std::getenv("KEYLANE_FAIL_ZSET_ORDERED_READ_PAGE") == nullptr ||
-               KEYLANE_FAULT_MATCHES_NTH("KEYLANE_FAIL_ZSET_ORDERED_READ_KEY",
-                                         key,
-                                         "KEYLANE_FAIL_ZSET_ORDERED_READ_PAGE",
-                                         i + 1))) co_return absl::
+          if (LAVIK_FAULT_MATCHES("LAVIK_FAIL_ZSET_ORDERED_READ_KEY", key) &&
+              (std::getenv("LAVIK_FAIL_ZSET_ORDERED_READ_PAGE") == nullptr ||
+               LAVIK_FAULT_MATCHES_NTH("LAVIK_FAIL_ZSET_ORDERED_READ_KEY", key,
+                                       "LAVIK_FAIL_ZSET_ORDERED_READ_PAGE",
+                                       i + 1))) co_return absl::
               UnavailableError("injected ordered-page read failure"););
       if (ReadOnly(operation) || prepared != nullptr) {
         co_await bycorf::Yield(*store.worker_);
@@ -1241,4 +1239,4 @@ StorageEngine::Impl::ExecuteGroupedSortedSetLocked(
   }
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

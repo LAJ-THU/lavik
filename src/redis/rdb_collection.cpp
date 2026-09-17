@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-#include "keylane/rdb_collection.h"
+#include "lavik/rdb_collection.h"
 
 #include <bit>
 #include <cmath>
 #include <cstring>
 #include <limits>
 
-namespace keylane::rdb {
+namespace lavik::rdb {
 namespace {
 
 std::size_t EncodeLength(char* bytes, std::uint64_t value) noexcept {
@@ -192,4 +192,4 @@ absl::Status CollectionFileEncoder::Finish() const {
   return absl::OkStatus();
 }
 
-}  // namespace keylane::rdb
+}  // namespace lavik::rdb

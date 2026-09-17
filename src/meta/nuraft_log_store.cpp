@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/nuraft_log_store.h"
+#include "lavik/meta/nuraft_log_store.h"
 
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -34,7 +34,7 @@
 #include "libnuraft/buffer.hxx"
 #include "spdlog/spdlog.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
 constexpr uint32_t kSegmentMagic = 0x4C534547;  // "LSEG"
@@ -973,4 +973,4 @@ void NuraftLogStore::RecomputeLiveBytesLocked() {
   live_bytes_ = total;
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

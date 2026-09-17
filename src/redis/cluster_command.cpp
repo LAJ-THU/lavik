@@ -26,12 +26,12 @@
 #include <vector>
 
 #include "absl/strings/str_cat.h"
-#include "keylane/cluster/runtime.h"
-#include "keylane/cluster/topology.h"
-#include "keylane/resp.h"
-#include "keylane/storage/format.h"
+#include "lavik/cluster/runtime.h"
+#include "lavik/cluster/topology.h"
+#include "lavik/resp.h"
+#include "lavik/storage/format.h"
 
-namespace keylane {
+namespace lavik {
 namespace {
 
 // Same case-insensitive compare as the other Redis command translation
@@ -372,4 +372,4 @@ Task<CommandReply> ExecuteClusterModeCommand(const CommandRequest& request,
   co_return reply;
 }
 
-}  // namespace keylane
+}  // namespace lavik

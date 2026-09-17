@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/automatic_failover_reconciler.h"
+#include "lavik/meta/automatic_failover_reconciler.h"
 
 #include <algorithm>
 #include <array>
@@ -40,21 +40,21 @@
 #include "absl/status/status.h"
 #include "bycorf/io/storage.h"
 #include "bycorf/runtime/worker.h"
-#include "keylane/cluster/control_protocol.h"
-#include "keylane/fault_injection.h"
-#include "keylane/meta/failover.h"
-#include "keylane/meta/hash.h"
-#include "keylane/meta/observation_store.h"
-#include "keylane/meta/policy_store.h"
+#include "lavik/cluster/control_protocol.h"
+#include "lavik/fault_injection.h"
+#include "lavik/meta/failover.h"
+#include "lavik/meta/hash.h"
+#include "lavik/meta/observation_store.h"
+#include "lavik/meta/policy_store.h"
 #include "spdlog/spdlog.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
 constexpr std::array<std::uint64_t, 5> kRetryBackoffMs = {100, 200, 400, 800,
                                                           1'000};
 
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
 std::chrono::milliseconds TestPauseDelay(const char* variable) {
   const char* configured = std::getenv(variable);
   std::uint64_t delay_ms = 0;
@@ -526,7 +526,7 @@ struct MetaAutomaticFailoverReconciler::Core {
   std::map<std::string, Pending, std::less<>> pending_;
   std::vector<std::shared_ptr<std::promise<void>>> waiters_;
 
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
   // Deterministic process-test cuts. They are reset for each leadership run
   // and compiled out of ordinary Release binaries.
   bool test_pause_before_propose_applied_ = false;
@@ -542,7 +542,7 @@ struct MetaAutomaticFailoverReconciler::Core {
 
 namespace {
 
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
 bycorf::Task<absl::Status> TestPause(
     const std::shared_ptr<MetaAutomaticFailoverReconciler::Core>& core,
     std::chrono::milliseconds delay) {
@@ -770,7 +770,7 @@ void MetaAutomaticFailoverReconciler::Start(MetaLeaderContext& context) {
         core->eligible_since_steady_ms_.reset();
         core->detector_.Clear();
         core->pending_.clear();
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
         core->test_pause_before_propose_applied_ = false;
 #endif
         ClearAdmissions(core);
@@ -1044,10 +1044,10 @@ bycorf::Task<absl::Status> MetaAutomaticFailoverReconciler::Run(
     if (ready != core->pending_.end() && !core->cancelled_) {
       Core::Pending& pending = ready->second;
       ArmAdmission(core, pending);
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
       if (!core->test_pause_before_propose_applied_) {
         const auto delay =
-            TestPauseDelay("KEYLANE_TEST_PAUSE_AUTOMATIC_BEFORE_PROPOSE_MS");
+            TestPauseDelay("LAVIK_TEST_PAUSE_AUTOMATIC_BEFORE_PROPOSE_MS");
         if (delay != std::chrono::milliseconds::zero()) {
           core->test_pause_before_propose_applied_ = true;
           spdlog::info(
@@ -1147,4 +1147,4 @@ bycorf::Task<absl::Status> MetaAutomaticFailoverReconciler::Run(
   co_return absl::OkStatus();
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

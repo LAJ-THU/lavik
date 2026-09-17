@@ -39,7 +39,7 @@
 
 extern char** environ;
 
-namespace keylane::test {
+namespace lavik::test {
 namespace {
 
 constexpr std::size_t kMaxRespLineBytes = 64 * 1024;
@@ -128,8 +128,7 @@ std::string ReadFile(const std::filesystem::path& path) {
 }
 
 TempDirectory::TempDirectory(std::string_view label) {
-  std::string pattern =
-      TestDataPath("keylane-" + std::string(label) + "-XXXXXX");
+  std::string pattern = TestDataPath("lavik-" + std::string(label) + "-XXXXXX");
   std::vector<char> mutable_pattern(pattern.begin(), pattern.end());
   mutable_pattern.push_back('\0');
   char* created = ::mkdtemp(mutable_pattern.data());
@@ -488,4 +487,4 @@ void WaitUntil(std::string_view label, std::chrono::milliseconds timeout,
   Fail("timed out waiting for " + std::string(label));
 }
 
-}  // namespace keylane::test
+}  // namespace lavik::test

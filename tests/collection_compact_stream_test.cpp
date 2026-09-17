@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/storage/detail/collection_compact_stream.h"
+#include "lavik/storage/detail/collection_compact_stream.h"
 
 #include <bit>
 #include <limits>
@@ -22,10 +22,10 @@
 #include <vector>
 
 #include "gtest/gtest.h"
-#include "keylane/storage/detail/hash_codec.h"
-#include "keylane/storage/detail/ordered_compact_codec.h"
+#include "lavik/storage/detail/hash_codec.h"
+#include "lavik/storage/detail/ordered_compact_codec.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 CollectionPage Page(ValueType type) {
@@ -440,4 +440,4 @@ TEST(CollectionCompactStream,
 }
 
 }  // namespace
-}  // namespace keylane::storage
+}  // namespace lavik::storage

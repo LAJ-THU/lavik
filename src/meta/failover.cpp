@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/failover.h"
+#include "lavik/meta/failover.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -28,15 +28,15 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "keylane/meta/candidate_plan.h"
-#include "keylane/meta/coordinator.h"
-#include "keylane/meta/encoding.h"
-#include "keylane/meta/hash.h"
+#include "lavik/meta/candidate_plan.h"
+#include "lavik/meta/coordinator.h"
+#include "lavik/meta/encoding.h"
+#include "lavik/meta/hash.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
-constexpr std::string_view kOperationIntentMagic = "KLFO";
+constexpr std::string_view kOperationIntentMagic = "LVFO";
 constexpr std::uint16_t kFailoverSchemaVersion = 1;
 
 absl::Status Invalid(std::string_view message) {
@@ -554,4 +554,4 @@ absl::Status ValidateFailoverProposal(const MetaCommand& command,
   return absl::OkStatus();
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

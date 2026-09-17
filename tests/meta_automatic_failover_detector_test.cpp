@@ -24,9 +24,9 @@
 #include <vector>
 
 #include "gtest/gtest.h"
-#include "keylane/meta/automatic_failover_detector.h"
+#include "lavik/meta/automatic_failover_detector.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
 template <std::size_t N>
@@ -595,4 +595,4 @@ TEST(MetaAutomaticFailoverStateMachineTest,
 }
 
 }  // namespace
-}  // namespace keylane::meta
+}  // namespace lavik::meta

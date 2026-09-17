@@ -14,9 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Keylane
+# Lavik
 
-Keylane coordinates Redis-compatible data groups through a replicated Meta
+Lavik coordinates Redis-compatible data groups through a replicated Meta
 control plane and node-local data-plane enforcement.
 
 ## Language

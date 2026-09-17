@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/cluster/node_control.h"
+#include "lavik/cluster/node_control.h"
 
 #include <gtest/gtest.h>
 
@@ -33,9 +33,9 @@
 
 #include "bycorf/net/server.h"
 #include "bycorf/runtime/worker.h"
-#include "keylane/metrics.h"
+#include "lavik/metrics.h"
 
-namespace keylane::cluster {
+namespace lavik::cluster {
 namespace {
 
 using namespace std::chrono_literals;
@@ -3646,4 +3646,4 @@ TEST(NodeControlInstallerTest, RoutingRefreshPreservesLocalLeaseAndExecution) {
   EXPECT_EQ(control.cache.Current()->topology_epoch(), 2);
 }
 
-}  // namespace keylane::cluster
+}  // namespace lavik::cluster

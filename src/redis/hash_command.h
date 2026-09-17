@@ -16,9 +16,9 @@
 
 #pragma once
 
-#include "keylane/command.h"
+#include "lavik/command.h"
 
-namespace keylane {
+namespace lavik {
 
 class ReplyBuilder;
 
@@ -32,4 +32,4 @@ Task<CommandReply> ExecuteHashCommandLocked(const CommandRequest& request,
                                             storage::TxShardWrites* tx,
                                             ReplyBuilder& reply_builder);
 
-}  // namespace keylane
+}  // namespace lavik

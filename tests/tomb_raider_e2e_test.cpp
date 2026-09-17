@@ -42,10 +42,10 @@
 #include <vector>
 
 #include "bycorf/net/server.h"
-#include "keylane/memory.h"
-#include "keylane/metrics.h"
-#include "keylane/storage/engine.h"
-#include "keylane/tx/tx_shard.h"
+#include "lavik/memory.h"
+#include "lavik/metrics.h"
+#include "lavik/storage/engine.h"
+#include "lavik/tx/tx_shard.h"
 #include "support/test_data_path.h"
 
 namespace {
@@ -171,7 +171,7 @@ void CreateDataFile(const std::string& path, std::uint64_t bytes) {
 
 class TombRaiderQuiesceService final : public bycorf::Service {
  public:
-  explicit TombRaiderQuiesceService(keylane::storage::StorageEngine* storage)
+  explicit TombRaiderQuiesceService(lavik::storage::StorageEngine* storage)
       : storage_(storage) {}
 
   void Prepare(unsigned thread_count) override {
@@ -182,8 +182,8 @@ class TombRaiderQuiesceService final : public bycorf::Service {
 
   bycorf::Task<absl::Status> Run(bycorf::Worker& worker,
                                  bycorf::ServiceContext) override {
-    keylane::BindMemoryAccountingShard(worker.id());
-    keylane::tx::TxRuntime::Get()->shard(worker.id()).Bind(worker);
+    lavik::BindMemoryAccountingShard(worker.id());
+    lavik::tx::TxRuntime::Get()->shard(worker.id()).Bind(worker);
     result_ = co_await storage_->InitializeWorker(worker);
     if (result_.ok()) {
       auto seeded = co_await storage_->Set(0, "quiesce-running-round", "v");
@@ -204,7 +204,7 @@ class TombRaiderQuiesceService final : public bycorf::Service {
     // current maintenance round alone. Replica quiesce is the stronger path.
     if (result_.ok()) {
       result_ = co_await storage_->ConfigureTombRaider(
-          {.action_ = keylane::storage::TombRaiderConfigAction::kOff});
+          {.action_ = lavik::storage::TombRaiderConfigAction::kOff});
     }
     const auto user_off = storage_->TombRaiderStats();
     if (result_.ok() && (user_off.enabled_ || !user_off.running_)) {
@@ -248,26 +248,26 @@ class TombRaiderQuiesceService final : public bycorf::Service {
   const absl::Status& result() const noexcept { return result_; }
 
  private:
-  keylane::storage::StorageEngine* storage_ = nullptr;
+  lavik::storage::StorageEngine* storage_ = nullptr;
   absl::Status result_ =
       absl::UnknownError("tomb raider quiesce service did not run");
 };
 
 void VerifyReplicaQuiesce(const std::string& path) {
-  keylane::storage::StorageEngineOptions options;
+  lavik::storage::StorageEngineOptions options;
   options.data_files_ = {path};
   options.buffers_.registered_bytes_ = 64 * kMiB;
   options.tomb_raider_interval_ms_ = 1;
   // A normal round would remain in this pacing sleep for a minute. Quiesce
   // must wake at a bounded checkpoint rather than waiting for it to finish.
   options.tomb_raider_sleep_ms_ = 60'000;
-  keylane::storage::StorageEngine storage(std::move(options));
-  keylane::InitWorkerMetrics(1);
-  const absl::Status memory = keylane::InitMemoryLimit(512 * kMiB, 1);
+  lavik::storage::StorageEngine storage(std::move(options));
+  lavik::InitWorkerMetrics(1);
+  const absl::Status memory = lavik::InitMemoryLimit(512 * kMiB, 1);
   if (!memory.ok()) Fail(std::string(memory.message()));
   const absl::Status prepared = storage.Prepare(1);
   if (!prepared.ok()) Fail(std::string(prepared.message()));
-  keylane::tx::TxRuntime::Create(1);
+  lavik::tx::TxRuntime::Create(1);
 
   TombRaiderQuiesceService service(&storage);
   bycorf::Server server;
@@ -310,7 +310,7 @@ RespClient Connect(std::uint16_t port) {
     ::close(fd);
     std::this_thread::sleep_for(10ms);
   }
-  Fail("timed out connecting to Keylane");
+  Fail("timed out connecting to Lavik");
 }
 
 class ServerProcess {
@@ -372,14 +372,14 @@ class ServerProcess {
       if (result == pid_) {
         pid_ = -1;
         if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-          Fail("Keylane exited unsuccessfully");
+          Fail("Lavik exited unsuccessfully");
         }
         return;
       }
       if (result < 0) Fail("waitpid failed");
       std::this_thread::sleep_for(10ms);
     }
-    Fail("Keylane did not stop");
+    Fail("Lavik did not stop");
   }
 
  private:
@@ -474,7 +474,7 @@ void VerifyTtlReapingReducesMemory(RespClient& client) {
   // Warm its first arena span before measuring growth; the survivor keeps a
   // span allocated after reaping. Defrag is paused so disk-block reclamation
   // cannot supply an unrelated memory drop. RSS is deliberately not an
-  // assertion: mimalloc may retain freed pages even when Keylane releases
+  // assertion: mimalloc may retain freed pages even when Lavik releases
   // ownership.
   std::this_thread::sleep_for(300ms);
   const long long warm_memory = InfoField(client, "memory", "used_memory");
@@ -607,11 +607,11 @@ std::string LocalTimeAfter(std::chrono::seconds offset) {
 
 int main(int argc, char** argv) {
   if (argc != 2) {
-    std::cerr << "usage: tomb_raider_e2e_test /path/to/keylane\n";
+    std::cerr << "usage: tomb_raider_e2e_test /path/to/lavik\n";
     return 2;
   }
-  const std::string prefix = keylane::test::TestDataPath(
-      "keylane-tombraider-" + std::to_string(::getpid()));
+  const std::string prefix = lavik::test::TestDataPath(
+      "lavik-tombraider-" + std::to_string(::getpid()));
   const std::string data_path = prefix + ".data";
   const std::string quiesce_path = prefix + ".quiesce.data";
   const std::string log_path = prefix + ".log";
@@ -769,7 +769,7 @@ int main(int argc, char** argv) {
     VerifyReplicaQuiesce(quiesce_path);
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
-    std::cerr << "--- Keylane log ---\n" << ReadFile(log_path);
+    std::cerr << "--- Lavik log ---\n" << ReadFile(log_path);
     (void)::unlink(data_path.c_str());
     (void)::unlink(quiesce_path.c_str());
     (void)::unlink(log_path.c_str());

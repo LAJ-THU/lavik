@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/resp.h"
+#include "lavik/resp.h"
 
 #include <algorithm>
 #include <cassert>
@@ -25,9 +25,9 @@
 #include <string_view>
 
 #include "absl/strings/str_cat.h"
-#include "keylane/memory.h"
+#include "lavik/memory.h"
 
-namespace keylane {
+namespace lavik {
 using namespace bycorf;
 
 namespace {
@@ -738,4 +738,4 @@ std::string EncodeScanReply(std::uint64_t cursor,
   return std::move(builder).Release();
 }
 
-}  // namespace keylane
+}  // namespace lavik

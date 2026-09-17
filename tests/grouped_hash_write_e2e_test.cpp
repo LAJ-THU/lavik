@@ -19,7 +19,7 @@
 #include <optional>
 
 #include "grouped_write_e2e_support.h"
-#include "keylane/storage/detail/grouped_hash.h"
+#include "lavik/storage/detail/grouped_hash.h"
 
 namespace {
 using namespace grouped_e2e;
@@ -103,11 +103,11 @@ TEST(HashReplaceE2e, SemanticsTtlBinaryFieldsAndUnchangedStandardCommands) {
   PrivateDisk disk;
   Server server(disk);
   Client client(server.port());
-  EXPECT_EQ(client.Command({"KEYLANE.HREPLACE", "missing", "f", "v"}).text_,
+  EXPECT_EQ(client.Command({"LAVIK.HREPLACE", "missing", "f", "v"}).text_,
             "-1");
   EXPECT_EQ(client.Command({"EXISTS", "missing"}).text_, "0");
   EXPECT_EQ(client.Command({"SET", "string", "value"}).text_, "OK");
-  EXPECT_TRUE(client.Command({"KEYLANE.HREPLACE", "string", "f", "v"})
+  EXPECT_TRUE(client.Command({"LAVIK.HREPLACE", "string", "f", "v"})
                   .text_.starts_with("WRONGTYPE"));
   EXPECT_EQ(client.Command({"GET", "string"}).text_, "value");
   EXPECT_EQ(client.Command({"HSET", "hash", "a", "1", "b", "2"}).text_, "2");
@@ -116,19 +116,22 @@ TEST(HashReplaceE2e, SemanticsTtlBinaryFieldsAndUnchangedStandardCommands) {
   EXPECT_EQ(client.Command({"EXPIRE", "hash", "3600"}).text_, "1");
   const auto expiry = client.Command({"PEXPIRETIME", "hash"}).text_;
   const std::string binary("f\0x", 3), value("v\0y", 3);
-  EXPECT_EQ(client.Command({"keylane.hreplace", "hash", "a", "first", "a",
-                            "last", binary, value}).text_, "OK");
+  EXPECT_EQ(client
+                .Command({"lavik.hreplace", "hash", "a", "first", "a", "last",
+                          binary, value})
+                .text_,
+            "OK");
   EXPECT_EQ(client.Command({"HLEN", "hash"}).text_, "2");
   EXPECT_EQ(client.Command({"HGET", "hash", "a"}).text_, "last");
   EXPECT_EQ(client.Command({"HGET", "hash", "b"}).text_, "-1");
   EXPECT_EQ(client.Command({"HGET", "hash", binary}).text_, value);
   EXPECT_EQ(client.Command({"PEXPIRETIME", "hash"}).text_, expiry);
-  EXPECT_EQ(client.Command({"KEYLANE.HREPLACE", "hash", "odd"}).kind_, '-');
-  EXPECT_EQ(client.Command({"KEYLANE.HREPLACE", "hash", "a", "v", "odd"})
-                .kind_, '-');
+  EXPECT_EQ(client.Command({"LAVIK.HREPLACE", "hash", "odd"}).kind_, '-');
+  EXPECT_EQ(client.Command({"LAVIK.HREPLACE", "hash", "a", "v", "odd"}).kind_,
+            '-');
   EXPECT_EQ(client.Command({"HLEN", "hash"}).text_, "2");
   EXPECT_EQ(client.Command({"PEXPIREAT", "hash", "1"}).text_, "1");
-  EXPECT_EQ(client.Command({"KEYLANE.HREPLACE", "hash", "f", "v"}).text_, "-1");
+  EXPECT_EQ(client.Command({"LAVIK.HREPLACE", "hash", "f", "v"}).text_, "-1");
   EXPECT_EQ(client.Command({"EXISTS", "hash"}).text_, "0");
 }
 
@@ -143,11 +146,10 @@ TEST(HashReplaceE2e, DifferentRequestSizesPreserveLastDuplicateAfterRecovery) {
     for (unsigned count : {1, 15, 16, 17, 65}) {
       const auto key = "replace-" + std::to_string(count);
       ASSERT_EQ(client.Command({"HSET", key, "old-field", "old"}).text_, "1");
-      std::vector<std::string> args{"KEYLANE.HREPLACE", key};
+      std::vector<std::string> args{"LAVIK.HREPLACE", key};
       for (unsigned i = 0; i < count; ++i) {
-        std::string field = i % 3 == 0
-                                ? ""
-                                : std::string("f\0", 2) + std::to_string(i % 7);
+        std::string field =
+            i % 3 == 0 ? "" : std::string("f\0", 2) + std::to_string(i % 7);
         std::string value = i % 4 == 0 ? "" : std::string(i * 3, 'v');
         expected[key][field] = value;
         args.push_back(std::move(field));
@@ -166,7 +168,8 @@ TEST(HashReplaceE2e, DifferentRequestSizesPreserveLastDuplicateAfterRecovery) {
   Server recovered(disk, 3);
   Client client(recovered.port());
   for (const auto& [key, fields] : expected) {
-    EXPECT_EQ(client.Command({"HLEN", key}).text_, std::to_string(fields.size()));
+    EXPECT_EQ(client.Command({"HLEN", key}).text_,
+              std::to_string(fields.size()));
     EXPECT_EQ(client.Command({"HEXISTS", key, "old-field"}).text_, "0");
     for (const auto& [field, value] : fields)
       EXPECT_EQ(client.Command({"HGET", key, field}).text_, value);
@@ -185,11 +188,15 @@ TEST(HashReplaceE2e, PromotionUsesFinalDeduplicatedBytes) {
       ASSERT_EQ(client.Command({"HSET", key, "old", "old"}).text_, "1");
       // Only the final duplicate participates in promotion. The overwritten
       // large value must neither force grouping nor leak into the after-image.
-      ASSERT_EQ(client.Command({"KEYLANE.HREPLACE", key, "x",
-                                std::string(32 * 1024, 'd'), "x",
-                                std::string(size, 'v')}).text_, "OK");
+      ASSERT_EQ(
+          client
+              .Command({"LAVIK.HREPLACE", key, "x", std::string(32 * 1024, 'd'),
+                        "x", std::string(size, 'v')})
+              .text_,
+          "OK");
       EXPECT_EQ(client.Command({"HLEN", key}).text_, "1");
-      EXPECT_EQ(client.Command({"HGET", key, "x"}).text_, std::string(size, 'v'));
+      EXPECT_EQ(client.Command({"HGET", key, "x"}).text_,
+                std::string(size, 'v'));
     }
     client.Durable();
     ASSERT_EQ(server.Wait(true), 0) << server.Log();
@@ -281,8 +288,8 @@ TEST(HashReadOwnershipE2e, FullReadsPreserveCompactAndGroupedValues) {
     EXPECT_EQ(client.Command({"GET", "string"}).text_, "unchanged");
     for (const auto* command : {"HGETALL", "HKEYS", "HVALS"}) {
       EXPECT_TRUE(client.Command({command, "missing"}).items_.empty());
-      EXPECT_TRUE(client.Command({command, "string"})
-                      .text_.starts_with("WRONGTYPE"));
+      EXPECT_TRUE(
+          client.Command({command, "string"}).text_.starts_with("WRONGTYPE"));
     }
     client.Durable();
     ASSERT_EQ(server.Wait(true), 0) << server.Log();
@@ -301,13 +308,14 @@ TEST(HashReplaceE2e, WatchExecAndLua) {
   Client writer(server.port()), watcher(server.port());
   ASSERT_EQ(writer.Command({"HSET", "hash", "a", "1", "b", "2"}).text_, "2");
   ASSERT_EQ(watcher.Command({"WATCH", "hash"}).text_, "OK");
-  ASSERT_EQ(writer.Command({"KEYLANE.HREPLACE", "hash", "a", "1", "b", "2"})
-                .text_, "OK");
+  ASSERT_EQ(
+      writer.Command({"LAVIK.HREPLACE", "hash", "a", "1", "b", "2"}).text_,
+      "OK");
   ASSERT_EQ(watcher.Command({"MULTI"}).text_, "OK");
   ASSERT_EQ(watcher.Command({"HLEN", "hash"}).text_, "QUEUED");
   EXPECT_EQ(watcher.Command({"EXEC"}).text_, "-1");
   ASSERT_EQ(writer.Command({"MULTI"}).text_, "OK");
-  ASSERT_EQ(writer.Command({"KEYLANE.HREPLACE", "hash", "c", "3"}).text_,
+  ASSERT_EQ(writer.Command({"LAVIK.HREPLACE", "hash", "c", "3"}).text_,
             "QUEUED");
   ASSERT_EQ(writer.Command({"HMSET", "hash", "d", "4"}).text_, "QUEUED");
   auto result = writer.Command({"EXEC"});
@@ -316,9 +324,12 @@ TEST(HashReplaceE2e, WatchExecAndLua) {
   EXPECT_EQ(result.items_[1].text_, "OK");
   EXPECT_EQ(writer.Command({"HLEN", "hash"}).text_, "2");
   EXPECT_EQ(writer.Command({"HGET", "hash", "a"}).text_, "-1");
-  EXPECT_EQ(writer.Command({"EVAL",
-                           "return redis.call('KEYLANE.HREPLACE',KEYS[1],'e','5')",
-                           "1", "hash"}).text_, "OK");
+  EXPECT_EQ(writer
+                .Command({"EVAL",
+                          "return redis.call('LAVIK.HREPLACE',KEYS[1],'e','5')",
+                          "1", "hash"})
+                .text_,
+            "OK");
   EXPECT_EQ(writer.Command({"HLEN", "hash"}).text_, "1");
   EXPECT_EQ(writer.Command({"HGET", "hash", "e"}).text_, "5");
 }
@@ -331,10 +342,10 @@ TEST(HashReplaceE2e, GroupedReplacementDemotionExtentsAndColdRecovery) {
     Client client(server.port());
     ASSERT_EQ(client.Command(HashCommand("hash")).text_, "256");
     auto replacement = HashCommand("hash", 'r');
-    replacement[0] = "KEYLANE.HREPLACE";
+    replacement[0] = "LAVIK.HREPLACE";
     ASSERT_EQ(client.Command(replacement).text_, "OK");
     client.Durable();
-    ASSERT_EQ(client.Command({"KEYLANE.HREPLACE", "hash", "only", huge}).text_,
+    ASSERT_EQ(client.Command({"LAVIK.HREPLACE", "hash", "only", huge}).text_,
               "OK");
     EXPECT_EQ(client.Command({"HLEN", "hash"}).text_, "1");
     EXPECT_EQ(client.Command({"HGET", "hash", "only"}).text_, huge);
@@ -347,7 +358,7 @@ TEST(HashReplaceE2e, GroupedReplacementDemotionExtentsAndColdRecovery) {
     Client client(server.port());
     EXPECT_EQ(client.Command({"HLEN", "hash"}).text_, "1");
     EXPECT_EQ(client.Command({"HGET", "hash", "only"}).text_, huge);
-    ASSERT_EQ(client.Command({"KEYLANE.HREPLACE", "hash", "small", "v"}).text_,
+    ASSERT_EQ(client.Command({"LAVIK.HREPLACE", "hash", "small", "v"}).text_,
               "OK");
     EXPECT_EQ(client.Command({"HGET", "hash", "only"}).text_, "-1");
     EXPECT_EQ(client.Command({"DEFRAG", "RESUME"}).kind_, '+');
@@ -362,7 +373,7 @@ TEST(HashReplaceE2e, GroupedReplacementDemotionExtentsAndColdRecovery) {
 }
 
 TEST(HashReplaceE2e, AuxiliaryOomPreservesOldHashInsideExec) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires Debug/fault server";
 #endif
   PrivateDisk disk;
@@ -377,7 +388,7 @@ TEST(HashReplaceE2e, AuxiliaryOomPreservesOldHashInsideExec) {
     Server server(disk, 2, {}, "hash");
     Client client(server.port());
     auto replacement = HashCommand("hash", 'r');
-    replacement[0] = "KEYLANE.HREPLACE";
+    replacement[0] = "LAVIK.HREPLACE";
     ASSERT_EQ(client.Command({"MULTI"}).text_, "OK");
     ASSERT_EQ(client.Command(replacement).text_, "QUEUED");
     ASSERT_EQ(client.Command({"SET", "after", "survives"}).text_, "QUEUED");
@@ -385,14 +396,16 @@ TEST(HashReplaceE2e, AuxiliaryOomPreservesOldHashInsideExec) {
     ASSERT_EQ(result.items_.size(), 2);
     EXPECT_TRUE(result.items_[0].text_.starts_with("OOM"));
     EXPECT_EQ(result.items_[1].text_, "OK");
-    EXPECT_EQ(client.Command({"HGET", "hash", "field0"}).text_, std::string(128, 'v'));
+    EXPECT_EQ(client.Command({"HGET", "hash", "field0"}).text_,
+              std::string(128, 'v'));
     client.Durable();
     ASSERT_EQ(server.Wait(true), 0) << server.Log();
   }
   Server recovered(disk);
   Client client(recovered.port());
   EXPECT_EQ(client.Command({"HLEN", "hash"}).text_, "256");
-  EXPECT_EQ(client.Command({"HGET", "hash", "field0"}).text_, std::string(128, 'v'));
+  EXPECT_EQ(client.Command({"HGET", "hash", "field0"}).text_,
+            std::string(128, 'v'));
   EXPECT_EQ(client.Command({"GET", "after"}).text_, "survives");
 }
 
@@ -406,13 +419,17 @@ TEST(HashReplaceE2e, NativeReplicationPreservesReplacementAndAbsoluteTtl) {
     const auto expiry = writer.Command({"PEXPIRETIME", "hash"}).text_;
     Server replica(replica_disk, 3);
     Client follower(replica.port());
-    ASSERT_EQ(follower.Command({"REPLICAOF", "127.0.0.1",
-                                std::to_string(source.port())}).text_, "OK");
+    ASSERT_EQ(
+        follower
+            .Command({"REPLICAOF", "127.0.0.1", std::to_string(source.port())})
+            .text_,
+        "OK");
     const auto until = std::chrono::steady_clock::now() + 60s;
     bool online = false;
     while (std::chrono::steady_clock::now() < until) {
-      if (follower.Command({"INFO", "replication"}).text_.find(
-              "keylane_replication_state:online") != std::string::npos) {
+      if (follower.Command({"INFO", "replication"})
+              .text_.find("lavik_replication_state:online") !=
+          std::string::npos) {
         online = true;
         break;
       }
@@ -421,12 +438,13 @@ TEST(HashReplaceE2e, NativeReplicationPreservesReplacementAndAbsoluteTtl) {
     ASSERT_TRUE(online) << source.Log() << replica.Log();
     ASSERT_EQ(follower.Command({"READONLY"}).text_, "OK");
     auto replacement = HashCommand("hash", 'r');
-    replacement[0] = "KEYLANE.HREPLACE";
+    replacement[0] = "LAVIK.HREPLACE";
     ASSERT_EQ(writer.Command(replacement).text_, "OK");
     ASSERT_EQ(writer.Command({"MULTI"}).text_, "OK");
-    ASSERT_EQ(writer.Command({"KEYLANE.HREPLACE", "hash", "only", "value"})
-                  .text_, "QUEUED");
-    ASSERT_EQ(writer.Command({"HMSET", "hash", "after", "tail"}).text_, "QUEUED");
+    ASSERT_EQ(writer.Command({"LAVIK.HREPLACE", "hash", "only", "value"}).text_,
+              "QUEUED");
+    ASSERT_EQ(writer.Command({"HMSET", "hash", "after", "tail"}).text_,
+              "QUEUED");
     const auto replies = writer.Command({"EXEC"});
     ASSERT_EQ(replies.items_.size(), 2);
     ASSERT_EQ(replies.items_[0].text_, "OK");
@@ -510,7 +528,7 @@ TEST(GroupedHashWriteE2e, ConditionalIncrementDeleteAndNewIncarnation) {
 
 TEST(GroupedHashWriteE2e,
      FailedAuxiliaryBatchCannotReappearAfterLaterExecWrite) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires Debug/fault auxiliary hook";
 #endif
   PrivateDisk disk;
@@ -597,7 +615,7 @@ TEST(GroupedHashWriteE2e, SetUsesSameGroupedLifecycleWithSetType) {
 }
 
 TEST(GroupedHashWriteE2e, NativeFullSyncTailAllowsRepeatedHashAndMixedWrites) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP()
       << "requires a Debug/fault server for the acknowledged handoff pause";
 #endif
@@ -663,11 +681,11 @@ TEST(GroupedHashWriteE2e, NativeFullSyncTailAllowsRepeatedHashAndMixedWrites) {
     std::string info;
     do {
       info = follower.Command({"INFO", "replication"}).text_;
-      if (info.find("keylane_replication_state:online") != std::string::npos)
+      if (info.find("lavik_replication_state:online") != std::string::npos)
         break;
       std::this_thread::sleep_for(10ms);
     } while (std::chrono::steady_clock::now() < online_deadline);
-    ASSERT_NE(info.find("keylane_replication_state:online"), std::string::npos)
+    ASSERT_NE(info.find("lavik_replication_state:online"), std::string::npos)
         << source.Log() << replica.Log();
     ASSERT_EQ(follower.Command({"READONLY"}).text_, "OK");
     EXPECT_EQ(follower.Command({"HGET", hash, "field0"}).text_, "first");
@@ -775,11 +793,11 @@ TEST(GroupedHashWriteE2e,
     std::string info;
     do {
       info = follower.Command({"INFO", "replication"}).text_;
-      if (info.find("keylane_replication_state:online") != std::string::npos)
+      if (info.find("lavik_replication_state:online") != std::string::npos)
         break;
       std::this_thread::sleep_for(10ms);
     } while (std::chrono::steady_clock::now() < deadline);
-    ASSERT_NE(info.find("keylane_replication_state:online"), std::string::npos)
+    ASSERT_NE(info.find("lavik_replication_state:online"), std::string::npos)
         << source.Log() << replica.Log();
     ASSERT_EQ(follower.Command({"READONLY"}).text_, "OK");
     verify(follower);
@@ -817,7 +835,7 @@ class ScopedSourceFault {
 };
 
 TEST(HashReplaceE2e, ColdReplacementDoesNotLoadOldPayload) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires payload read fault hook";
 #endif
   for (const bool grouped : {false, true}) {
@@ -826,8 +844,9 @@ TEST(HashReplaceE2e, ColdReplacementDoesNotLoadOldPayload) {
     {
       Server server(disk);
       Client client(server.port());
-      auto seed = grouped ? HashCommand("hash")
-                          : std::vector<std::string>{"HSET", "hash", "old", "v"};
+      auto seed = grouped
+                      ? HashCommand("hash")
+                      : std::vector<std::string>{"HSET", "hash", "old", "v"};
       ASSERT_NE(client.Command(seed).kind_, '-');
       client.Durable();
       ASSERT_EQ(server.Wait(true), 0) << server.Log();
@@ -835,14 +854,16 @@ TEST(HashReplaceE2e, ColdReplacementDoesNotLoadOldPayload) {
     {
       std::unique_ptr<Server> server;
       {
-        ScopedSourceFault fault("KEYLANE_FAIL_VALUE_READ_KEY", "hash");
+        ScopedSourceFault fault("LAVIK_FAIL_VALUE_READ_KEY", "hash");
         server = std::make_unique<Server>(disk);
       }
       Client client(server->port());
-      EXPECT_NE(client.Command({"HMSET", "hash", "old", "changed"}).text_.find(
-                    "injected value payload read failure"), std::string::npos);
-      ASSERT_EQ(client.Command({"KEYLANE.HREPLACE", "hash", "new", "image"})
-                    .text_, "OK");
+      EXPECT_NE(client.Command({"HMSET", "hash", "old", "changed"})
+                    .text_.find("injected value payload read failure"),
+                std::string::npos);
+      ASSERT_EQ(
+          client.Command({"LAVIK.HREPLACE", "hash", "new", "image"}).text_,
+          "OK");
       EXPECT_EQ(client.Command({"HLEN", "hash"}).text_, "1");
       client.Durable();
       ASSERT_EQ(server->Wait(true), 0) << server->Log();
@@ -945,7 +966,7 @@ std::vector<std::string> SmallHashCommand(const std::string& key) {
 }
 
 TEST(GroupedHashWriteE2e, ColdCompactWritesReleaseStateButKeepTheKeyLocked) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires Debug/fault compact Hash write pause hook";
 #endif
   for (const auto* verb : {"HSET", "HMSET"}) {
@@ -964,9 +985,9 @@ TEST(GroupedHashWriteE2e, ColdCompactWritesReleaseStateButKeepTheKeyLocked) {
     }
     ASSERT_TRUE(disk.Auxiliaries(key).empty());
     {
-      ScopedSourceFault paused_key("KEYLANE_COMPACT_HASH_WRITE_PAUSE_KEY",
+      ScopedSourceFault paused_key("LAVIK_COMPACT_HASH_WRITE_PAUSE_KEY",
                                    key.c_str());
-      ScopedSourceFault pause_ms("KEYLANE_COMPACT_HASH_WRITE_PAUSE_MS", "3000");
+      ScopedSourceFault pause_ms("LAVIK_COMPACT_HASH_WRITE_PAUSE_MS", "3000");
       // One worker makes all three keys share the same WorkerStore mutex.
       // No value read precedes A after restart, so A loads the old disk value.
       Server server(disk, 1);
@@ -1074,7 +1095,7 @@ TEST(GroupedHashWriteE2e,
 }
 
 TEST(GroupedHashWriteE2e, PublicationHandoffOomFailsClosedAndRecoversOldGraph) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires allocation failure after grouped root staging";
 #endif
   const std::string old_value(20 * 1024, 'o');
@@ -1117,7 +1138,7 @@ TEST(GroupedHashWriteE2e, PublicationHandoffOomFailsClosedAndRecoversOldGraph) {
     {
       std::unique_ptr<Server> server;
       {
-        ScopedSourceFault fault("KEYLANE_FAIL_GROUP_HANDOFF_KEY", "handoff");
+        ScopedSourceFault fault("LAVIK_FAIL_GROUP_HANDOFF_KEY", "handoff");
         server = std::make_unique<Server>(disk, 1);
       }
       Client client(server->port());
@@ -1140,7 +1161,7 @@ TEST(GroupedHashWriteE2e, PublicationHandoffOomFailsClosedAndRecoversOldGraph) {
 }
 
 TEST(GroupedHashWriteE2e, NativeCancelReleasesActiveHugePageAndExactPins) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires Debug source cancellation hook";
 #endif
   PrivateDisk source_disk;
@@ -1148,7 +1169,7 @@ TEST(GroupedHashWriteE2e, NativeCancelReleasesActiveHugePageAndExactPins) {
   const std::string huge(9 * 1024 * 1024, 'C');
   std::unique_ptr<Server> source;
   {
-    ScopedSourceFault fault("KEYLANE_PAUSE_FULLSYNC_COLLECTION_CHUNK_KEY",
+    ScopedSourceFault fault("LAVIK_PAUSE_FULLSYNC_COLLECTION_CHUNK_KEY",
                             "cancel-hash");
     source = std::make_unique<Server>(source_disk, 2);
   }
@@ -1206,7 +1227,7 @@ TEST(GroupedHashWriteE2e, NativeCancelReleasesActiveHugePageAndExactPins) {
 }
 
 TEST(GroupedHashWriteE2e, NativeShutdownWaitsForUnpublishedPinnedScan) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires Debug source pre-scan hook";
 #endif
   PrivateDisk source_disk;
@@ -1215,7 +1236,7 @@ TEST(GroupedHashWriteE2e, NativeShutdownWaitsForUnpublishedPinnedScan) {
   {
     std::unique_ptr<Server> source;
     {
-      ScopedSourceFault fault("KEYLANE_PAUSE_FULLSYNC_COLLECTION_SCAN_KEY",
+      ScopedSourceFault fault("LAVIK_PAUSE_FULLSYNC_COLLECTION_SCAN_KEY",
                               "shutdown-hash");
       source = std::make_unique<Server>(source_disk, 2);
     }
@@ -1250,7 +1271,7 @@ TEST(GroupedHashWriteE2e, NativeShutdownWaitsForUnpublishedPinnedScan) {
 class GroupedHashWriteCrashE2e : public testing::TestWithParam<const char*> {};
 
 TEST_P(GroupedHashWriteCrashE2e, UncommittedOuterNeverPublishesPartialHash) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires Debug/fault crash hook";
 #endif
   PrivateDisk disk;
@@ -1288,7 +1309,7 @@ TEST_P(GroupedHashWriteCrashE2e, UncommittedOuterNeverPublishesPartialHash) {
 }
 
 TEST_P(GroupedHashWriteCrashE2e, ReplacementNeverRevivesPartialOrOldFields) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires Debug/fault crash hook";
 #endif
   PrivateDisk disk;
@@ -1303,9 +1324,9 @@ TEST_P(GroupedHashWriteCrashE2e, ReplacementNeverRevivesPartialOrOldFields) {
     Server server(disk, 2, GetParam());
     Client client(server.port());
     auto replacement = HashCommand("hash", 'r');
-    replacement[0] = "KEYLANE.HREPLACE";
+    replacement[0] = "LAVIK.HREPLACE";
     if (std::string_view(GetParam()) == "group-extents-durable-before-record")
-      replacement = {"KEYLANE.HREPLACE", "hash", "only",
+      replacement = {"LAVIK.HREPLACE", "hash", "only",
                      std::string(9 * 1024 * 1024, 'r')};
     ASSERT_EQ(client.Command({"MULTI"}).text_, "OK");
     ASSERT_EQ(client.Command(replacement).text_, "QUEUED");
@@ -1317,8 +1338,9 @@ TEST_P(GroupedHashWriteCrashE2e, ReplacementNeverRevivesPartialOrOldFields) {
   EXPECT_EQ(client.Command({"HLEN", "hash"}).text_, "256");
   EXPECT_EQ(client.Command({"HGET", "hash", "only"}).text_, "-1");
   for (unsigned i = 0; i < 256; ++i)
-    EXPECT_EQ(client.Command({"HGET", "hash", "field" + std::to_string(i)}).text_,
-              std::string(128, 'v'));
+    EXPECT_EQ(
+        client.Command({"HGET", "hash", "field" + std::to_string(i)}).text_,
+        std::string(128, 'v'));
 }
 
 INSTANTIATE_TEST_SUITE_P(

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/rdb_collection.h"
+#include "lavik/rdb_collection.h"
 
 #include <unistd.h>
 
@@ -27,10 +27,10 @@
 #include <vector>
 
 #include "gtest/gtest.h"
-#include "keylane/rdb.h"
+#include "lavik/rdb.h"
 #include "support/test_data_path.h"
 
-namespace keylane::rdb {
+namespace lavik::rdb {
 namespace {
 
 using storage::CollectionPage;
@@ -65,8 +65,7 @@ TEST(RdbCollectionTest, FourTypesRoundTripAcrossPagesAndEmptyRoutes) {
       fragment += Drain(*encoder);
     }
     ASSERT_TRUE(encoder->Finish().ok());
-    std::string path =
-        keylane::test::TestDataPath("keylane-rdb-collection-XXXXXX");
+    std::string path = lavik::test::TestDataPath("lavik-rdb-collection-XXXXXX");
     const int fd = ::mkstemp(path.data());
     ASSERT_GE(fd, 0);
     ::close(fd);
@@ -243,7 +242,7 @@ class CollectionImportFile {
   const char* path() const { return path_.c_str(); }
 
  private:
-  std::string path_ = keylane::test::TestDataPath("keylane-rdb-import-XXXXXX");
+  std::string path_ = lavik::test::TestDataPath("lavik-rdb-import-XXXXXX");
 };
 
 void WriteImportFixture(const char* path, ValueType type, bool duplicate) {
@@ -424,4 +423,4 @@ TEST(RdbCollectionImportTest, PackedHashMeasuresEntriesBeforeDecoding) {
 }
 
 }  // namespace
-}  // namespace keylane::rdb
+}  // namespace lavik::rdb

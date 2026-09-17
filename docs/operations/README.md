@@ -17,7 +17,7 @@ limitations under the License.
 # Operations
 
 This directory contains procedural guidance for building, packaging,
-provisioning, observing, and tuning Keylane. Read the runbook for the affected
+provisioning, observing, and tuning Lavik. Read the runbook for the affected
 operational branch before changing its scripts, configuration, prerequisites,
 or safety boundaries.
 

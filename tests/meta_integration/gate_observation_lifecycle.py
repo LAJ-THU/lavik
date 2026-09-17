@@ -37,7 +37,7 @@ One 3-node cluster; serial phases:
    fresh session on the new leader. Committed history is verified
    unaffected by all observation traffic.
 
-Usage: gate_observation_lifecycle.py /path/to/keylane-meta [workdir]
+Usage: gate_observation_lifecycle.py /path/to/lavik-meta [workdir]
 """
 
 import os
@@ -83,7 +83,7 @@ def main():
         # --- phase 1: committed anchors ----------------------------------
         expect_ok(leader.put_authority_lease_policy(1),
                   "put Authority Lease Policy")
-        expect_ok(leader.registernode(DATA_NODE, f"keylane://node/{DATA_NODE}",
+        expect_ok(leader.registernode(DATA_NODE, f"lavik://node/{DATA_NODE}",
                                       "primary",
                                       endpoints=("tcp://127.0.0.1:6379",)),
                   "registernode")

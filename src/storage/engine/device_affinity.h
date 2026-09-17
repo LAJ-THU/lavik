@@ -26,7 +26,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 struct ControllerAffinityInput {
   std::string id_;
@@ -149,4 +149,4 @@ inline absl::StatusOr<ControllerAffinityPlan> PlanControllerAffinity(
   return plan;
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

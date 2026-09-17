@@ -21,7 +21,7 @@
 
 #include "absl/status/status.h"
 
-namespace keylane {
+namespace lavik {
 
 // Runtime boundary used by CONFIG without coupling command dispatch to the
 // concrete RedisService owned by the server lifecycle.
@@ -32,7 +32,7 @@ class ClientLimit {
   virtual std::uint64_t max_clients() const noexcept = 0;
   // Raises the process file-descriptor limit when needed. The update fails
   // without changing the live limit if the requested value cannot preserve
-  // Keylane's non-client descriptor reserve.
+  // Lavik's non-client descriptor reserve.
   virtual absl::Status SetMaxClients(std::uint64_t value) = 0;
 
   virtual std::size_t client_query_buffer_limit() const noexcept = 0;
@@ -45,4 +45,4 @@ class ClientLimit {
 // after every service coroutine has stopped.
 void InitClientLimit(ClientLimit* limit) noexcept;
 
-}  // namespace keylane
+}  // namespace lavik

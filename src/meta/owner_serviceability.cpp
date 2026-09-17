@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/owner_serviceability.h"
+#include "lavik/meta/owner_serviceability.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 
 MetaOwnerServiceabilityDecision EvaluateOwnerServiceability(
     const MetaOwnerServiceabilityCut& cut) noexcept {
@@ -151,4 +151,4 @@ std::string_view MetaOwnerServiceabilityBlockerName(
   return "unknown";
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

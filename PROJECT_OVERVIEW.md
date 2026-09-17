@@ -16,14 +16,14 @@ limitations under the License.
 
 # Bycorf Redis Overview
 
-> Historical integration note: this file records Keylane's initial Bycorf
+> Historical integration note: this file records Lavik's initial Bycorf
 > milestone and is not the current architecture authority. Start with
 > [`docs/README.md`](docs/README.md) and the
 > [architecture index](docs/architecture/README.md) for the implemented system.
 
 ## Goal
 
-`keylane` is a Redis/Valkey-protocol server built on top of the `bycorf` core runtime.
+`lavik` is a Redis/Valkey-protocol server built on top of the `bycorf` core runtime.
 
 Supported commands follow the Redis 7.2 semantic baseline documented in
 [`docs/design-docs/redis-compatibility.md`](docs/design-docs/redis-compatibility.md).
@@ -76,13 +76,13 @@ This repository currently uses `add_subdirectory(bycorf ...)` against the submod
 The current integration status is:
 
 - `bycorf` now owns worker thread creation, runtime start/stop/wait, and runtime completion notification
-- `keylane` no longer owns the worker pool lifecycle directly
-- `keylane` shutdown is now driven by a main-thread `eventfd` wakeup path rather than a dedicated signal-wait thread
-- `keylane` TCP serving now goes through `bycorf::TcpServer`
+- `lavik` no longer owns the worker pool lifecycle directly
+- `lavik` shutdown is now driven by a main-thread `eventfd` wakeup path rather than a dedicated signal-wait thread
+- `lavik` TCP serving now goes through `bycorf::TcpServer`
 - application code no longer calls `Worker::Spawn` directly
-- RESP parsing, command execution, and reply encoding remain in `keylane`
+- RESP parsing, command execution, and reply encoding remain in `lavik`
 
-Current application-facing shape in `keylane`:
+Current application-facing shape in `lavik`:
 
 - implement `TcpConnectionHandler::HandleRequests(TcpStream)`
 - keep RESP/session logic inside that handler
@@ -90,6 +90,6 @@ Current application-facing shape in `keylane`:
 
 ## TODO
 
-- keep RESP parsing, command dispatch, and database logic in `keylane`
-- continue removing application-visible runtime details from `keylane`
+- keep RESP parsing, command dispatch, and database logic in `lavik`
+- continue removing application-visible runtime details from `lavik`
 - add shard-aware request routing on top of the current `bycorf::TcpServer` integration

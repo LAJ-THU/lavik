@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/pubsub.h"
+#include "lavik/pubsub.h"
 
 #include <sys/socket.h>
 
@@ -38,11 +38,11 @@
 #include "bycorf/runtime/cross_core.h"
 #include "bycorf/runtime/sync.h"
 #include "bycorf/runtime/worker.h"
-#include "keylane/glob.h"
-#include "keylane/memory.h"
-#include "keylane/resp.h"
+#include "lavik/glob.h"
+#include "lavik/memory.h"
+#include "lavik/resp.h"
 
-namespace keylane {
+namespace lavik {
 using namespace bycorf;
 
 namespace {
@@ -1154,4 +1154,4 @@ Task<absl::Status> StreamPubSubMessages(
   co_return absl::OkStatus();
 }
 
-}  // namespace keylane
+}  // namespace lavik

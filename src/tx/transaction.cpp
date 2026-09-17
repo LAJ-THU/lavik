@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-#include "keylane/tx/transaction.h"
+#include "lavik/tx/transaction.h"
 
 #include <algorithm>
 
 #include "bycorf/runtime/worker.h"
-#include "keylane/tx/tx_shard.h"
+#include "lavik/tx/tx_shard.h"
 
-namespace keylane::tx {
+namespace lavik::tx {
 
 using bycorf::Task;
 
@@ -359,4 +359,4 @@ void StartTransactionHop(TxShard& shard, TxWaiter* node) {
   shard.worker()->Spawn(RunShardHop(&shard, node));
 }
 
-}  // namespace keylane::tx
+}  // namespace lavik::tx

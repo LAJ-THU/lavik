@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/state_machine.h"
+#include "lavik/meta/state_machine.h"
 
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -32,16 +32,16 @@
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
-#include "keylane/fault_injection.h"
-#include "keylane/meta/cluster_create.h"
-#include "keylane/meta/commands.h"
-#include "keylane/meta/nuraft_state_mgr.h"
+#include "lavik/fault_injection.h"
+#include "lavik/meta/cluster_create.h"
+#include "lavik/meta/commands.h"
+#include "lavik/meta/nuraft_state_mgr.h"
 #include "libnuraft/buffer.hxx"
 #include "libnuraft/cluster_config.hxx"
 #include "libnuraft/snapshot.hxx"
 #include "spdlog/spdlog.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
 constexpr uint32_t kSnapshotMagic = 0x4D534E31;  // "MSN1"
@@ -884,7 +884,7 @@ bool MetaStateMachine::apply_snapshot(nuraft::snapshot& s) {
   }
   // The received snapshot file is already durable, so it is also the redo
   // authority if a crash interrupts config/baseline/marker publication here.
-  KEYLANE_MAYBE_CRASH_AT("meta-snapshot-before-membership");
+  LAVIK_MAYBE_CRASH_AT("meta-snapshot-before-membership");
   if (const auto manager = state_mgr_.lock()) {
     const MetaSnapshotMembership membership{idx,
                                             data.snapshot_->get_last_config(),
@@ -1018,4 +1018,4 @@ void MetaStateMachine::PruneSnapshotsLocked(uint64_t keep_idx) {
   }
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

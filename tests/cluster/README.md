@@ -24,12 +24,12 @@ The property engine is the in-tree `ScenarioRunner`, with GoogleTest
 used for assertions and CTest discovery. This avoids adding a second test
 dependency while preserving the required generated schedules, shrinking, and
 seed replay. Scenarios can adopt a dedicated property library without changing
-KFT1 or the scenario interface.
+LFT1 or the scenario interface.
 
 ## Components and determinism contract
 
 - `fault_harness.*` schedules sorted enabled actions with a stable PRNG;
-  `fault_trace.cpp` owns canonical KFT1 encoding and persistence. Exact-model
+  `fault_trace.cpp` owns canonical LFT1 encoding and persistence. Exact-model
   replay compares every choice, fault-checkpoint acknowledgment, observation,
   and finding. The minimizer keeps only changes that reproduce the same
   invariant ID and witness.
@@ -55,7 +55,7 @@ KFT1 or the scenario interface.
   and grants only finite, session-scoped leases; production targets do not
   compile or link it.
 
-KFT1 has two declared modes. `exact-model` is byte-for-byte replayable and is
+LFT1 has two declared modes. `exact-model` is byte-for-byte replayable and is
 appropriate for checked-in regression inputs. `process-action-script` records
 the intended actions for a real-process run; OS scheduling and transport
 observations may drift, so replay must diagnose drift rather than promise an
@@ -64,8 +64,8 @@ cluster fixtures can use the process mode as their adapter contract without
 changing the durable exact-model format.
 
 The fault-enabled server is built only with both `BUILD_TESTING=ON` and
-`KEYLANE_BUILD_FAULT_SERVER=ON`. It keeps existing crash/write hooks available
-under optimized sanitizer builds and produces `keylane_fault_server`; release
+`LAVIK_BUILD_FAULT_SERVER=ON`. It keeps existing crash/write hooks available
+under optimized sanitizer builds and produces `lavik_fault_server`; release
 packaging explicitly disables the option.
 
 ## Verification matrix
@@ -95,25 +95,25 @@ exposed before a fresh full sync.
 
 | Safety claim | Stable invariant | Fast model coverage |
 |---|---|---|
-| One full authority incarnation (node, boot, term, grant) covers admission, in-flight work, background mutation, and success decisions | `authority.single-writer`, `client.operation-single-authority`, `client.valid-authority-at-admission`, `client.safe-success-decision` | same-node-incarnation assertions, dual-authority KFT1 regression, and client history assertions |
+| One full authority incarnation (node, boot, term, grant) covers admission, in-flight work, background mutation, and success decisions | `authority.single-writer`, `client.operation-single-authority`, `client.valid-authority-at-admission`, `client.safe-success-decision` | same-node-incarnation assertions, dual-authority LFT1 regression, and client history assertions |
 | Candidate selection is separate from durable activation | `promotion.safe-activation`, `promotion.durable-before-write-authority` | snapshot assertions and composed failover scenario |
-| Promotion binds the durable base to the validated population and current durable Function catalog generation | `promotion.durable-base-before-activation`, `promotion.catalog-token-current` | snapshot assertions and stale-catalog-promotion KFT1 regression |
+| Promotion binds the durable base to the validated population and current durable Function catalog generation | `promotion.durable-base-before-activation`, `promotion.catalog-token-current` | snapshot assertions and stale-catalog-promotion LFT1 regression |
 | Other replicas remain intact until activation and child history is ready before writes | `promotion.keep-replicas-until-activation`, `history.child-ready-before-write` | snapshot assertions |
-| Restart invalidates old partial-sync and Meta population-readiness evidence | `replication.restart-invalidates-evidence` | stale-evidence KFT1 regression, group-API reconstruction checks at each rebuild boundary, and real-process recovery of a partial SSD image |
-| Live reparent requires compatible domains, an exact cursor, contiguous retained events, and a complete transaction boundary | `replication.compatible-resume-domain`, `replication.reparent-requires-complete-history` | vector tests and history-gap KFT1 regression |
-| A crashed rebuild cannot expose staging or a half-active population | `population.staging-hidden`, `population.atomic-activation` | storage controls and partial-activation KFT1 regression |
-| Function mutations keep staging hidden and make the complete catalog durable and installed before publication, cursor advancement, or ACK | `function.catalog-staging-hidden`, `function.catalog-durable-before-visible`, `function.catalog-installed-before-progress`, `function.catalog-durable-before-ack` | snapshot assertions and catalog-ack-before-durable KFT1 regression |
-| Full sync durably invalidates old population, promotion, and catalog-readiness evidence before transfer and stays fenced until catalog plus population activation | `fullsync.destructive-invalidation-before-transfer`, `fullsync.fenced-until-activation`, `fullsync.catalog-and-population-ready` | snapshot assertions and fullsync-retains-old-state KFT1 regression |
+| Restart invalidates old partial-sync and Meta population-readiness evidence | `replication.restart-invalidates-evidence` | stale-evidence LFT1 regression, group-API reconstruction checks at each rebuild boundary, and real-process recovery of a partial SSD image |
+| Live reparent requires compatible domains, an exact cursor, contiguous retained events, and a complete transaction boundary | `replication.compatible-resume-domain`, `replication.reparent-requires-complete-history` | vector tests and history-gap LFT1 regression |
+| A crashed rebuild cannot expose staging or a half-active population | `population.staging-hidden`, `population.atomic-activation` | storage controls and partial-activation LFT1 regression |
+| Function mutations keep staging hidden and make the complete catalog durable and installed before publication, cursor advancement, or ACK | `function.catalog-staging-hidden`, `function.catalog-durable-before-visible`, `function.catalog-installed-before-progress`, `function.catalog-durable-before-ack` | snapshot assertions and catalog-ack-before-durable LFT1 regression |
+| Full sync durably invalidates old population, promotion, and catalog-readiness evidence before transfer and stays fenced until catalog plus population activation | `fullsync.destructive-invalidation-before-transfer`, `fullsync.fenced-until-activation`, `fullsync.catalog-and-population-ready` | snapshot assertions and fullsync-retains-old-state LFT1 regression |
 | One process boot accepts directives for at most one replication group | `population.one-node-one-group` | assigned/directive group mismatch and matching-group assertions |
 | Destructive reset requires safe-source authority bound to the accepted directive | `population.safe-source-before-destructive-reset` | reset-without-authority mutant and positive assertion |
 | Readiness, readability, and candidacy use the exact boot-scoped rebuild identity and manifest | `population.readiness-identity-bound` | mutations of every identity component and manifest identity |
 | Readiness requires all 16,384 reset/handoffs, exact logical-to-target-local epoch mapping, the Function catalog, every flow cut, storage promotion, and no in-flight apply | `population.readiness-proof-complete` | one missing-proof mutant per evidence component plus sparse-manifest/local-epoch group tests |
-| A partial in-place rebuild remains hidden, and abstract readiness is exposed only for a complete durable population | `population.staging-hidden`, `population.atomic-activation` | abstract storage/exposure controls and partial-activation KFT1 regression |
+| A partial in-place rebuild remains hidden, and abstract readiness is exposed only for a complete durable population | `population.staging-hidden`, `population.atomic-activation` | abstract storage/exposure controls and partial-activation LFT1 regression |
 | A failed-stopped population neither retries nor becomes ready, readable, or candidate-eligible | `population.failed-stopped-terminal` | retry and every exposure mutant, group-identity API checks, and native manager current-boot failure integration |
 | Available capacity excludes committed, partial-attempt, and retired-unreclaimed populations | `population.capacity-excludes-unreclaimed` | over-reported-capacity mutant and exact-bound positive state |
 | A completed abort returns runtime index use to its baseline | `population.abort-reclaims-runtime` | retained-index mutant and reclaimed positive state; production reset/abort reuse the worker-local detached-index drain |
 | Candidate ordering is componentwise within one compatibility domain | `candidate.componentwise-applied-order` | vector partial-order tests |
-| Meta publication/replay cannot regress committed state, and directive replay cannot reuse evidence after a target restart | `meta.committed-state-monotonic`, `meta.directive-evidence-scoped` | composed replay controls, snapshot assertions, and stale-directive KFT1 regression |
+| Meta publication/replay cannot regress committed state, and directive replay cannot reuse evidence after a target restart | `meta.committed-state-monotonic`, `meta.directive-evidence-scoped` | composed replay controls, snapshot assertions, and stale-directive LFT1 regression |
 | Migration has one serving owner and a complete target | `migration.single-owner`, `migration.complete-before-serving` | snapshot assertions |
 | Redis errors expose only exact public error shapes, never internal term/grant/failed/retry state | `redis.control-error-shape`, `redis.compatible-control-error`, `redis.private-control-state-hidden` | structured public-shape allowlist assertions |
 
@@ -152,7 +152,7 @@ replacement cannot cross into the new dataset, and
 `rebuild_failure_integration_test.cpp` proves an uncertain native promotion
 stops the current boot without retrying.
 `rebuild_protocol_integration_test.cpp` exercises adversarial source behavior:
-the target must reject `KLONLINE` before its local flow proof and must reject a
+the target must reject `LVONLINE` before its local flow proof and must reject a
 reset after the full-sync cut without losing the promoted population. It also
 injects a divergent online LSN and proves that every continuation cursor is
 discarded before the replacement full rebuild returns online, and verifies
@@ -167,8 +167,8 @@ Configure a dedicated tree once:
 
 ```bash
 cmake -S . -B build_cluster_fault -DCMAKE_BUILD_TYPE=Debug \
-  -DKEYLANE_ENABLE_OPT=OFF -DKEYLANE_STATIC_OPENSSL=ON \
-  -DBUILD_TESTING=ON -DKEYLANE_BUILD_FAULT_SERVER=ON
+  -DLAVIK_ENABLE_OPT=OFF -DLAVIK_STATIC_OPENSSL=ON \
+  -DBUILD_TESTING=ON -DLAVIK_BUILD_FAULT_SERVER=ON
 ```
 
 Run a bounded tier with `scripts/run_cluster_fault_tests.sh --tier model` or
@@ -176,20 +176,20 @@ Run a bounded tier with `scripts/run_cluster_fault_tests.sh --tier model` or
 writes the first unexpected trace under the build tree. Hardware jobs skip
 unless explicitly opted in; use `--tier hardware --require-hardware` in CI to
 turn a missing opt-in into a failure. Hardware opt-in additionally requires an
-unmounted `KEYLANE_CLUSTER_SCRATCH_DEVICE` block device. The gate is a safety
+unmounted `LAVIK_CLUSTER_SCRATCH_DEVICE` block device. The gate is a safety
 precondition; raw/SPDK scenarios must use the `cluster-hardware` label and keep
 destructive targets inside that allowlist.
 
 The trace CLI can generate, replay, and minimize artifacts:
 
 ```bash
-build_cluster_fault/keylane_cluster_fault \
-  --scenario dual-authority --seed 7 --trace-out /tmp/failure.kft \
+build_cluster_fault/lavik_cluster_fault \
+  --scenario dual-authority --seed 7 --trace-out /tmp/failure.lft \
   --expect-finding authority.single-writer
-build_cluster_fault/keylane_cluster_fault --replay /tmp/failure.kft \
+build_cluster_fault/lavik_cluster_fault --replay /tmp/failure.lft \
   --expect-finding authority.single-writer
-build_cluster_fault/keylane_cluster_fault --minimize /tmp/failure.kft \
-  --trace-out /tmp/minimized.kft \
+build_cluster_fault/lavik_cluster_fault --minimize /tmp/failure.lft \
+  --trace-out /tmp/minimized.lft \
   --expect-finding authority.single-writer
 ```
 
@@ -199,4 +199,4 @@ observations. Add the assertion to `CheckClusterInvariants`, give it a stable
 dot-separated ID, add a positive state, add a mutant that proves the checker
 fires, and check in a minimized exact-model trace. Real fixtures translate the
 same action and checkpoint vocabulary to process/network/storage operations;
-they do not embed production-only fields into KFT1.
+they do not embed production-only fields into LFT1.

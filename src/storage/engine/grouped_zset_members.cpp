@@ -19,9 +19,9 @@
 #include <map>
 
 #include "impl.h"
-#include "keylane/storage/detail/grouped_scratch.h"
+#include "lavik/storage/detail/grouped_scratch.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 Task<absl::StatusOr<StorageEngine::Impl::SortedSetMemberMutation>>
 StorageEngine::Impl::PrepareSortedSetMembers(
@@ -40,7 +40,7 @@ StorageEngine::Impl::PrepareSortedSetMembers(
     // Before staging either graph: an allocation exception must release private
     // plans/admission without changing the caller's key or an outer EXEC
     // prefix.
-    KEYLANE_FAULT_BAD_ALLOC("KEYLANE_FAIL_GROUP_MEMBER_PREPARE_KEY", key);
+    LAVIK_FAULT_BAD_ALLOC("LAVIK_FAIL_GROUP_MEMBER_PREPARE_KEY", key);
 
     auto add_group = [&](GroupedScratchBudget& budget,
                          HashGroupId id) -> absl::Status {
@@ -268,4 +268,4 @@ StorageEngine::Impl::PrepareSortedSetMembers(
   }
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

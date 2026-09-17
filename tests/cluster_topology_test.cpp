@@ -23,9 +23,9 @@
 #include <utility>
 #include <vector>
 
-#include "keylane/cluster/topology.h"
+#include "lavik/cluster/topology.h"
 
-namespace keylane::cluster {
+namespace lavik::cluster {
 namespace {
 
 // 40 lowercase hex chars, as Redis Cluster discovery writes them. TestNodeId(0)
@@ -721,4 +721,4 @@ TEST(TopologyCacheTest, CachedReaderConsistentUnderConcurrentPublish) {
 }
 
 }  // namespace
-}  // namespace keylane::cluster
+}  // namespace lavik::cluster

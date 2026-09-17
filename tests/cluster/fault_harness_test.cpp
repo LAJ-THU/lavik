@@ -28,7 +28,7 @@
 #include "gtest/gtest.h"
 #include "tests/cluster/reference_model.h"
 
-namespace keylane::test::cluster {
+namespace lavik::test::cluster {
 namespace {
 
 class NoisyFailureWorld final : public ScenarioWorld {
@@ -121,7 +121,7 @@ constexpr std::array<PopulationFlag, 5> kReadinessProofs{{
     {"no-inflight-apply", &PopulationObservation::no_inflight_apply_},
 }};
 
-TEST(KftTraceTest, HasCanonicalRoundTripAndGoldenEncoding) {
+TEST(LftTraceTest, HasCanonicalRoundTripAndGoldenEncoding) {
   Trace trace{
       .mode_ = TraceMode::kExactModel,
       .scenario_ = "scenario one",
@@ -135,7 +135,7 @@ TEST(KftTraceTest, HasCanonicalRoundTripAndGoldenEncoding) {
   };
   const std::string encoded = EncodeTrace(trace);
   EXPECT_EQ(encoded,
-            "KFT1\n"
+            "LFT1\n"
             "mode\texact-model\n"
             "scenario\tscenario%20one\n"
             "schema\t7\n"
@@ -148,21 +148,21 @@ TEST(KftTraceTest, HasCanonicalRoundTripAndGoldenEncoding) {
   EXPECT_EQ(EncodeTrace(*decoded), encoded);
 }
 
-TEST(KftTraceTest, RejectsMalformedAndUnknownInputs) {
-  EXPECT_FALSE(DecodeTrace("KFT2\n").ok());
+TEST(LftTraceTest, RejectsMalformedAndUnknownInputs) {
+  EXPECT_FALSE(DecodeTrace("LFT2\n").ok());
   EXPECT_FALSE(
-      DecodeTrace("KFT1\nmode\tother\nscenario\tx\nschema\t1\nseed\t1\n"
+      DecodeTrace("LFT1\nmode\tother\nscenario\tx\nschema\t1\nseed\t1\n"
                   "initial\tx\n")
           .ok());
-  EXPECT_FALSE(DecodeTrace("KFT1\nmode\texact-model\nscenario\t%GG\nschema\t1\n"
+  EXPECT_FALSE(DecodeTrace("LFT1\nmode\texact-model\nscenario\t%GG\nschema\t1\n"
                            "seed\t1\ninitial\tx\n")
                    .ok());
-  EXPECT_FALSE(DecodeTrace("KFT1\nmode\texact-model\nscenario\tx\nschema\t1\n"
+  EXPECT_FALSE(DecodeTrace("LFT1\nmode\texact-model\nscenario\tx\nschema\t1\n"
                            "seed\t1\ninitial\tx\nrecord\t1\tunknown\tx\ty\n")
                    .ok());
 }
 
-TEST(KftTraceTest, ActionCodecPreservesTypedArgumentsAndPayload) {
+TEST(LftTraceTest, ActionCodecPreservesTypedArgumentsAndPayload) {
   const Action action{.name_ = "advance timer",
                       .arguments_ = {-4, 0, 27},
                       .payload_ = "a;b%\n"};
@@ -259,15 +259,15 @@ TEST_P(CounterexampleTest, GeneratesReplaysAndMinimizesStableFinding) {
 INSTANTIATE_TEST_SUITE_P(RequiredFaults, CounterexampleTest,
                          testing::ValuesIn(CounterexampleParameters()));
 
-TEST(KftRegressionTest, CheckedInCounterexamplesRemainReplayable) {
+TEST(LftRegressionTest, CheckedInCounterexamplesRemainReplayable) {
   ScenarioRunner runner;
   for (const ScenarioDescriptor& descriptor : ClusterScenarioDescriptors()) {
     if (descriptor.expected_invariant_.empty()) continue;
-    const std::string file = std::string(descriptor.cli_name_) + ".kft";
+    const std::string file = std::string(descriptor.cli_name_) + ".lft";
     SCOPED_TRACE(file);
-    const std::filesystem::path path =
-        std::filesystem::path(KEYLANE_SOURCE_DIR) / "tests" / "cluster" /
-        "regressions" / file;
+    const std::filesystem::path path = std::filesystem::path(LAVIK_SOURCE_DIR) /
+                                       "tests" / "cluster" / "regressions" /
+                                       file;
     auto trace = ReadTrace(path);
     ASSERT_TRUE(trace.ok()) << trace.status();
     std::unique_ptr<Scenario> scenario =
@@ -805,4 +805,4 @@ TEST(AppliedVectorTest, UsesCompatibilityAndComponentwisePartialOrder) {
 }
 
 }  // namespace
-}  // namespace keylane::test::cluster
+}  // namespace lavik::test::cluster

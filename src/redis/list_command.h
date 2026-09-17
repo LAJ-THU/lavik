@@ -17,9 +17,9 @@
 #pragma once
 
 #include "blocking_wait.h"
-#include "keylane/command.h"
+#include "lavik/command.h"
 
-namespace keylane {
+namespace lavik {
 
 class ReplyBuilder;
 
@@ -41,4 +41,4 @@ Task<CommandReply> ExecuteBlockingListCommand(const CommandRequest& request,
                                               ReplyBuilder& reply_builder,
                                               std::uint64_t client_id = 0);
 
-}  // namespace keylane
+}  // namespace lavik

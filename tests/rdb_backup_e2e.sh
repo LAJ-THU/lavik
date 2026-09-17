@@ -15,10 +15,10 @@
 
 set -euo pipefail
 
-keylane_bin=$1
+lavik_bin=$1
 redis_cli=$2
 case_dir=$(mktemp -d \
-  "${KEYLANE_TEST_DATA_DIR:-/tmp}/keylane-rdb-backup-e2e.XXXXXX")
+  "${LAVIK_TEST_DATA_DIR:-/tmp}/lavik-rdb-backup-e2e.XXXXXX")
 source_pid=
 import_pid=
 
@@ -89,8 +89,8 @@ emit_hash_fields() {
 source_port=16479
 import_port=16480
 truncate -s 1G "${case_dir}/source.data"
-KEYLANE_RDB_CAPTURE_PAUSE_MS=500 \
-"${keylane_bin}" --logtostderr --port "${source_port}" --threads 4 --no-pin-workers \
+LAVIK_RDB_CAPTURE_PAUSE_MS=500 \
+"${lavik_bin}" --logtostderr --port "${source_port}" --threads 4 --no-pin-workers \
   --recv-buffers-per-worker 0 --data-file "${case_dir}/source.data" \
   --rdb-dir "${case_dir}" --dbfilename dump.rdb \
   >"${case_dir}/source.log" 2>&1 &
@@ -164,7 +164,7 @@ stop_server "${source_pid}"
 source_pid=
 
 truncate -s 1G "${case_dir}/import.data"
-"${keylane_bin}" --logtostderr --port "${import_port}" --threads 3 --no-pin-workers \
+"${lavik_bin}" --logtostderr --port "${import_port}" --threads 3 --no-pin-workers \
   --recv-buffers-per-worker 0 --data-file "${case_dir}/import.data" \
   --load-rdb "${case_dir}/dump.rdb" --rdb-dir "${case_dir}" \
   --dbfilename imported.rdb >"${case_dir}/import.log" 2>&1 &

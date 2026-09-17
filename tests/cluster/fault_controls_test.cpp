@@ -21,7 +21,7 @@
 
 #include "gtest/gtest.h"
 
-namespace keylane::test::cluster {
+namespace lavik::test::cluster {
 namespace {
 
 TEST(ManualClockTest, MovesOnlyForward) {
@@ -124,4 +124,4 @@ TEST(FaultControllerTest, MatchesStableCheckpointOccurrence) {
 }
 
 }  // namespace
-}  // namespace keylane::test::cluster
+}  // namespace lavik::test::cluster

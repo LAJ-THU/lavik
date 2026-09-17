@@ -20,10 +20,10 @@
 #include <optional>
 
 #include "impl.h"
-#include "keylane/memory.h"
-#include "keylane/replication_command.h"
+#include "lavik/memory.h"
+#include "lavik/replication_command.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 constexpr std::size_t kSparseFrameStride = 64;
@@ -189,7 +189,7 @@ std::optional<std::size_t> TransactionOwnerAllocationBytes(
        !AddAllocationCharge(participant_capacity * sizeof(unsigned), &total))) {
     return std::nullopt;
   }
-  // KTX1 uses one generated metadata string. Reserve its largest valid bitmap
+  // LTX1 uses one generated metadata string. Reserve its largest valid bitmap
   // before allocation exists so source admission still covers the eventual
   // retained owner on every supported worker count.
   constexpr std::size_t kMaximumMetadataBytes = 4 + sizeof(std::uint64_t) +
@@ -1121,10 +1121,10 @@ Task<absl::Status> StorageEngine::Impl::DrainReplicationPublishQueue(
             "history");
         break;
       }
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
       static std::atomic<bool> catalog_transaction_publish_failed{false};
       const char* failure_marker =
-          std::getenv("KEYLANE_FAIL_REPLICATION_TRANSACTION_CONTAINING_ONCE");
+          std::getenv("LAVIK_FAIL_REPLICATION_TRANSACTION_CONTAINING_ONCE");
       if (failure_marker != nullptr && *failure_marker != '\0' &&
           std::any_of(pending.transaction_->command_args_.begin(),
                       pending.transaction_->command_args_.end(),
@@ -1941,4 +1941,4 @@ ReplicationLogInfo StorageEngine::Impl::LocalReplicationLogInfo() const {
   };
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

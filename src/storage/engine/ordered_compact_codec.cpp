@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-#include "keylane/storage/detail/ordered_compact_codec.h"
+#include "lavik/storage/detail/ordered_compact_codec.h"
 
 #include <bit>
 #include <cmath>
 #include <limits>
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 bool ValidKind(OrderedCollectionKind kind) {
@@ -45,9 +45,10 @@ std::uint64_t Get(std::string_view input, std::size_t offset, unsigned width) {
 
 }  // namespace
 
-absl::StatusOr<std::size_t> AppendOrderedEntrySize(
-    OrderedCollectionKind kind, std::size_t encoded_bytes,
-    std::size_t item_bytes, std::size_t max_bytes) {
+absl::StatusOr<std::size_t> AppendOrderedEntrySize(OrderedCollectionKind kind,
+                                                   std::size_t encoded_bytes,
+                                                   std::size_t item_bytes,
+                                                   std::size_t max_bytes) {
   if (!ValidKind(kind))
     return absl::InvalidArgumentError("invalid ordered collection kind");
   const std::size_t framing =
@@ -61,7 +62,8 @@ absl::StatusOr<std::size_t> AppendOrderedEntrySize(
 }
 
 absl::StatusOr<std::string> EncodeOrderedCompactValue(
-    OrderedCollectionKind kind, std::span<const OrderedCollectionEntry> entries) {
+    OrderedCollectionKind kind,
+    std::span<const OrderedCollectionEntry> entries) {
   if (!ValidKind(kind) || entries.empty() ||
       entries.size() > std::numeric_limits<std::uint32_t>::max()) {
     return absl::InvalidArgumentError("invalid ordered full-image kind/count");
@@ -81,7 +83,7 @@ absl::StatusOr<std::string> EncodeOrderedCompactValue(
     size = *next;
   }
   encoded.reserve(size);
-  encoded.append(sorted ? "KZS1" : "KLL1");
+  encoded.append(sorted ? "LZS1" : "LVL1");
   Put(encoded, entries.size(), 4);
   for (const auto& entry : entries) {
     if (sorted) Put(encoded, std::bit_cast<std::uint64_t>(entry.score_), 8);
@@ -101,7 +103,7 @@ absl::StatusOr<std::vector<OrderedCollectionEntry>> DecodeOrderedCompactValue(
   }
   const bool sorted = kind == OrderedCollectionKind::kSortedSet;
   const std::size_t framing = sorted ? 12 : 4;
-  if (!encoded.starts_with(sorted ? "KZS1" : "KLL1") ||
+  if (!encoded.starts_with(sorted ? "LZS1" : "LVL1") ||
       Get(encoded, 4, 4) != expected_count ||
       expected_count > (encoded.size() - 8) / framing) {
     return absl::DataLossError("invalid ordered full-image framing");
@@ -132,4 +134,4 @@ absl::StatusOr<std::vector<OrderedCollectionEntry>> DecodeOrderedCompactValue(
   return result;
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/state_apply.h"
+#include "lavik/meta/state_apply.h"
 
 #include <algorithm>
 #include <array>
@@ -28,12 +28,12 @@
 #include <vector>
 
 #include "absl/strings/str_cat.h"
-#include "keylane/cluster/control_protocol.h"
-#include "keylane/meta/cluster_create.h"
-#include "keylane/meta/failover.h"
-#include "keylane/meta/hash.h"
+#include "lavik/cluster/control_protocol.h"
+#include "lavik/meta/cluster_create.h"
+#include "lavik/meta/failover.h"
+#include "lavik/meta/hash.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 
 // Apply owns the state-machine write lock. Aggregate commands can therefore
 // validate their prospective result in place without publishing intermediate
@@ -403,7 +403,6 @@ absl::Status ValidateDecodedAggregate(const MetaStores& stores) {
     return MetaFailStopError(
         "Created cluster lacks a registered current global Policy");
   }
-
 
   std::set<MetaOperationId> controlled_transition_operations;
   std::set<MetaFailoverTransitionId> failover_transition_ids;
@@ -2951,4 +2950,4 @@ absl::StatusOr<MetaApplyResult> DecodeMetaApplyResult(std::string_view bytes) {
                          static_cast<MetaCommandTag>(*command_tag)};
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

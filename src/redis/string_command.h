@@ -21,10 +21,10 @@
 #include <string>
 #include <vector>
 
-#include "keylane/command.h"
-#include "keylane/storage/engine.h"
+#include "lavik/command.h"
+#include "lavik/storage/engine.h"
 
-namespace keylane {
+namespace lavik {
 
 struct StringExecKey {
   storage::Digest digest_;
@@ -63,4 +63,4 @@ bycorf::Task<CommandReply> ExecuteLcsCommand(const CommandRequest& request,
 bycorf::Task<std::string> ExecuteLcsLocked(
     const CommandRequest& request, std::span<const StringExecKey> locked_keys);
 
-}  // namespace keylane
+}  // namespace lavik

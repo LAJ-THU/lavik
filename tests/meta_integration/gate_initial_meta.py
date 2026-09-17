@@ -28,7 +28,7 @@ class InitialBindingFaultNode(H.Node):
     pause_after = None
 
     def start(self, *args, **kwargs):
-        variable = "KEYLANE_TEST_PAUSE_INITIAL_BINDINGS_AFTER"
+        variable = "LAVIK_TEST_PAUSE_INITIAL_BINDINGS_AFTER"
         previous = os.environ.get(variable)
         try:
             if self.pause_after is None:
@@ -44,7 +44,7 @@ class InitialBindingFaultNode(H.Node):
 
 
 def has_initial_binding_fault():
-    needle = b"KEYLANE_TEST_PAUSE_INITIAL_BINDINGS_AFTER"
+    needle = b"LAVIK_TEST_PAUSE_INITIAL_BINDINGS_AFTER"
     tail = b""
     with open(META, "rb") as source:
         while chunk := source.read(1 << 20):

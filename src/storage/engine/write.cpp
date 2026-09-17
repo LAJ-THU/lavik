@@ -19,11 +19,11 @@
 
 #include "absl/strings/str_cat.h"
 #include "impl.h"
-#include "keylane/memory.h"
-#include "keylane/metrics.h"
-#include "keylane/replication_command.h"
+#include "lavik/memory.h"
+#include "lavik/metrics.h"
+#include "lavik/replication_command.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 absl::StatusOr<RecordIndex::Entry*> StorageEngine::Impl::ReplaceIndexLocation(
     WorkerStore& store, RecordIndex& index, RecordIndex::Entry* entry,
@@ -591,7 +591,7 @@ Task<absl::Status> StorageEngine::Impl::CommitTxWrites(
   // Every tagged record is durable; the transaction's fate now rests solely
   // on the commit record. Crash-safety tests arm this point to prove the
   // all-or-nothing promise: dying here must abort the whole transaction.
-  KEYLANE_MAYBE_CRASH_AT("tx-commit-append");
+  LAVIK_MAYBE_CRASH_AT("tx-commit-append");
   WorkerStore& store = CurrentStore();
   co_await store.store_state_mutex_.Lock();
   UnlockGuard unlock(&store.store_state_mutex_, store.worker_);
@@ -1258,14 +1258,14 @@ Task<absl::StatusOr<ReservedBlock>> StorageEngine::Impl::AcquireWriteBlock(
   if (unlock_writer) {
     store.store_state_mutex_.Unlock(*store.worker_);
   }
-  KEYLANE_FAULT_INJECT(
+  LAVIK_FAULT_INJECT(
       // Deterministically hold the elected foreground allocator after it
       // releases store_state_mutex_. Tests use this to prove that a peer for
       // the same stream waits on the allocation gate instead of allocating a
       // spare block. Only the first foreground allocation pauses.
       static std::atomic<bool> tx_active_pause_claimed = false;
       const char* tx_active_pause_text =
-          std::getenv("KEYLANE_TX_ACTIVE_BLOCK_PAUSE_MS");
+          std::getenv("LAVIK_TX_ACTIVE_BLOCK_PAUSE_MS");
       bool expected_tx_active_pause = false;
       if (!for_defrag && unlock_writer && tx_active_pause_text != nullptr &&
           tx_active_pause_claimed.compare_exchange_strong(
@@ -1278,7 +1278,7 @@ Task<absl::StatusOr<ReservedBlock>> StorageEngine::Impl::AcquireWriteBlock(
           // marker to confirm the pause is actually in effect instead of
           // guessing with sleeps.
           spdlog::warn(
-              "KEYLANE_TX_ACTIVE_BLOCK_PAUSE_MS pausing foreground allocation "
+              "LAVIK_TX_ACTIVE_BLOCK_PAUSE_MS pausing foreground allocation "
               "for {} ms",
               pause_ms);
           absl::Status paused = co_await bycorf::SleepFor(
@@ -1379,10 +1379,10 @@ Task<absl::Status> StorageEngine::Impl::PrefetchStandbyBlock(
       absl::CancelledError("standby prefetch is no longer needed")};
   if (should_allocate) {
     absl::Status pause_status = absl::OkStatus();
-    KEYLANE_FAULT_INJECT(
+    LAVIK_FAULT_INJECT(
         static std::atomic<bool> standby_pause_claimed = false;
         const char* standby_pause_text =
-            std::getenv("KEYLANE_STANDBY_PREFETCH_PAUSE_MS");
+            std::getenv("LAVIK_STANDBY_PREFETCH_PAUSE_MS");
         bool expected_standby_pause = false;
         if (standby_pause_text != nullptr &&
             standby_pause_claimed.compare_exchange_strong(
@@ -1392,7 +1392,7 @@ Task<absl::Status> StorageEngine::Impl::PrefetchStandbyBlock(
               std::strtoul(standby_pause_text, &end, 10);
           if (end != standby_pause_text && *end == '\0' && pause_ms != 0) {
             spdlog::warn(
-                "KEYLANE_STANDBY_PREFETCH_PAUSE_MS pausing standby prefetch "
+                "LAVIK_STANDBY_PREFETCH_PAUSE_MS pausing standby prefetch "
                 "for {} ms",
                 pause_ms);
             pause_status = co_await bycorf::SleepFor(
@@ -1531,7 +1531,7 @@ StorageEngine::Impl::WriteExtentValueLocked(
     // are touched outside store state; body-before-header durability is intact.
     ++state.pins_;
     auto write_extent = [&]() -> Task<absl::Status> {
-      KEYLANE_FAULT_INJECT(if (extent_index == 0) {
+      LAVIK_FAULT_INJECT(if (extent_index == 0) {
         const auto paused = co_await PauseGroupedWriteForTest(
             *store.worker_, fault_key, "extent");
         if (!paused.ok()) co_return paused;
@@ -1677,7 +1677,7 @@ StorageEngine::Impl::WriteExtentValueLocked(
     // remaining payload and keyed manifest have not been published. Recovery
     // must reclaim this orphan without losing the previous complete value.
     if (payload_offset == 0 && payload_bytes < logical_bytes) {
-      KEYLANE_MAYBE_CRASH_AT("extent-first-part-durable");
+      LAVIK_MAYBE_CRASH_AT("extent-first-part-durable");
     }
     payload_offset += payload_bytes;
     ++extent_index;
@@ -1774,7 +1774,7 @@ Task<absl::Status> StorageEngine::Impl::AppendLocked(
       co_return extents.status();
     }
     if (value_type == ValueType::kHash) {
-      KEYLANE_MAYBE_CRASH_AT("hash-extents-durable-before-root");
+      LAVIK_MAYBE_CRASH_AT("hash-extents-durable-before-root");
     }
     const std::string manifest = EncodeManifest(**extents);
     status = co_await WriteRecordLocked(
@@ -2269,7 +2269,7 @@ Task<absl::Status> StorageEngine::Impl::WriteRecordLocked(
   if (tx != nullptr) {
     assert(tx->txid_ != 0);
     txid = tx->txid_;
-    if (KEYLANE_MAYBE_FAIL_TX_WRITE(key)) {
+    if (LAVIK_MAYBE_FAIL_TX_WRITE(key)) {
       co_return absl::Status(absl::StatusCode::kInternal,
                              "injected transaction write fault");
     }
@@ -2402,9 +2402,9 @@ Task<absl::Status> StorageEngine::Impl::WriteRecordLocked(
   }
   const BlockKind append_block_kind =
       transaction_append ? BlockKind::kTransaction : BlockKind::kRecords;
-  KEYLANE_FAULT_INJECT(
+  LAVIK_FAULT_INJECT(
       if (!for_defrag && !key.empty() &&
-          KEYLANE_FAULT_MATCHES("KEYLANE_RECORD_WRITE_PAUSE_KEY", key)) {
+          LAVIK_FAULT_MATCHES("LAVIK_RECORD_WRITE_PAUSE_KEY", key)) {
         // A deterministic publication-order race: let GC publish the previous
         // value while this foreground append has not acquired its final stream.
         spdlog::info("record write publication pause armed");
@@ -2683,9 +2683,9 @@ acquire_active_stream:
       if (absl::IsAborted(pinned)) goto acquire_active_stream;
       co_return pinned;
     }
-    KEYLANE_FAULT_INJECT(if (KEYLANE_FAULT_MATCHES(
-                                 "KEYLANE_GROUP_ROOT_PIN_PAUSE_KEY", key) &&
-                             tx != nullptr) {
+    LAVIK_FAULT_INJECT(if (LAVIK_FAULT_MATCHES("LAVIK_GROUP_ROOT_PIN_PAUSE_KEY",
+                                               key) &&
+                           tx != nullptr) {
       static std::atomic<bool> root_pin_pause_claimed{false};
       if (!root_pin_pause_claimed.exchange(true, std::memory_order_relaxed)) {
         const RecordLocation root = (*old_view)->version().root_;
@@ -2901,9 +2901,9 @@ acquire_active_stream:
   if (!allocated_lsn.ok()) co_return allocated_lsn.status();
   const std::uint64_t lsn = *allocated_lsn;
   updated.max_lsn_ = std::max(updated.max_lsn_, lsn);
-  KEYLANE_FAULT_INJECT(
+  LAVIK_FAULT_INJECT(
       if (!auxiliary &&
-          KEYLANE_FAULT_MATCHES("KEYLANE_RECORD_WRITE_PAUSE_KEY", key)) {
+          LAVIK_FAULT_MATCHES("LAVIK_RECORD_WRITE_PAUSE_KEY", key)) {
         spdlog::info("record publication test type={} lsn={}",
                      static_cast<unsigned>(value_type), lsn);
       });
@@ -3362,4 +3362,4 @@ void StorageEngine::Impl::SealDeadActiveBlock(WorkerStore& store) {
   store.active_block_.reset();
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

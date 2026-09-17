@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/command_table.h"
+#include "lavik/command_table.h"
 
 #include <fcntl.h>
 #include <gtest/gtest.h>
@@ -30,19 +30,19 @@
 #include <utility>
 #include <vector>
 
-#include "keylane/command.h"
-#include "keylane/glob.h"
-#include "keylane/storage/engine.h"
+#include "lavik/command.h"
+#include "lavik/glob.h"
+#include "lavik/storage/engine.h"
 #include "support/test_data_path.h"
 
 namespace {
 
-using keylane::CommandCanonicalName;
-using keylane::CommandKind;
-using keylane::CommandSpec;
-using keylane::DetermineKeys;
-using keylane::FindCommand;
-using keylane::KeyIndexView;
+using lavik::CommandCanonicalName;
+using lavik::CommandKind;
+using lavik::CommandSpec;
+using lavik::DetermineKeys;
+using lavik::FindCommand;
+using lavik::KeyIndexView;
 
 // Test-only transliteration of Valkey's stringmatchlen_impl (nocase=false).
 // Keeping the oracle independent of the iterative production matcher catches
@@ -194,12 +194,12 @@ TEST(CommandTableTest, LookupFlagsArityAndKeyPositions) {
   CheckKind("get", CommandKind::kGet);
   CheckKind("GeT", CommandKind::kGet);
   CheckKind("SET", CommandKind::kSet);
-  CheckKind("KEYLANE.HREPLACE", CommandKind::kHReplace);
-  CheckKind("Keylane.HReplace", CommandKind::kHReplace);
-  CheckArity("keylane.hreplace", 3, false);
-  CheckArity("keylane.hreplace", 4, true);
-  EXPECT_TRUE(FindCommand("keylane.hreplace")->flags_ & keylane::kCmdWrite);
-  EXPECT_EQ(Keys("keylane.hreplace", 6).count(), 1);
+  CheckKind("LAVIK.HREPLACE", CommandKind::kHReplace);
+  CheckKind("Lavik.HReplace", CommandKind::kHReplace);
+  CheckArity("lavik.hreplace", 3, false);
+  CheckArity("lavik.hreplace", 4, true);
+  EXPECT_TRUE(FindCommand("lavik.hreplace")->flags_ & lavik::kCmdWrite);
+  EXPECT_EQ(Keys("lavik.hreplace", 6).count(), 1);
   CheckKind("SCRIPT", CommandKind::kScript);
   CheckKind("EVAL_RO", CommandKind::kEvalRo);
   CheckKind("EVALSHA_RO", CommandKind::kEvalShaRo);
@@ -299,13 +299,13 @@ TEST(CommandTableTest, LookupFlagsArityAndKeyPositions) {
                "prefix collision should not resolve");
   const CommandSpec* monitor = FindCommand("MONITOR");
   ASSERT_NE(monitor, nullptr);
-  EXPECT_NE(monitor->flags_ & keylane::kCmdAdmin, 0u);
-  EXPECT_NE(monitor->flags_ & keylane::kCmdSkipMonitor, 0u);
+  EXPECT_NE(monitor->flags_ & lavik::kCmdAdmin, 0u);
+  EXPECT_NE(monitor->flags_ & lavik::kCmdSkipMonitor, 0u);
   const CommandSpec* publish = FindCommand("PUBLISH");
   ASSERT_NE(publish, nullptr);
-  EXPECT_NE(publish->flags_ & keylane::kCmdMayReplicate, 0u);
-  EXPECT_EQ(publish->flags_ & keylane::kCmdWrite, 0u);
-  EXPECT_NE(publish->flags_ & keylane::kCmdNoKeys, 0u);
+  EXPECT_NE(publish->flags_ & lavik::kCmdMayReplicate, 0u);
+  EXPECT_EQ(publish->flags_ & lavik::kCmdWrite, 0u);
+  EXPECT_NE(publish->flags_ & lavik::kCmdNoKeys, 0u);
   CheckArity("publish", 2, false);
   CheckArity("publish", 3, true);
   CheckArity("publish", 4, false);
@@ -366,16 +366,16 @@ TEST(CommandTableTest, LookupFlagsArityAndKeyPositions) {
        {"blpop", "brpop", "blmove", "brpoplpush", "blmpop", "bzmpop",
         "bzpopmin", "bzpopmax", "xread", "xreadgroup", "wait"}) {
     const CommandSpec* spec = FindCommand(name);
-    EXPECT_CHECK(spec != nullptr && (spec->flags_ & keylane::kCmdMayBlock) != 0,
+    EXPECT_CHECK(spec != nullptr && (spec->flags_ & lavik::kCmdMayBlock) != 0,
                  std::string(name) + " should have kCmdMayBlock");
   }
-  EXPECT_EQ(FindCommand("lpop")->flags_ & keylane::kCmdMayBlock, 0u);
-  EXPECT_EQ(FindCommand("xrange")->flags_ & keylane::kCmdMayBlock, 0u);
+  EXPECT_EQ(FindCommand("lpop")->flags_ & lavik::kCmdMayBlock, 0u);
+  EXPECT_EQ(FindCommand("xrange")->flags_ & lavik::kCmdMayBlock, 0u);
   const CommandSpec* radius_member = FindCommand("georadiusbymember");
   ASSERT_NE(radius_member, nullptr);
-  EXPECT_NE(radius_member->flags_ & keylane::kCmdWrite, 0u);
-  EXPECT_NE(radius_member->flags_ & keylane::kCmdMultiShard, 0u);
-  EXPECT_NE(radius_member->flags_ & keylane::kCmdMovableKeys, 0u);
+  EXPECT_NE(radius_member->flags_ & lavik::kCmdWrite, 0u);
+  EXPECT_NE(radius_member->flags_ & lavik::kCmdMultiShard, 0u);
+  EXPECT_NE(radius_member->flags_ & lavik::kCmdMovableKeys, 0u);
 
   // Flag consistency: the write set must match the read-only replica check,
   // the gate set must match today's uses_db list, and NoKeys <=> first_key==0.
@@ -390,16 +390,16 @@ TEST(CommandTableTest, LookupFlagsArityAndKeyPositions) {
       "exists", "touch",  "randomkey",  "dbsize",      "scan"};
   for (const char* name : write_cmds) {
     const CommandSpec* spec = FindCommand(name);
-    EXPECT_CHECK(spec != nullptr && (spec->flags_ & keylane::kCmdWrite) != 0,
+    EXPECT_CHECK(spec != nullptr && (spec->flags_ & lavik::kCmdWrite) != 0,
                  std::string(name) + " should have kCmdWrite");
-    EXPECT_CHECK(spec != nullptr && (spec->flags_ & keylane::kCmdReadOnly) == 0,
+    EXPECT_CHECK(spec != nullptr && (spec->flags_ & lavik::kCmdReadOnly) == 0,
                  std::string(name) + " should not have kCmdReadOnly");
   }
   for (const char* name : read_cmds) {
     const CommandSpec* spec = FindCommand(name);
-    EXPECT_CHECK(spec != nullptr && (spec->flags_ & keylane::kCmdReadOnly) != 0,
+    EXPECT_CHECK(spec != nullptr && (spec->flags_ & lavik::kCmdReadOnly) != 0,
                  std::string(name) + " should have kCmdReadOnly");
-    EXPECT_CHECK(spec != nullptr && (spec->flags_ & keylane::kCmdWrite) == 0,
+    EXPECT_CHECK(spec != nullptr && (spec->flags_ & lavik::kCmdWrite) == 0,
                  std::string(name) + " should not have kCmdWrite");
   }
   {
@@ -416,13 +416,13 @@ TEST(CommandTableTest, LookupFlagsArityAndKeyPositions) {
     for (const char* name : gated) {
       const CommandSpec* spec = FindCommand(name);
       EXPECT_CHECK(
-          spec != nullptr && (spec->flags_ & keylane::kCmdUsesDbGate) != 0,
+          spec != nullptr && (spec->flags_ & lavik::kCmdUsesDbGate) != 0,
           std::string(name) + " should have kCmdUsesDbGate");
     }
     for (const char* name : ungated) {
       const CommandSpec* spec = FindCommand(name);
       EXPECT_CHECK(
-          spec != nullptr && (spec->flags_ & keylane::kCmdUsesDbGate) == 0,
+          spec != nullptr && (spec->flags_ & lavik::kCmdUsesDbGate) == 0,
           std::string(name) + " should not have kCmdUsesDbGate");
     }
   }
@@ -432,8 +432,7 @@ TEST(CommandTableTest, LookupFlagsArityAndKeyPositions) {
                              "flushdb", "flushall", "tombraider"};
     for (const char* name : no_keys) {
       const CommandSpec* spec = FindCommand(name);
-      EXPECT_CHECK(spec != nullptr &&
-                       (spec->flags_ & keylane::kCmdNoKeys) != 0 &&
+      EXPECT_CHECK(spec != nullptr && (spec->flags_ & lavik::kCmdNoKeys) != 0 &&
                        spec->first_key_ == 0,
                    std::string(name) + " should be keyless");
     }
@@ -446,8 +445,7 @@ TEST(CommandTableTest, LookupFlagsArityAndKeyPositions) {
         "bitcount",    "bitpos",  "bitfield", "bitfield_ro"};
     for (const char* name : keyed) {
       const CommandSpec* spec = FindCommand(name);
-      EXPECT_CHECK(spec != nullptr &&
-                       (spec->flags_ & keylane::kCmdNoKeys) == 0 &&
+      EXPECT_CHECK(spec != nullptr && (spec->flags_ & lavik::kCmdNoKeys) == 0 &&
                        spec->first_key_ == 1,
                    std::string(name) + " should have keys at arg 1");
     }
@@ -602,9 +600,9 @@ TEST(CommandTableTest, ResolvesEvalKeys) {
   ASSERT_NE(evalsha, nullptr);
   ASSERT_NE(eval_ro, nullptr);
   ASSERT_NE(evalsha_ro, nullptr);
-  EXPECT_NE(eval_ro->flags_ & keylane::kCmdReadOnly, 0u);
-  EXPECT_EQ(eval_ro->flags_ & keylane::kCmdDynamicWrite, 0u);
-  EXPECT_NE(evalsha_ro->flags_ & keylane::kCmdReadOnly, 0u);
+  EXPECT_NE(eval_ro->flags_ & lavik::kCmdReadOnly, 0u);
+  EXPECT_EQ(eval_ro->flags_ & lavik::kCmdDynamicWrite, 0u);
+  EXPECT_NE(evalsha_ro->flags_ & lavik::kCmdReadOnly, 0u);
 
   std::vector<std::string> args = {"EVAL",  "return ARGV[1]", "2",
                                    "first", "second",         "argument"};
@@ -853,30 +851,30 @@ TEST(CommandTableTest, ResolvesMovableSortedSetPopKeys) {
 }
 
 TEST(CommandTableTest, RedisGlobTrailingHyphenIsRangeEndpoint) {
-  EXPECT_TRUE(keylane::RedisGlobMatch("[a-]", "]"));
-  EXPECT_TRUE(keylane::RedisGlobMatch("[a-]", "_"));
-  EXPECT_TRUE(keylane::RedisGlobMatch("[a-]", "a"));
-  EXPECT_FALSE(keylane::RedisGlobMatch("[a-]", "-"));
+  EXPECT_TRUE(lavik::RedisGlobMatch("[a-]", "]"));
+  EXPECT_TRUE(lavik::RedisGlobMatch("[a-]", "_"));
+  EXPECT_TRUE(lavik::RedisGlobMatch("[a-]", "a"));
+  EXPECT_FALSE(lavik::RedisGlobMatch("[a-]", "-"));
   // The endpoint ']' is consumed by the range. The following '*' remains
   // inside the now-unterminated class instead of matching the rest of text.
-  EXPECT_FALSE(keylane::RedisGlobMatch("[b-]*", "bbba"));
-  EXPECT_TRUE(keylane::RedisGlobMatch("[b-]*", "b"));
+  EXPECT_FALSE(lavik::RedisGlobMatch("[b-]*", "bbba"));
+  EXPECT_TRUE(lavik::RedisGlobMatch("[b-]*", "b"));
 }
 
 TEST(CommandTableTest, RedisGlobOnlyCaretNegatesAndEscapesPrecedeRanges) {
-  EXPECT_TRUE(keylane::RedisGlobMatch("[!a]", "!"));
-  EXPECT_TRUE(keylane::RedisGlobMatch("[!a]", "a"));
-  EXPECT_FALSE(keylane::RedisGlobMatch("[!a]", "b"));
+  EXPECT_TRUE(lavik::RedisGlobMatch("[!a]", "!"));
+  EXPECT_TRUE(lavik::RedisGlobMatch("[!a]", "a"));
+  EXPECT_FALSE(lavik::RedisGlobMatch("[!a]", "b"));
 
-  EXPECT_TRUE(keylane::RedisGlobMatch("[\\a-z]", "a"));
-  EXPECT_TRUE(keylane::RedisGlobMatch("[\\a-z]", "-"));
-  EXPECT_TRUE(keylane::RedisGlobMatch("[\\a-z]", "z"));
-  EXPECT_FALSE(keylane::RedisGlobMatch("[\\a-z]", "b"));
+  EXPECT_TRUE(lavik::RedisGlobMatch("[\\a-z]", "a"));
+  EXPECT_TRUE(lavik::RedisGlobMatch("[\\a-z]", "-"));
+  EXPECT_TRUE(lavik::RedisGlobMatch("[\\a-z]", "z"));
+  EXPECT_FALSE(lavik::RedisGlobMatch("[\\a-z]", "b"));
 
-  EXPECT_TRUE(keylane::RedisGlobMatch("[abc", "a"));
-  EXPECT_TRUE(keylane::RedisGlobMatch("[abc", "c"));
-  EXPECT_FALSE(keylane::RedisGlobMatch("[abc", "["));
-  EXPECT_FALSE(keylane::RedisGlobMatch("[abc", "d"));
+  EXPECT_TRUE(lavik::RedisGlobMatch("[abc", "a"));
+  EXPECT_TRUE(lavik::RedisGlobMatch("[abc", "c"));
+  EXPECT_FALSE(lavik::RedisGlobMatch("[abc", "["));
+  EXPECT_FALSE(lavik::RedisGlobMatch("[abc", "d"));
 }
 
 TEST(CommandTableTest, RedisGlobMatchesValkeyReference) {
@@ -887,7 +885,7 @@ TEST(CommandTableTest, RedisGlobMatchesValkeyReference) {
     std::string text(random() % 9, '\0');
     for (char& byte : pattern) byte = alphabet[random() % alphabet.size()];
     for (char& byte : text) byte = alphabet[random() % alphabet.size()];
-    ASSERT_EQ(keylane::RedisGlobMatch(pattern, text),
+    ASSERT_EQ(lavik::RedisGlobMatch(pattern, text),
               ValkeyGlobReference(pattern, text))
         << "pattern=" << pattern << " text=" << text;
   }
@@ -944,20 +942,20 @@ TEST(CommandTableTest, ReplicationGateCandidatesAreClassified) {
       "function",           // kCmdNoKeys: library mutations are process-global
   };
   std::size_t eligible_count = 0;
-  for (const CommandSpec& spec : keylane::CommandSpecs()) {
+  for (const CommandSpec& spec : lavik::CommandSpecs()) {
     const bool eligible =
-        (spec.flags_ & keylane::kCmdMultiShard) != 0 &&
-        (spec.flags_ & (keylane::kCmdWrite | keylane::kCmdDynamicWrite)) != 0 &&
-        (spec.flags_ & keylane::kCmdMayBlock) == 0;
+        (spec.flags_ & lavik::kCmdMultiShard) != 0 &&
+        (spec.flags_ & (lavik::kCmdWrite | lavik::kCmdDynamicWrite)) != 0 &&
+        (spec.flags_ & lavik::kCmdMayBlock) == 0;
     if (!eligible) {
-      EXPECT_EQ(spec.flags_ & keylane::kCmdKeyViewComplete, 0u)
+      EXPECT_EQ(spec.flags_ & lavik::kCmdKeyViewComplete, 0u)
           << spec.name_
           << " carries kCmdKeyViewComplete without being "
              "gate-eligible; the flag is meaningless there";
       continue;
     }
     ++eligible_count;
-    const bool flagged = (spec.flags_ & keylane::kCmdKeyViewComplete) != 0;
+    const bool flagged = (spec.flags_ & lavik::kCmdKeyViewComplete) != 0;
     if (known_incomplete.contains(spec.name_)) {
       EXPECT_FALSE(flagged) << spec.name_
                             << " is known to have an incomplete key view and "
@@ -978,11 +976,10 @@ TEST(CommandTableTest, ReplicationGateCandidatesAreClassified) {
   for (std::string_view name : known_incomplete) {
     const CommandSpec* spec = FindCommand(name);
     ASSERT_NE(spec, nullptr) << name;
-    EXPECT_NE(spec->flags_ & keylane::kCmdMultiShard, 0u) << name;
-    EXPECT_NE(spec->flags_ & (keylane::kCmdWrite | keylane::kCmdDynamicWrite),
-              0u)
+    EXPECT_NE(spec->flags_ & lavik::kCmdMultiShard, 0u) << name;
+    EXPECT_NE(spec->flags_ & (lavik::kCmdWrite | lavik::kCmdDynamicWrite), 0u)
         << name << " is no longer gate-eligible; drop its list entry";
-    EXPECT_EQ(spec->flags_ & keylane::kCmdMayBlock, 0u) << name;
+    EXPECT_EQ(spec->flags_ & lavik::kCmdMayBlock, 0u) << name;
   }
 }
 
@@ -990,8 +987,8 @@ TEST(CommandTableTest, ReplicationGateCandidatesAreClassified) {
 // for the replication transaction order gate. Needs a real storage engine so
 // OwnerForKey can spread keys over several shards.
 TEST(CommandTableTest, RequestSpansMultipleShardsDecision) {
-  const std::string path = keylane::test::TestDataPath(
-      "keylane-command-table-" + std::to_string(::getpid()) + ".data");
+  const std::string path = lavik::test::TestDataPath(
+      "lavik-command-table-" + std::to_string(::getpid()) + ".data");
   const int fd =
       ::open(path.c_str(), O_RDWR | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
   ASSERT_GE(fd, 0);
@@ -1002,13 +999,13 @@ TEST(CommandTableTest, RequestSpansMultipleShardsDecision) {
     ~Cleanup() { (void)::unlink(path_.c_str()); }
   } cleanup{path};
 
-  keylane::storage::StorageEngineOptions options;
+  lavik::storage::StorageEngineOptions options;
   options.data_files_ = {path};
-  keylane::storage::StorageEngine engine(std::move(options));
+  lavik::storage::StorageEngine engine(std::move(options));
   ASSERT_TRUE(engine.Prepare(4).ok());
-  keylane::InitStorage(&engine, nullptr);
+  lavik::InitStorage(&engine, nullptr);
   struct ResetStorage {
-    ~ResetStorage() { keylane::InitStorage(nullptr, nullptr); }
+    ~ResetStorage() { lavik::InitStorage(nullptr, nullptr); }
   } reset_storage;
 
   // Same hashtag => same Redis slot => same shard, guaranteed by
@@ -1029,7 +1026,7 @@ TEST(CommandTableTest, RequestSpansMultipleShardsDecision) {
   ASSERT_FALSE(cross.empty()) << "no cross-shard probe key found";
 
   auto request = [](std::vector<std::string> args) {
-    keylane::CommandRequest built;
+    lavik::CommandRequest built;
     built.spec_ = FindCommand(args.front());
     built.kind_ =
         built.spec_ != nullptr ? built.spec_->kind_ : CommandKind::kUnknown;
@@ -1037,7 +1034,7 @@ TEST(CommandTableTest, RequestSpansMultipleShardsDecision) {
     return built;
   };
   auto spans = [&request](std::vector<std::string> args) {
-    return keylane::RequestSpansMultipleShards(request(std::move(args)));
+    return lavik::RequestSpansMultipleShards(request(std::move(args)));
   };
 
   // Conservative fallbacks: unknown command, arity failure, and any kind

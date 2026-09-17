@@ -18,5 +18,5 @@ repos:
     hooks:
       - id: clang-format
         name: clang-format 23.1.0
-        files: '^(app/|include/keylane/|src/|tests/).*\.(c|cc|cpp|cxx|h|hh|hpp|hxx)$'
-        exclude: '^include/keylane/CLI11\.hpp$'
+        files: '^(app/|include/lavik/|src/|tests/).*\.(c|cc|cpp|cxx|h|hh|hpp|hxx)$'
+        exclude: '^include/lavik/CLI11\.hpp$'

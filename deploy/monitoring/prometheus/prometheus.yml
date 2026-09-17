@@ -18,10 +18,10 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: keylane
+  - job_name: lavik
     metrics_path: /metrics
     scheme: http
     file_sd_configs:
       - files:
-          - /etc/prometheus/targets/keylane.json
+          - /etc/prometheus/targets/lavik.json
         refresh_interval: 30s

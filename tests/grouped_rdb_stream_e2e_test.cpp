@@ -21,9 +21,9 @@
 #include <set>
 
 #include "grouped_write_e2e_support.h"
-#include "keylane/rdb.h"
-#include "keylane/rdb_collection.h"
-#include "keylane/storage/detail/ordered_compact_codec.h"
+#include "lavik/rdb.h"
+#include "lavik/rdb_collection.h"
+#include "lavik/storage/detail/ordered_compact_codec.h"
 
 namespace {
 using namespace grouped_e2e;
@@ -169,7 +169,7 @@ TEST(GroupedRdbStreamE2e, FourTypesMultiPageLargeItemsAndMultipleWorkers) {
     std::this_thread::sleep_for(10ms);
   ASSERT_NE(server.Log().find("RDB backup completed:"), std::string::npos)
       << server.Log();
-  auto reader = keylane::rdb::FileReader::Open(disk.path() + ".rdb");
+  auto reader = lavik::rdb::FileReader::Open(disk.path() + ".rdb");
   ASSERT_TRUE(reader.ok()) << reader.status();
   std::set<std::string> seen;
   for (;;) {
@@ -213,12 +213,12 @@ TEST(GroupedRdbStreamE2e, FourTypesMultiPageLargeItemsAndMultipleWorkers) {
 }
 
 TEST(GroupedRdbStreamE2e, LaterPageFailurePreservesPreviousDump) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires the Debug RDB page failure hook";
 #endif
   for (const char* injected : {"1", "alloc:1"}) {
     PrivateDisk disk;
-    ScopedEnvironment fault("KEYLANE_FAIL_RDB_COLLECTION_PAGE", injected);
+    ScopedEnvironment fault("LAVIK_FAIL_RDB_COLLECTION_PAGE", injected);
     Server server(disk);
     Client client(server.port());
     std::vector<std::string> hash{"HSET", "hash"};
@@ -230,9 +230,9 @@ TEST(GroupedRdbStreamE2e, LaterPageFailurePreservesPreviousDump) {
     client.Durable();
     const std::string path = disk.path() + ".rdb";
     {
-      auto writer = keylane::rdb::FileWriter::Open(path);
+      auto writer = lavik::rdb::FileWriter::Open(path);
       ASSERT_TRUE(writer.ok()) << writer.status();
-      auto entry = keylane::rdb::EncodeFileEntry(
+      auto entry = lavik::rdb::EncodeFileEntry(
           0, "previous-dump",
           RawValue{.encoded_ = "sentinel",
                    .logical_size_ = 8,
@@ -254,7 +254,7 @@ TEST(GroupedRdbStreamE2e, LaterPageFailurePreservesPreviousDump) {
         << server.Log();
     ASSERT_NE(server.Log().find("RDB backup failed:"), std::string::npos)
         << server.Log();
-    auto reader = keylane::rdb::FileReader::Open(path);
+    auto reader = lavik::rdb::FileReader::Open(path);
     ASSERT_TRUE(reader.ok()) << reader.status();
     auto previous = reader->Next();
     ASSERT_TRUE(previous.ok());
@@ -294,9 +294,9 @@ TEST(GroupedRdbStreamE2e,
   ASSERT_EQ(client.Command({"HLEN", "hash"}).text_, "1");
   const std::string path = disk.path() + ".rdb";
   {
-    auto writer = keylane::rdb::FileWriter::Open(path);
+    auto writer = lavik::rdb::FileWriter::Open(path);
     ASSERT_TRUE(writer.ok()) << writer.status();
-    auto entry = keylane::rdb::EncodeFileEntry(
+    auto entry = lavik::rdb::EncodeFileEntry(
         0, "previous-dump",
         RawValue{.encoded_ = "sentinel",
                  .logical_size_ = 8,
@@ -313,7 +313,7 @@ TEST(GroupedRdbStreamE2e,
   ASSERT_NE(server.Log().find("OOM RDB collection page retention rejected"),
             std::string::npos)
       << server.Log();
-  auto reader = keylane::rdb::FileReader::Open(path);
+  auto reader = lavik::rdb::FileReader::Open(path);
   ASSERT_TRUE(reader.ok()) << reader.status();
   auto previous = reader->Next();
   ASSERT_TRUE(previous.ok());
@@ -334,7 +334,7 @@ TEST(GroupedRdbStreamE2e,
 
 TEST(GroupedRdbStreamE2e,
      ConcurrentEndWaitsForAdmittedPageAndAllowsTheNextBackup) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires the Debug concurrent RDB End hook";
 #endif
   PrivateDisk disk;
@@ -347,14 +347,14 @@ TEST(GroupedRdbStreamE2e,
     ASSERT_EQ(initial.Wait(true), 0) << initial.Log();
   }
   ASSERT_FALSE(disk.Auxiliaries("hash").empty());
-  ScopedEnvironment cancel("KEYLANE_RDB_CANCEL_ADMITTED_PAGE", "hash");
+  ScopedEnvironment cancel("LAVIK_RDB_CANCEL_ADMITTED_PAGE", "hash");
   Server server(disk, 4);
   Client client(server.port());
   const std::string path = disk.path() + ".rdb";
   {
-    auto writer = keylane::rdb::FileWriter::Open(path);
+    auto writer = lavik::rdb::FileWriter::Open(path);
     ASSERT_TRUE(writer.ok()) << writer.status();
-    auto entry = keylane::rdb::EncodeFileEntry(
+    auto entry = lavik::rdb::EncodeFileEntry(
         0, "previous-dump",
         RawValue{.encoded_ = "sentinel",
                  .logical_size_ = 8,
@@ -380,7 +380,7 @@ TEST(GroupedRdbStreamE2e,
       << log;
   ASSERT_NE(log.find("RDB backup failed:"), std::string::npos) << log;
   {
-    auto reader = keylane::rdb::FileReader::Open(path);
+    auto reader = lavik::rdb::FileReader::Open(path);
     ASSERT_TRUE(reader.ok()) << reader.status();
     auto previous = reader->Next();
     ASSERT_TRUE(previous.ok());
@@ -401,7 +401,7 @@ TEST(GroupedRdbStreamE2e,
     std::this_thread::sleep_for(10ms);
   ASSERT_NE(server.Log().find("RDB backup completed:"), std::string::npos)
       << server.Log();
-  auto reader = keylane::rdb::FileReader::Open(path);
+  auto reader = lavik::rdb::FileReader::Open(path);
   ASSERT_TRUE(reader.ok()) << reader.status();
   auto value = reader->Next();
   ASSERT_TRUE(value.ok());
@@ -528,7 +528,7 @@ TEST(GroupedRdbStreamE2e, StartupImportStreamsPagesAndSortsUnorderedZsetInput) {
     const std::string& path;
     ~RemoveInput() { ::unlink(path.c_str()); }
   } cleanup{input};
-  auto writer = keylane::rdb::FileWriter::Open(input);
+  auto writer = lavik::rdb::FileWriter::Open(input);
   ASSERT_TRUE(writer.ok());
   for (auto type : {ValueType::kHash, ValueType::kSet, ValueType::kList,
                     ValueType::kSortedSet}) {
@@ -537,12 +537,12 @@ TEST(GroupedRdbStreamE2e, StartupImportStreamsPagesAndSortsUnorderedZsetInput) {
                             : type == ValueType::kList ? "list"
                                                        : "sorted";
     auto encoder =
-        keylane::rdb::CollectionFileEncoder::Create(0, key, type, 700, 0);
+        lavik::rdb::CollectionFileEncoder::Create(0, key, type, 700, 0);
     ASSERT_TRUE(encoder.ok());
     while (auto fragment = encoder->Next())
       ASSERT_TRUE(writer->WriteFragment(*fragment).ok());
     for (unsigned n = 0; n < 7; ++n) {
-      keylane::storage::CollectionPage page{
+      lavik::storage::CollectionPage page{
           .value_type_ = type, .next_cursor_ = n + 1, .done_ = n == 6};
       for (unsigned i = n * 100; i < (n + 1) * 100; ++i) {
         auto member = std::to_string(i);
@@ -634,7 +634,7 @@ TEST(GroupedRdbStreamE2e, DisklessPsyncStreamsFourTypesThenImportsAndRestarts) {
           "OK");
     writer.Durable();
     ASSERT_NO_THROW(CapturePsyncRdb(source.port(), input)) << source.Log();
-    auto reader = keylane::rdb::FileReader::Open(input);
+    auto reader = lavik::rdb::FileReader::Open(input);
     ASSERT_TRUE(reader.ok()) << reader.status();
     unsigned keys = 0;
     for (;;) {
@@ -678,7 +678,7 @@ TEST(GroupedRdbStreamE2e, DisklessPsyncStreamsFourTypesThenImportsAndRestarts) {
 
 TEST(GroupedRdbStreamE2e,
      LargeListOverOneGiBImportsAndExportsWithoutAggregate) {
-  if (std::getenv("KEYLANE_RUN_LARGE_RDB") == nullptr)
+  if (std::getenv("LAVIK_RUN_LARGE_RDB") == nullptr)
     GTEST_SKIP() << "opt-in private /mnt/dev 4 GiB image and >1 GiB RDB";
   constexpr std::uint64_t count = 140000;
   constexpr std::size_t member_bytes = 8192;
@@ -705,18 +705,18 @@ TEST(GroupedRdbStreamE2e,
     return value;
   };
   {
-    auto writer = keylane::rdb::FileWriter::Open(input);
+    auto writer = lavik::rdb::FileWriter::Open(input);
     ASSERT_TRUE(writer.ok());
-    auto encoder = keylane::rdb::CollectionFileEncoder::Create(
+    auto encoder = lavik::rdb::CollectionFileEncoder::Create(
         0, "large-list", ValueType::kList, count, 0);
     ASSERT_TRUE(encoder.ok());
     while (auto fragment = encoder->Next())
       ASSERT_TRUE(writer->WriteFragment(*fragment).ok());
     for (std::uint64_t begin = 0, cursor = 0; begin < count; begin += 128) {
       const auto end = std::min(begin + 128, count);
-      keylane::storage::CollectionPage page{.value_type_ = ValueType::kList,
-                                            .next_cursor_ = ++cursor,
-                                            .done_ = end == count};
+      lavik::storage::CollectionPage page{.value_type_ = ValueType::kList,
+                                          .next_cursor_ = ++cursor,
+                                          .done_ = end == count};
       for (auto i = begin; i < end; ++i) page.elements_.push_back(member(i));
       ASSERT_TRUE(encoder->StartPage(page).ok());
       while (auto fragment = encoder->Next())
@@ -747,7 +747,7 @@ TEST(GroupedRdbStreamE2e,
       std::this_thread::sleep_for(250ms);
     ASSERT_NE(imported.Log().find("RDB backup completed:"), std::string::npos)
         << imported.Log();
-    auto reader = keylane::rdb::FileReader::Open(disk.path() + ".rdb");
+    auto reader = lavik::rdb::FileReader::Open(disk.path() + ".rdb");
     ASSERT_TRUE(reader.ok()) << reader.status();
     auto entry = reader->NextStreaming();
     ASSERT_TRUE(entry.ok() && entry->has_value());

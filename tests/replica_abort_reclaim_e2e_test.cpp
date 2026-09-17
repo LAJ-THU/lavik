@@ -32,23 +32,23 @@
 #include <vector>
 
 #include "bycorf/net/server.h"
-#include "keylane/memory.h"
-#include "keylane/metrics.h"
-#include "keylane/storage/detail/collection_compact_stream.h"
-#include "keylane/storage/detail/grouped_commit.h"
-#include "keylane/storage/engine.h"
-#include "keylane/storage/format.h"
-#include "keylane/tx/tx_shard.h"
+#include "lavik/memory.h"
+#include "lavik/metrics.h"
+#include "lavik/storage/detail/collection_compact_stream.h"
+#include "lavik/storage/detail/grouped_commit.h"
+#include "lavik/storage/engine.h"
+#include "lavik/storage/format.h"
+#include "lavik/tx/tx_shard.h"
 #include "support/test_data_path.h"
 
 namespace {
 
-using keylane::storage::PartitionSnapshotBatch;
-using keylane::storage::ReplicaPartitionEpoch;
-using keylane::storage::ReplicaPartitionReset;
-using keylane::storage::SnapshotRecord;
-using keylane::storage::StorageEngine;
-using keylane::storage::StorageEngineOptions;
+using lavik::storage::PartitionSnapshotBatch;
+using lavik::storage::ReplicaPartitionEpoch;
+using lavik::storage::ReplicaPartitionReset;
+using lavik::storage::SnapshotRecord;
+using lavik::storage::StorageEngine;
+using lavik::storage::StorageEngineOptions;
 
 constexpr std::size_t kMiB = 1024 * 1024;
 constexpr std::size_t kExternalValueBytes = 10 * kMiB;
@@ -90,10 +90,10 @@ class ScopedDataFile {
 
 class ReplicaAbortReclaimService final : public bycorf::Service {
  public:
-  explicit ReplicaAbortReclaimService(StorageEngine* storage,
-                                      keylane::storage::ValueType large_type =
-                                          keylane::storage::ValueType::kNone,
-                                      bool verify_ingest = false)
+  explicit ReplicaAbortReclaimService(
+      StorageEngine* storage,
+      lavik::storage::ValueType large_type = lavik::storage::ValueType::kNone,
+      bool verify_ingest = false)
       : storage_(storage),
         large_type_(large_type),
         verify_ingest_(verify_ingest) {}
@@ -105,12 +105,12 @@ class ReplicaAbortReclaimService final : public bycorf::Service {
   bycorf::Task<absl::Status> Run(bycorf::Worker& worker,
                                  bycorf::ServiceContext) override {
     worker_ = &worker;
-    keylane::BindMemoryAccountingShard(worker.id());
-    keylane::tx::TxRuntime::Get()->shard(worker.id()).Bind(worker);
+    lavik::BindMemoryAccountingShard(worker.id());
+    lavik::tx::TxRuntime::Get()->shard(worker.id()).Bind(worker);
     result_ = co_await storage_->InitializeWorker(worker);
     if (verify_ingest_) {
       if (result_.ok()) result_ = co_await VerifyOrdinaryCollectionIngest();
-    } else if (large_type_ != keylane::storage::ValueType::kNone) {
+    } else if (large_type_ != lavik::storage::ValueType::kNone) {
       if (result_.ok()) result_ = co_await ExerciseLargeCollection();
     } else {
       if (result_.ok()) result_ = co_await ExerciseRepeatedAbort();
@@ -136,7 +136,7 @@ class ReplicaAbortReclaimService final : public bycorf::Service {
 
  private:
   bycorf::Task<absl::Status> VerifyOrdinaryCollectionIngest() {
-    using namespace keylane::storage;
+    using namespace lavik::storage;
     for (auto type : {ValueType::kHash, ValueType::kSet, ValueType::kList,
                       ValueType::kSortedSet}) {
       const auto key = "ordinary-ingest-" + std::to_string(unsigned(type));
@@ -161,7 +161,7 @@ class ReplicaAbortReclaimService final : public bycorf::Service {
   }
 
   bycorf::Task<absl::Status> ExerciseOrdinaryCollectionIngest() {
-    using namespace keylane::storage;
+    using namespace lavik::storage;
     for (auto type : {ValueType::kHash, ValueType::kSet, ValueType::kList,
                       ValueType::kSortedSet}) {
       const auto key = "ordinary-ingest-" + std::to_string(unsigned(type));
@@ -195,9 +195,8 @@ class ReplicaAbortReclaimService final : public bycorf::Service {
       const auto txid = StorageEngine::AllocateWriteTxid();
       storage_->InitializeTxWrites(txid, std::span(&writes, 1));
       writes.collect_undo_ = true;
-      auto hold = co_await keylane::tx::CurrentTxShard().AcquireKey(
-          0, keylane::tx::FingerprintOf(digest),
-          keylane::tx::LockMode::kExclusive);
+      auto hold = co_await lavik::tx::CurrentTxShard().AcquireKey(
+          0, lavik::tx::FingerprintOf(digest), lavik::tx::LockMode::kExclusive);
       // A successful earlier write to this exact key must survive a later
       // streamed command failure inside the same EXEC/Lua accumulator.
       auto prefix = co_await storage_->RestoreCollectionValueLocked(
@@ -205,9 +204,9 @@ class ReplicaAbortReclaimService final : public bycorf::Service {
       if (!prefix.ok()) co_return prefix.status();
       const auto guard_key = key + "-guard";
       const auto guard_digest = ComputeDigest(guard_key);
-      auto guard_hold = co_await keylane::tx::CurrentTxShard().AcquireKey(
-          0, keylane::tx::FingerprintOf(guard_digest),
-          keylane::tx::LockMode::kExclusive);
+      auto guard_hold = co_await lavik::tx::CurrentTxShard().AcquireKey(
+          0, lavik::tx::FingerprintOf(guard_digest),
+          lavik::tx::LockMode::kExclusive);
       auto guard = co_await storage_->SetLocked(0, guard_key, guard_digest,
                                                 "prefix", {}, &writes);
       if (!guard.ok()) co_return guard.status();
@@ -248,9 +247,9 @@ class ReplicaAbortReclaimService final : public bycorf::Service {
       const auto rejected_txid = StorageEngine::AllocateWriteTxid();
       storage_->InitializeTxWrites(rejected_txid, std::span(&rejected, 1));
       rejected.collect_undo_ = true;
-      auto failed_hold = co_await keylane::tx::CurrentTxShard().AcquireKey(
-          0, keylane::tx::FingerprintOf(failed_digest),
-          keylane::tx::LockMode::kExclusive);
+      auto failed_hold = co_await lavik::tx::CurrentTxShard().AcquireKey(
+          0, lavik::tx::FingerprintOf(failed_digest),
+          lavik::tx::LockMode::kExclusive);
       const std::uint64_t tentative_expiry =
           type == ValueType::kSortedSet
               ? std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -310,9 +309,9 @@ class ReplicaAbortReclaimService final : public bycorf::Service {
                 "legacy callback observed failed or tentatively expired root");
         }
       }
-      failed_hold = co_await keylane::tx::CurrentTxShard().AcquireKey(
-          0, keylane::tx::FingerprintOf(failed_digest),
-          keylane::tx::LockMode::kExclusive);
+      failed_hold = co_await lavik::tx::CurrentTxShard().AcquireKey(
+          0, lavik::tx::FingerprintOf(failed_digest),
+          lavik::tx::LockMode::kExclusive);
       auto cleaned = co_await storage_->RollbackTxLocal(rejected_txid);
       if (!cleaned.ok()) co_return cleaned;
       failed_hold.Reset();
@@ -325,7 +324,7 @@ class ReplicaAbortReclaimService final : public bycorf::Service {
   }
 
   bycorf::Task<absl::Status> ExerciseLargeCollection() {
-    using namespace keylane::storage;
+    using namespace lavik::storage;
     constexpr std::uint64_t count = 140000;
     constexpr std::size_t item_bytes = 8192;
     constexpr std::uint64_t session = 9001;
@@ -376,9 +375,9 @@ class ReplicaAbortReclaimService final : public bycorf::Service {
       }
       ++frame.chunk_index_;
       frame.value_.clear();
-      keylane::RefreshMemoryStats();
+      lavik::RefreshMemoryStats();
       if (frame.chunk_index_ % 64 == 0) {
-        const auto memory = keylane::GetMemoryStats();
+        const auto memory = lavik::GetMemoryStats();
         std::cout << "large target chunks=" << frame.chunk_index_
                   << " retained=" << memory.used_bytes_
                   << " retained_peak=" << memory.peak_used_bytes_
@@ -452,12 +451,11 @@ class ReplicaAbortReclaimService final : public bycorf::Service {
     {
       const auto digest = ComputeDigest(key);
       const auto copy_digest = ComputeDigest(copy_key);
-      auto source_hold = co_await keylane::tx::CurrentTxShard().AcquireKey(
-          0, keylane::tx::FingerprintOf(digest),
-          keylane::tx::LockMode::kExclusive);
-      auto target_hold = co_await keylane::tx::CurrentTxShard().AcquireKey(
-          0, keylane::tx::FingerprintOf(copy_digest),
-          keylane::tx::LockMode::kExclusive);
+      auto source_hold = co_await lavik::tx::CurrentTxShard().AcquireKey(
+          0, lavik::tx::FingerprintOf(digest), lavik::tx::LockMode::kExclusive);
+      auto target_hold = co_await lavik::tx::CurrentTxShard().AcquireKey(
+          0, lavik::tx::FingerprintOf(copy_digest),
+          lavik::tx::LockMode::kExclusive);
       auto source =
           co_await storage_->ReadValueForTransferLocked(0, key, digest);
       if (!source.ok()) co_return source.status();
@@ -492,8 +490,8 @@ class ReplicaAbortReclaimService final : public bycorf::Service {
                 std::vector<std::string>{std::string(item_bytes, 'v')},
             "large copied List last item mismatch");
     }
-    keylane::RefreshMemoryStats();
-    const auto memory = keylane::GetMemoryStats();
+    lavik::RefreshMemoryStats();
+    const auto memory = lavik::GetMemoryStats();
     const auto seconds = std::chrono::duration<double>(
                              std::chrono::steady_clock::now() - started)
                              .count();
@@ -505,9 +503,9 @@ class ReplicaAbortReclaimService final : public bycorf::Service {
               << " rss=" << memory.rss_bytes_ << std::endl;
     co_return absl::OkStatus();
   }
-  static std::string CollectionBytes(keylane::storage::ValueType type,
+  static std::string CollectionBytes(lavik::storage::ValueType type,
                                      char fill) {
-    using namespace keylane::storage;
+    using namespace lavik::storage;
     CollectionPage page{.value_type_ = type};
     for (unsigned i = 0; i < kStreamEntries; ++i) {
       const auto name = std::to_string(i);
@@ -536,7 +534,7 @@ class ReplicaAbortReclaimService final : public bycorf::Service {
   bycorf::Task<absl::Status> SendCollection(std::uint64_t session,
                                             std::uint64_t epoch,
                                             std::string_view key,
-                                            keylane::storage::ValueType type,
+                                            lavik::storage::ValueType type,
                                             std::uint64_t sequence,
                                             unsigned mode, char fill = 'v') {
     const auto encoded = CollectionBytes(type, fill);
@@ -553,7 +551,7 @@ class ReplicaAbortReclaimService final : public bycorf::Service {
     for (unsigned byte = 0; byte < 8; ++byte)
       frame.value_[byte] =
           static_cast<char>(std::uint64_t{kStreamEntries} >> (8 * byte));
-    const auto partition = keylane::storage::RedisSlot(key);
+    const auto partition = lavik::storage::RedisSlot(key);
     auto apply = [&]() {
       return storage_->ApplyReplicaRecords(session, partition, epoch,
                                            std::span(&frame, 1));
@@ -578,7 +576,7 @@ class ReplicaAbortReclaimService final : public bycorf::Service {
   }
 
   bycorf::Task<absl::Status> ExerciseCollectionStreams() {
-    using namespace keylane::storage;
+    using namespace lavik::storage;
     std::uint64_t session = 1200;
     for (const auto type : {ValueType::kHash, ValueType::kSet, ValueType::kList,
                             ValueType::kSortedSet}) {
@@ -673,7 +671,7 @@ class ReplicaAbortReclaimService final : public bycorf::Service {
         db_id, key, std::string(kExternalValueBytes, fill), {});
     if (!written.ok()) co_return written.status();
 
-    const std::uint16_t partition = keylane::storage::RedisSlot(key);
+    const std::uint16_t partition = lavik::storage::RedisSlot(key);
     auto session = storage_->BeginFullSyncSession(session_id);
     if (!session.ok()) co_return session.status();
     auto start = storage_->BeginPartitionReplication(session_id, partition);
@@ -683,7 +681,7 @@ class ReplicaAbortReclaimService final : public bycorf::Service {
     if (!db.ok()) co_return db;
     auto batch = co_await storage_->SnapshotPartition(
         session_id, partition, db_id, 0, 1, 1,
-        keylane::storage::kReplicationTransferBytes);
+        lavik::storage::kReplicationTransferBytes);
     if (!batch.ok()) co_return batch.status();
     if (batch->records_.size() != 1 || batch->records_.front().key_ != key ||
         batch->records_.front().source_id_ == 0) {
@@ -695,7 +693,7 @@ class ReplicaAbortReclaimService final : public bycorf::Service {
 
   void ReleasePinnedValue(std::uint64_t session_id, std::string_view key,
                           const PartitionSnapshotBatch& batch) {
-    const std::uint16_t partition = keylane::storage::RedisSlot(key);
+    const std::uint16_t partition = lavik::storage::RedisSlot(key);
     storage_->AcknowledgePartitionSnapshotRecords(session_id, partition,
                                                   batch.records_);
     storage_->EndPartitionReplication(session_id, partition);
@@ -704,16 +702,16 @@ class ReplicaAbortReclaimService final : public bycorf::Service {
 
   bycorf::Task<absl::StatusOr<std::vector<ReplicaPartitionEpoch>>>
   ResetFullRoot(std::uint64_t session_id) {
-    std::array<std::uint64_t, keylane::storage::kLogicalDatabaseCount>
+    std::array<std::uint64_t, lavik::storage::kLogicalDatabaseCount>
         source_db_epochs{};
-    for (std::uint8_t db_id = 0;
-         db_id < keylane::storage::kLogicalDatabaseCount; ++db_id) {
+    for (std::uint8_t db_id = 0; db_id < lavik::storage::kLogicalDatabaseCount;
+         ++db_id) {
       source_db_epochs[db_id] = storage_->DbEpoch(db_id);
     }
     std::vector<ReplicaPartitionReset> resets;
-    resets.reserve(keylane::storage::kLogicalStorageShards);
+    resets.reserve(lavik::storage::kLogicalStorageShards);
     for (std::uint16_t partition = 0;
-         partition < keylane::storage::kLogicalStorageShards; ++partition) {
+         partition < lavik::storage::kLogicalStorageShards; ++partition) {
       resets.push_back(ReplicaPartitionReset{
           .partition_id_ = partition,
           .db_epochs_ = source_db_epochs,
@@ -726,8 +724,8 @@ class ReplicaAbortReclaimService final : public bycorf::Service {
       std::uint64_t session_id,
       std::span<const ReplicaPartitionEpoch> partition_epochs,
       std::uint8_t db_id, std::string_view key, char fill) {
-    const std::uint16_t partition = keylane::storage::RedisSlot(key);
-    Check(partition_epochs.size() == keylane::storage::kLogicalStorageShards,
+    const std::uint16_t partition = lavik::storage::RedisSlot(key);
+    Check(partition_epochs.size() == lavik::storage::kLogicalStorageShards,
           "replica reset did not cover the full root");
     Check(partition_epochs[partition].partition_id_ == partition,
           "replica reset epochs are not partition ordered");
@@ -736,7 +734,7 @@ class ReplicaAbortReclaimService final : public bycorf::Service {
         .db_id_ = db_id,
         .db_epoch_ = storage_->DbEpoch(db_id),
         .mutation_sequence_ = 1,
-        .value_type_ = keylane::storage::ValueType::kString,
+        .value_type_ = lavik::storage::ValueType::kString,
         .logical_size_ = kExternalValueBytes,
         .key_ = std::string(key),
         .value_ = std::string(kExternalValueBytes, fill),
@@ -773,8 +771,8 @@ class ReplicaAbortReclaimService final : public bycorf::Service {
 
   void CheckRetainedMemory(std::optional<std::uint64_t>& first_retained,
                            std::string_view failure) {
-    keylane::RefreshMemoryStats();
-    const std::uint64_t retained = keylane::GetMemoryStats().used_bytes_;
+    lavik::RefreshMemoryStats();
+    const std::uint64_t retained = lavik::GetMemoryStats().used_bytes_;
     if (first_retained.has_value()) {
       Check(retained <= *first_retained + kRetainedTolerance, failure);
     } else {
@@ -872,34 +870,33 @@ class ReplicaAbortReclaimService final : public bycorf::Service {
   }
 
   StorageEngine* storage_ = nullptr;
-  keylane::storage::ValueType large_type_;
+  lavik::storage::ValueType large_type_;
   bool verify_ingest_ = false;
   bycorf::Worker* worker_ = nullptr;
   absl::Status result_ = absl::UnknownError("test service did not run");
 };
 
-int Run(const std::string& path, keylane::storage::ValueType large_type,
+int Run(const std::string& path, lavik::storage::ValueType large_type,
         bool verify_ingest = false) {
   StorageEngineOptions options;
   options.data_files_ = {path};
   options.buffers_.registered_bytes_ = 64 * kMiB;
   options.replication_publish_queue_bytes_ = 16 * kMiB;
   StorageEngine storage(std::move(options));
-  keylane::InitWorkerMetrics(1);
-  absl::Status memory = keylane::InitMemoryLimit(
-      (large_type == keylane::storage::ValueType::kNone ? 512 : 2048) * kMiB,
-      1);
+  lavik::InitWorkerMetrics(1);
+  absl::Status memory = lavik::InitMemoryLimit(
+      (large_type == lavik::storage::ValueType::kNone ? 512 : 2048) * kMiB, 1);
   if (!memory.ok()) {
     std::cerr << memory << '\n';
     return 1;
   }
-  keylane::InitStorage(&storage, nullptr);
+  lavik::InitStorage(&storage, nullptr);
   absl::Status prepared = storage.Prepare(1);
   if (!prepared.ok()) {
     std::cerr << prepared << '\n';
     return 1;
   }
-  keylane::tx::TxRuntime::Create(1);
+  lavik::tx::TxRuntime::Create(1);
   ReplicaAbortReclaimService service(&storage, large_type, verify_ingest);
   bycorf::Server server;
   server.AddService(&service);
@@ -924,7 +921,7 @@ int Run(const std::string& path, keylane::storage::ValueType large_type,
 
 int main(int argc, char** argv) {
   try {
-    using keylane::storage::ValueType;
+    using lavik::storage::ValueType;
     if (argc == 3 && std::string_view(argv[1]) == "--verify-ingest")
       return Run(argv[2], ValueType::kNone, true);
     ValueType large_type = ValueType::kNone;
@@ -936,8 +933,8 @@ int main(int argc, char** argv) {
       Check(argc == 1, "usage: replica_abort [--large-list|--large-hash]");
     const bool large = large_type != ValueType::kNone;
     const std::string prefix =
-        large ? "/mnt/dev/keylane-native-large-"
-              : keylane::test::TestDataPath("keylane-replica-abort-reclaim-");
+        large ? "/mnt/dev/lavik-native-large-"
+              : lavik::test::TestDataPath("lavik-replica-abort-reclaim-");
     ScopedDataFile data_file(prefix + std::to_string(::getpid()) + ".data");
     data_file.Create(large);
     const auto result = Run(data_file.path(), large_type);

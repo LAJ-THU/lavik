@@ -42,4 +42,4 @@ List exact commands run and their results.
 
 Update architecture documentation only when this change makes an existing core
 claim false or materially incomplete, keeping the result focused on the current
-system; see the [architecture authoring standard](https://github.com/thweetkomputer/keylane/blob/main/docs/architecture/README.md#authoring-standard).
+system; see the [architecture authoring standard](https://github.com/eloqdata/lavik/blob/main/docs/architecture/README.md#authoring-standard).

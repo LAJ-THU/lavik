@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/policy_store.h"
+#include "lavik/meta/policy_store.h"
 
 #include <cctype>
 #include <limits>
@@ -25,7 +25,7 @@
 
 #include "absl/strings/str_cat.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
 using JsonValue = std::variant<std::string, bool, std::uint64_t>;
@@ -419,4 +419,4 @@ absl::StatusOr<MetaPolicyStore> MetaPolicyStore::Deserialize(
   return store;
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

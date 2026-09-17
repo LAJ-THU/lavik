@@ -34,7 +34,7 @@ struct MoveOnlyValue {
 };
 
 TEST(RingBufferTest, PreservesFifoAcrossWrapAndResize) {
-  keylane::storage::RingBuffer<MoveOnlyValue> buffer;
+  lavik::storage::RingBuffer<MoveOnlyValue> buffer;
   EXPECT_EQ(buffer.growth_bytes_if_push(), 64 * sizeof(MoveOnlyValue));
 
   for (int value = 0; value < 64; ++value) {
@@ -65,7 +65,7 @@ TEST(RingBufferTest, PreservesFifoAcrossWrapAndResize) {
 }
 
 TEST(RingBufferTest, ClearReleasesContentsAndRetainsCapacity) {
-  keylane::storage::RingBuffer<MoveOnlyValue> buffer;
+  lavik::storage::RingBuffer<MoveOnlyValue> buffer;
   for (int value = 0; value < 65; ++value) {
     buffer.push_back(MoveOnlyValue(value));
   }
@@ -80,7 +80,7 @@ TEST(RingBufferTest, ClearReleasesContentsAndRetainsCapacity) {
 }
 
 TEST(RingBufferTest, PreparedPushUsesReservedSlotWithoutGrowth) {
-  keylane::storage::RingBuffer<MoveOnlyValue> buffer;
+  lavik::storage::RingBuffer<MoveOnlyValue> buffer;
   buffer.PrepareCapacity(65);
   ASSERT_EQ(buffer.capacity(), 128);
   const std::size_t prepared_capacity = buffer.capacity();

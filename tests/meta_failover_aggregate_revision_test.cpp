@@ -19,16 +19,16 @@
 #include <string>
 
 #include "gtest/gtest.h"
-#include "keylane/meta/cluster_create.h"
-#include "keylane/meta/commands.h"
-#include "keylane/meta/failover.h"
-#include "keylane/meta/hash.h"
-#include "keylane/meta/state_apply.h"
+#include "lavik/meta/cluster_create.h"
+#include "lavik/meta/commands.h"
+#include "lavik/meta/failover.h"
+#include "lavik/meta/hash.h"
+#include "lavik/meta/state_apply.h"
 #include "meta_topology_test_access.h"
 
 namespace {
 
-namespace meta = keylane::meta;
+namespace meta = lavik::meta;
 
 constexpr std::uint64_t kBaseRevision = 10;
 
@@ -83,7 +83,7 @@ void RegisterNode(Fixture& fixture, const std::string& node_id,
   meta::RegisterNode node;
   node.request_id_ = Filled<16>(request_seed);
   node.node_id_ = node_id;
-  node.principal_ = "keylane://node/" + node_id;
+  node.principal_ = "lavik://node/" + node_id;
   node.endpoints_ = {"tcp://127.0.0.1:" + std::to_string(port)};
   node.role_ = role;
   ASSERT_TRUE(fixture.stores.identity_.Apply(node).ok());
@@ -164,7 +164,7 @@ void PopulateActivatedFixture(Fixture& fixture,
   begin_term.expected_term_ = 0;
   begin_term.new_term_ = 1;
   ASSERT_TRUE(fixture.stores.topology_.BeginGroupTerm(begin_term).ok());
-  ASSERT_TRUE(keylane::meta::MetaTopologyTestAccess::SetGroupTerm(
+  ASSERT_TRUE(lavik::meta::MetaTopologyTestAccess::SetGroupTerm(
                   fixture.stores.topology_, "g1", 1)
                   .ok());
 
@@ -175,7 +175,7 @@ void PopulateActivatedFixture(Fixture& fixture,
   activate.new_owner_ = fixture.owner;
   activate.new_topology_epoch_ = 4;
   ASSERT_TRUE(fixture.stores.topology_.ValidateActivate(activate).ok());
-  ASSERT_TRUE(keylane::meta::MetaTopologyTestAccess::SetOwner(
+  ASSERT_TRUE(lavik::meta::MetaTopologyTestAccess::SetOwner(
                   fixture.stores.topology_, "g1", fixture.owner)
                   .ok());
   ASSERT_TRUE(fixture.stores.topology_.SetTopologyEpoch(4).ok());

@@ -32,21 +32,21 @@
 
 namespace {
 using namespace std::chrono_literals;
-using keylane::test::ChildProcess;
-using keylane::test::Connect;
-using keylane::test::CreateDataFile;
-using keylane::test::PortReservation;
-using keylane::test::ReadFile;
-using keylane::test::RespClient;
-using keylane::test::TempDirectory;
-using keylane::test::WaitUntil;
+using lavik::test::ChildProcess;
+using lavik::test::Connect;
+using lavik::test::CreateDataFile;
+using lavik::test::PortReservation;
+using lavik::test::ReadFile;
+using lavik::test::RespClient;
+using lavik::test::TempDirectory;
+using lavik::test::WaitUntil;
 
-std::string g_keylane_binary;
+std::string g_lavik_binary;
 
 std::vector<std::string> ServerArguments(std::uint16_t port,
                                          const std::filesystem::path& data,
                                          unsigned threads = 1) {
-  return {g_keylane_binary,
+  return {g_lavik_binary,
           "--port",
           std::to_string(port),
           "--threads",
@@ -78,11 +78,11 @@ std::size_t CountOccurrences(std::string_view text, std::string_view needle) {
 
 TEST(RebuildProtocolIntegrationTest,
      SourceCannotPublishOnlineBeforeTargetFlowProof) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP()
       << "requires a Debug/fault server for premature online injection";
 #endif
-  ASSERT_FALSE(g_keylane_binary.empty());
+  ASSERT_FALSE(g_lavik_binary.empty());
   TempDirectory directory("cluster-early-online");
   const std::filesystem::path source_data = directory.path() / "source.data";
   const std::filesystem::path target_data = directory.path() / "target.data";
@@ -96,7 +96,7 @@ TEST(RebuildProtocolIntegrationTest,
   const std::uint16_t source_port = source_reservation.ReleaseForSpawn();
   const std::uint16_t target_port = target_reservation.ReleaseForSpawn();
   ChildProcess source(ServerArguments(source_port, source_data), source_log,
-                      {{"KEYLANE_REPLICATION_EARLY_ONLINE", "1"}});
+                      {{"LAVIK_REPLICATION_EARLY_ONLINE", "1"}});
   ChildProcess target(ServerArguments(target_port, target_data), target_log);
   WaitForStartup(source_port, "early-online source startup");
   WaitForStartup(target_port, "early-online target startup");
@@ -113,7 +113,7 @@ TEST(RebuildProtocolIntegrationTest,
   // proves local flow state closes it and retries while staying fail-closed.
   for (int sample = 0; sample < 20; ++sample) {
     const std::string info = target_client.Command({"INFO", "replication"});
-    ASSERT_EQ(info.find("keylane_replication_state:online"), std::string::npos)
+    ASSERT_EQ(info.find("lavik_replication_state:online"), std::string::npos)
         << info;
     std::this_thread::sleep_for(100ms);
   }
@@ -126,10 +126,10 @@ TEST(RebuildProtocolIntegrationTest,
 
 TEST(RebuildProtocolIntegrationTest,
      PostCutResetCannotDetachThePromotedPopulation) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires a Debug/fault server for post-cut reset injection";
 #endif
-  ASSERT_FALSE(g_keylane_binary.empty());
+  ASSERT_FALSE(g_lavik_binary.empty());
   TempDirectory directory("cluster-post-cut-reset");
   const std::filesystem::path source_data = directory.path() / "source.data";
   const std::filesystem::path target_data = directory.path() / "target.data";
@@ -143,7 +143,7 @@ TEST(RebuildProtocolIntegrationTest,
   const std::uint16_t source_port = source_reservation.ReleaseForSpawn();
   const std::uint16_t target_port = target_reservation.ReleaseForSpawn();
   ChildProcess source(ServerArguments(source_port, source_data), source_log,
-                      {{"KEYLANE_REPLICATION_POST_CUT_RESET_ONCE", "1"}});
+                      {{"LAVIK_REPLICATION_POST_CUT_RESET_ONCE", "1"}});
   ChildProcess target(ServerArguments(target_port, target_data), target_log);
   WaitForStartup(source_port, "post-cut source startup");
   WaitForStartup(target_port, "post-cut target startup");
@@ -162,7 +162,7 @@ TEST(RebuildProtocolIntegrationTest,
   });
   WaitUntil("post-cut reconnect", 30s, [&] {
     const std::string info = target_client.Command({"INFO", "replication"});
-    return info.find("keylane_replication_state:online") != std::string::npos;
+    return info.find("lavik_replication_state:online") != std::string::npos;
   });
   ASSERT_EQ(target_client.Command({"READONLY"}), "+OK");
   EXPECT_EQ(target_client.Command({"GET", "promoted-proof"}),
@@ -173,10 +173,10 @@ TEST(RebuildProtocolIntegrationTest,
 }
 
 void CheckDivergentOnlineTail(unsigned workers, unsigned failing_flow) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires a Debug/fault server for divergent tail injection";
 #endif
-  ASSERT_FALSE(g_keylane_binary.empty());
+  ASSERT_FALSE(g_lavik_binary.empty());
   TempDirectory directory("cluster-divergent-tail");
   const std::filesystem::path source_data = directory.path() / "source.data";
   const std::filesystem::path target_data = directory.path() / "target.data";
@@ -191,8 +191,8 @@ void CheckDivergentOnlineTail(unsigned workers, unsigned failing_flow) {
   const std::uint16_t target_port = target_reservation.ReleaseForSpawn();
   ChildProcess source(ServerArguments(source_port, source_data, workers),
                       source_log,
-                      {{"KEYLANE_REPLICATION_DIVERGENT_TAIL_ONCE", "1"},
-                       {"KEYLANE_REPLICATION_DIVERGENT_TAIL_FLOW",
+                      {{"LAVIK_REPLICATION_DIVERGENT_TAIL_ONCE", "1"},
+                       {"LAVIK_REPLICATION_DIVERGENT_TAIL_FLOW",
                         std::to_string(failing_flow)}});
   ChildProcess target(ServerArguments(target_port, target_data, workers),
                       target_log);
@@ -208,7 +208,7 @@ void CheckDivergentOnlineTail(unsigned workers, unsigned failing_flow) {
             "+OK");
   WaitUntil("initial full rebuild", 30s, [&] {
     const std::string info = target_client.Command({"INFO", "replication"});
-    return info.find("keylane_replication_state:online") != std::string::npos;
+    return info.find("lavik_replication_state:online") != std::string::npos;
   });
 
   std::string after_gap = "population-after-gap";
@@ -231,7 +231,7 @@ void CheckDivergentOnlineTail(unsigned workers, unsigned failing_flow) {
   });
   WaitUntil("replacement population online", 30s, [&] {
     const std::string info = target_client.Command({"INFO", "replication"});
-    return info.find("keylane_replication_state:online") != std::string::npos;
+    return info.find("lavik_replication_state:online") != std::string::npos;
   });
   ASSERT_EQ(target_client.Command({"READONLY"}), "+OK");
   EXPECT_NE(
@@ -258,7 +258,7 @@ TEST(RebuildProtocolIntegrationTest,
 
 TEST(RebuildProtocolIntegrationTest,
      ShutdownClosesTargetSocketsWithoutReadingOwnerSessionState) {
-  ASSERT_FALSE(g_keylane_binary.empty());
+  ASSERT_FALSE(g_lavik_binary.empty());
   TempDirectory directory("replication-target-shutdown");
   const auto source_data = directory.path() / "source.data";
   const auto target_data = directory.path() / "target.data";
@@ -280,7 +280,7 @@ TEST(RebuildProtocolIntegrationTest,
       "+OK");
   WaitUntil("target online before shutdown", 30s, [&] {
     return client.Command({"INFO", "replication"})
-               .find("keylane_replication_state:online") != std::string::npos;
+               .find("lavik_replication_state:online") != std::string::npos;
   });
 
   // No peer can acknowledge or close these connections. Main's transport
@@ -297,10 +297,10 @@ TEST(RebuildProtocolIntegrationTest,
 
 TEST(RebuildProtocolIntegrationTest,
      CorruptFullSyncFrameRequiresAFreshFullSync) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires a Debug/fault server for corrupt frame injection";
 #endif
-  ASSERT_FALSE(g_keylane_binary.empty());
+  ASSERT_FALSE(g_lavik_binary.empty());
   TempDirectory directory("cluster-full-sync-checksum");
   const std::filesystem::path source_data = directory.path() / "source.data";
   const std::filesystem::path target_data = directory.path() / "target.data";
@@ -315,7 +315,7 @@ TEST(RebuildProtocolIntegrationTest,
   const std::uint16_t target_port = target_reservation.ReleaseForSpawn();
   ChildProcess source(
       ServerArguments(source_port, source_data), source_log,
-      {{"KEYLANE_REPLICATION_CORRUPT_FULLSYNC_RECORD_FRAME_ONCE", "1"}});
+      {{"LAVIK_REPLICATION_CORRUPT_FULLSYNC_RECORD_FRAME_ONCE", "1"}});
   ChildProcess target(ServerArguments(target_port, target_data), target_log);
   WaitForStartup(source_port, "checksum source startup");
   WaitForStartup(target_port, "checksum target startup");
@@ -337,7 +337,7 @@ TEST(RebuildProtocolIntegrationTest,
   });
   WaitUntil("checksum replacement population online", 30s, [&] {
     const std::string info = target_client.Command({"INFO", "replication"});
-    return info.find("keylane_replication_state:online") != std::string::npos;
+    return info.find("lavik_replication_state:online") != std::string::npos;
   });
   ASSERT_EQ(target_client.Command({"READONLY"}), "+OK");
   EXPECT_EQ(target_client.Command({"GET", "checksum-proof"}),
@@ -349,10 +349,10 @@ TEST(RebuildProtocolIntegrationTest,
 
 TEST(RebuildProtocolIntegrationTest,
      TargetCrashDiscardsPartialAndFreshSyncRecoversPopulation) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires a Debug/fault server for the partial handoff pause";
 #endif
-  ASSERT_FALSE(g_keylane_binary.empty());
+  ASSERT_FALSE(g_lavik_binary.empty());
   TempDirectory directory("cluster-target-crash");
   const std::filesystem::path source_data = directory.path() / "source.data";
   const std::filesystem::path target_data = directory.path() / "target.data";
@@ -367,7 +367,7 @@ TEST(RebuildProtocolIntegrationTest,
   const std::uint16_t target_port = target_reservation.ReleaseForSpawn();
   ChildProcess source(
       ServerArguments(source_port, source_data), source_log,
-      {{"KEYLANE_REPLICATION_PAUSE_FULLSYNC_AFTER_HANDOFF_MS", "5000"}});
+      {{"LAVIK_REPLICATION_PAUSE_FULLSYNC_AFTER_HANDOFF_MS", "5000"}});
   ChildProcess target(ServerArguments(target_port, target_data), target_log);
   WaitForStartup(source_port, "crash source startup");
   WaitForStartup(target_port, "crash target startup");
@@ -411,7 +411,7 @@ TEST(RebuildProtocolIntegrationTest,
     });
     WaitUntil("post-crash replacement population online", 60s, [&] {
       const std::string info = target_client.Command({"INFO", "replication"});
-      return info.find("keylane_replication_state:online") != std::string::npos;
+      return info.find("lavik_replication_state:online") != std::string::npos;
     });
     ASSERT_EQ(target_client.Command({"READONLY"}), "+OK");
     EXPECT_EQ(target_client.Command({"GET", key}), "$17\r\nsource-population");
@@ -423,10 +423,10 @@ TEST(RebuildProtocolIntegrationTest,
 
 TEST(RebuildProtocolIntegrationTest,
      PeerFlowCancellationAfterCommittedCommandResumesFromAppliedCursor) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires a Debug/fault server for peer-flow cancellation";
 #endif
-  ASSERT_FALSE(g_keylane_binary.empty());
+  ASSERT_FALSE(g_lavik_binary.empty());
   TempDirectory directory("cluster-cancel-after-command-apply");
   const std::filesystem::path source_data = directory.path() / "source.data";
   const std::filesystem::path target_data = directory.path() / "target.data";
@@ -442,7 +442,7 @@ TEST(RebuildProtocolIntegrationTest,
   ChildProcess source(ServerArguments(source_port, source_data, 2), source_log);
   ChildProcess target(
       ServerArguments(target_port, target_data, 2), target_log,
-      {{"KEYLANE_REPLICATION_CANCEL_PEER_FLOW_AFTER_COMMAND_APPLY_ONCE",
+      {{"LAVIK_REPLICATION_CANCEL_PEER_FLOW_AFTER_COMMAND_APPLY_ONCE",
         "cancelled-apply-counter"}});
   WaitForStartup(source_port, "cancel-after-apply source startup");
   WaitForStartup(target_port, "cancel-after-apply target startup");
@@ -454,7 +454,7 @@ TEST(RebuildProtocolIntegrationTest,
             "+OK");
   WaitUntil("initial two-flow full rebuild", 30s, [&] {
     const std::string info = target_client.Command({"INFO", "replication"});
-    return info.find("keylane_replication_state:online") != std::string::npos &&
+    return info.find("lavik_replication_state:online") != std::string::npos &&
            CountOccurrences(ReadFile(source_log), "selected=FULL") >= 2;
   });
   ASSERT_EQ(target_client.Command({"READONLY"}), "+OK");
@@ -489,7 +489,7 @@ TEST(RebuildProtocolIntegrationTest,
   });
   WaitUntil("continued population online after cancelled apply", 30s, [&] {
     const std::string info = target_client.Command({"INFO", "replication"});
-    return info.find("keylane_replication_state:online") != std::string::npos;
+    return info.find("lavik_replication_state:online") != std::string::npos;
   });
   EXPECT_EQ(target_client.Command({"GET", "cancelled-apply-counter"}),
             "$1\r\n1");
@@ -500,10 +500,10 @@ TEST(RebuildProtocolIntegrationTest,
 
 TEST(RebuildProtocolIntegrationTest,
      FullSyncCutInstallsResumeVectorBeforeAcknowledgement) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires a Debug/fault server for cut pause and disconnect";
 #endif
-  ASSERT_FALSE(g_keylane_binary.empty());
+  ASSERT_FALSE(g_lavik_binary.empty());
   TempDirectory directory("cluster-full-sync-cut");
   const std::filesystem::path source_data = directory.path() / "source.data";
   const std::filesystem::path target_data = directory.path() / "target.data";
@@ -518,7 +518,7 @@ TEST(RebuildProtocolIntegrationTest,
   const std::uint16_t target_port = target_reservation.ReleaseForSpawn();
   ChildProcess source(ServerArguments(source_port, source_data, 2), source_log);
   ChildProcess target(ServerArguments(target_port, target_data, 2), target_log,
-                      {{"KEYLANE_REPLICATION_DROP_AFTER_FULLSYNC_CUT", "2"}});
+                      {{"LAVIK_REPLICATION_DROP_AFTER_FULLSYNC_CUT", "2"}});
   WaitForStartup(source_port, "cut-vector source startup");
   WaitForStartup(target_port, "cut-vector target startup");
 
@@ -540,7 +540,7 @@ TEST(RebuildProtocolIntegrationTest,
             "+OK");
   WaitUntil("initial cut-vector full sync", 60s, [&] {
     const std::string info = target_client.Command({"INFO", "replication"});
-    return info.find("keylane_replication_state:online") != std::string::npos;
+    return info.find("lavik_replication_state:online") != std::string::npos;
   });
 
   // Advance both old-history flow cursors past the special initial cursor. The
@@ -556,12 +556,12 @@ TEST(RebuildProtocolIntegrationTest,
   source.Stop(SIGINT);
   source = ChildProcess(
       ServerArguments(source_port, source_data, 2), source_log,
-      {{"KEYLANE_REPLICATION_PAUSE_FULLSYNC_BEFORE_CUT_MS", "1500"}});
+      {{"LAVIK_REPLICATION_PAUSE_FULLSYNC_BEFORE_CUT_MS", "1500"}});
   WaitForStartup(source_port, "restarted cut-vector source startup");
   source_client = Connect(source_port);
   WaitUntil("replacement full-sync flows", 30s, [&] {
     const std::string info = target_client.Command({"INFO", "replication"});
-    return info.find("keylane_connected_flows:2") != std::string::npos;
+    return info.find("lavik_connected_flows:2") != std::string::npos;
   });
 
   for (unsigned index = 1; index <= 5; ++index) {
@@ -579,7 +579,7 @@ TEST(RebuildProtocolIntegrationTest,
   });
   WaitUntil("replacement population online", 60s, [&] {
     const std::string info = target_client.Command({"INFO", "replication"});
-    return info.find("keylane_replication_state:online") != std::string::npos;
+    return info.find("lavik_replication_state:online") != std::string::npos;
   });
   EXPECT_EQ(source_client.Command({"GET", counter0}), "$1\r\n5");
   EXPECT_EQ(source_client.Command({"GET", counter1}), "$1\r\n5");
@@ -594,7 +594,7 @@ TEST(RebuildProtocolIntegrationTest,
 
 int main(int argc, char** argv) {
   if (argc != 2) return 2;
-  g_keylane_binary = argv[1];
+  g_lavik_binary = argv[1];
   testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

@@ -19,7 +19,7 @@
 #include <fcntl.h>
 #include <linux/fs.h>
 
-#include "keylane/storage/engine.h"
+#include "lavik/storage/engine.h"
 #ifdef BLOCK_SIZE
 #undef BLOCK_SIZE
 #endif
@@ -58,21 +58,21 @@
 #include "bycorf/runtime/cross_core.h"
 #include "bycorf/runtime/sync.h"
 #include "bycorf/runtime/worker.h"
-#include "keylane/fault_injection.h"
-#include "keylane/memory.h"
-#include "keylane/storage/detail/compact_write.h"
-#include "keylane/storage/detail/grouped_object_index.h"
-#include "keylane/storage/detail/hash_codec.h"
-#include "keylane/storage/detail/record_index.h"
-#include "keylane/storage/detail/record_payload_cursor.h"
-#include "keylane/storage/detail/replica_collection_stage.h"
-#include "keylane/storage/format.h"
-#include "keylane/storage/scan_hash_map.h"
-#include "keylane/storage/tx_cleaner.h"
-#include "keylane/tx/tx_shard.h"
+#include "lavik/fault_injection.h"
+#include "lavik/memory.h"
+#include "lavik/storage/detail/compact_write.h"
+#include "lavik/storage/detail/grouped_object_index.h"
+#include "lavik/storage/detail/hash_codec.h"
+#include "lavik/storage/detail/record_index.h"
+#include "lavik/storage/detail/record_payload_cursor.h"
+#include "lavik/storage/detail/replica_collection_stage.h"
+#include "lavik/storage/format.h"
+#include "lavik/storage/scan_hash_map.h"
+#include "lavik/storage/tx_cleaner.h"
+#include "lavik/tx/tx_shard.h"
 #include "spdlog/spdlog.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 using bycorf::AsyncMutex;
 using bycorf::AsyncNotification;
@@ -107,14 +107,14 @@ class UnlockGuard {
 
 using ExtentManifest = std::shared_ptr<const std::vector<ExtentRef>>;
 
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
 // Deterministic write-fault injection for rollback tests: a tagged write of
-// the key named in KEYLANE_FAIL_TX_WRITE fails instead of appending.
+// the key named in LAVIK_FAIL_TX_WRITE fails instead of appending.
 inline bool MaybeFailTxWrite(std::string_view key) noexcept {
-  static const char* const armed = std::getenv("KEYLANE_FAIL_TX_WRITE");
+  static const char* const armed = std::getenv("LAVIK_FAIL_TX_WRITE");
   if (armed == nullptr || key != armed) return false;
   static const char* const after_text =
-      std::getenv("KEYLANE_FAIL_TX_WRITE_AFTER");
+      std::getenv("LAVIK_FAIL_TX_WRITE_AFTER");
   if (after_text == nullptr) return true;
   static const std::uint64_t fail_index = [] {
     std::uint64_t parsed = 0;
@@ -127,10 +127,9 @@ inline bool MaybeFailTxWrite(std::string_view key) noexcept {
   static std::atomic<std::uint64_t> matches{0};
   return matches.fetch_add(1, std::memory_order_relaxed) == fail_index;
 }
-#define KEYLANE_MAYBE_FAIL_TX_WRITE(key) \
-  ::keylane::storage::MaybeFailTxWrite(key)
+#define LAVIK_MAYBE_FAIL_TX_WRITE(key) ::lavik::storage::MaybeFailTxWrite(key)
 #else
-#define KEYLANE_MAYBE_FAIL_TX_WRITE(key) false
+#define LAVIK_MAYBE_FAIL_TX_WRITE(key) false
 #endif
 
 inline std::uint64_t UnixTimeMillis() noexcept {
@@ -1223,15 +1222,15 @@ inline Task<absl::StatusOr<std::size_t>> WriteStorageBuffer(
   co_return co_await bycorf::Write(worker, file, buffer, offset);
 }
 
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
 // Runs in the original write's key-lock lifetime, after store state is
 // released. The whole call site is erased in Release, including the extra
 // coroutine.
 inline Task<absl::Status> PauseCompactWriteForTest(Worker& worker,
                                                    std::string_view key) {
-  if (!KEYLANE_FAULT_MATCHES("KEYLANE_COMPACT_WRITE_PAUSE_KEY", key))
+  if (!LAVIK_FAULT_MATCHES("LAVIK_COMPACT_WRITE_PAUSE_KEY", key))
     co_return absl::OkStatus();
-  const char* configured = std::getenv("KEYLANE_COMPACT_WRITE_PAUSE_MS");
+  const char* configured = std::getenv("LAVIK_COMPACT_WRITE_PAUSE_MS");
   if (configured == nullptr) co_return absl::OkStatus();
   std::uint64_t milliseconds = 0;
   const char* end = configured + std::strlen(configured);
@@ -1254,9 +1253,9 @@ inline Task<absl::Status> PauseCompactWriteForTest(Worker& worker,
 inline Task<absl::Status> PauseGroupedWriteForTest(Worker& worker,
                                                    std::string_view key,
                                                    std::string_view phase) {
-  if (!KEYLANE_FAULT_MATCHES("KEYLANE_GROUPED_WRITE_PAUSE_KEY", key))
+  if (!LAVIK_FAULT_MATCHES("LAVIK_GROUPED_WRITE_PAUSE_KEY", key))
     co_return absl::OkStatus();
-  const char* selected = std::getenv("KEYLANE_GROUPED_WRITE_PAUSE_PHASE");
+  const char* selected = std::getenv("LAVIK_GROUPED_WRITE_PAUSE_PHASE");
   if (selected == nullptr || phase != selected) co_return absl::OkStatus();
   spdlog::info("grouped write pause armed key={} phase={}", key, phase);
   const auto status =
@@ -1278,7 +1277,7 @@ class StorageEngine::Impl {
     const std::chrono::nanoseconds deadline_since_boot_;
   };
 
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
   enum class ExpirationTestPoint : std::uint8_t {
     kBeforeDurableAppend,
     kBeforeDiskFullFallback,
@@ -3825,7 +3824,7 @@ class StorageEngine::Impl {
   std::atomic<bool> expiration_authority_{true};
   std::atomic<std::shared_ptr<ExpirationAuthorityGrant>>
       active_expiration_authority_;
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
   // Unit tests use this synchronous hook to revoke an exact grant after the
   // early check without relying on scheduler timing. It is absent from
   // production builds and never supplies production behavior.
@@ -3966,4 +3965,4 @@ class StorageEngine::Impl {
   std::atomic<bool> shutdown_flush_failed_{false};
 };
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

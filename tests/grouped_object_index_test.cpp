@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-#include "keylane/storage/detail/grouped_object_index.h"
+#include "lavik/storage/detail/grouped_object_index.h"
 
 #include <set>
 #include <string>
 
 #include "gtest/gtest.h"
-#include "keylane/storage/detail/grouped_scratch.h"
+#include "lavik/storage/detail/grouped_scratch.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 // Legacy fixture sequences model both order domains equally. Tests for replay
@@ -1115,4 +1115,4 @@ TEST(GroupedObjectIndexTest,
 }
 
 }  // namespace
-}  // namespace keylane::storage
+}  // namespace lavik::storage

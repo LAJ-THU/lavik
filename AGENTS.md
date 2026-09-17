@@ -43,7 +43,7 @@ limitations under the License.
   false or materially incomplete; leave architecture unchanged when there is
   none. Dedicated documentation work may correct inaccuracies, fill a known
   core-design gap, or consolidate existing sediment.
-- Keep architecture as a compact, present-tense model of Keylane's core module
+- Keep architecture as a compact, present-tense model of Lavik's core module
   boundaries, control and data flows, ownership and lifecycles, durable or wire
   formats, external integrations, and system-level correctness, safety, and
   compatibility invariants.

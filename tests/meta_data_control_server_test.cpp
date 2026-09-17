@@ -26,13 +26,13 @@
 
 #include "bycorf/net/connection.h"
 #include "gtest/gtest.h"
-#include "keylane/cluster/control_protocol.h"
-#include "keylane/meta/control_projector.h"
-#include "keylane/meta/data_control_runtime_status.h"
-#include "keylane/meta/data_control_server.h"
-#include "keylane/meta/observation_store.h"
+#include "lavik/cluster/control_protocol.h"
+#include "lavik/meta/control_projector.h"
+#include "lavik/meta/data_control_runtime_status.h"
+#include "lavik/meta/data_control_server.h"
+#include "lavik/meta/observation_store.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 
 // Constructs the smallest possible server shell for cancellation-policy
 // tests. A rejected executor lets the test exercise the allocation/runtime
@@ -50,41 +50,41 @@ class MetaDataControlServerTestPeer {
   }
 };
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta
 
 namespace {
 
-namespace control = keylane::cluster::control;
-using keylane::meta::BuildCommittedMetaDirectory;
-using keylane::meta::EvaluateLeaseChallenge;
-using keylane::meta::EvaluateReplacementDisposition;
-using keylane::meta::IngestHeartbeatObservations;
-using keylane::meta::MetaCommittedFacts;
-using keylane::meta::MetaCommittedView;
-using keylane::meta::MetaDataControlRuntimeStatus;
-using keylane::meta::MetaDataControlServer;
-using keylane::meta::MetaDataControlServerOptions;
-using keylane::meta::MetaDataControlServerTestPeer;
-using keylane::meta::MetaLeaderRuntimeDisposition;
-using keylane::meta::MetaLeaderRuntimeGuard;
-using keylane::meta::MetaLeaseEvaluation;
-using keylane::meta::MetaLeaseHandoffGuard;
-using keylane::meta::MetaNodeHealthObs;
-using keylane::meta::MetaObservationStore;
-using keylane::meta::MetaObservedOwnerProjection;
-using keylane::meta::MetaReplacementDisposition;
-using keylane::meta::MetaStores;
-using keylane::meta::UnfencedSupersededAuthorities;
-using keylane::meta::detail::ApplyLeadershipValidityLimit;
-using keylane::meta::detail::BoundNodeSessionRegistry;
-using keylane::meta::detail::ConfirmedLeaseForHeartbeat;
-using keylane::meta::detail::EstablishedSessionReadTimeout;
-using keylane::meta::detail::FailoverProjectionForHeartbeat;
-using keylane::meta::detail::MetaCommittedViewCache;
-using keylane::meta::detail::PendingHandshakeLimiter;
-using keylane::meta::detail::RecordEquivalentTransferBoundary;
-using keylane::meta::detail::RetainedProjectionLimiter;
-using keylane::meta::detail::TransferBoundaryNeedsProjectionValidation;
+namespace control = lavik::cluster::control;
+using lavik::meta::BuildCommittedMetaDirectory;
+using lavik::meta::EvaluateLeaseChallenge;
+using lavik::meta::EvaluateReplacementDisposition;
+using lavik::meta::IngestHeartbeatObservations;
+using lavik::meta::MetaCommittedFacts;
+using lavik::meta::MetaCommittedView;
+using lavik::meta::MetaDataControlRuntimeStatus;
+using lavik::meta::MetaDataControlServer;
+using lavik::meta::MetaDataControlServerOptions;
+using lavik::meta::MetaDataControlServerTestPeer;
+using lavik::meta::MetaLeaderRuntimeDisposition;
+using lavik::meta::MetaLeaderRuntimeGuard;
+using lavik::meta::MetaLeaseEvaluation;
+using lavik::meta::MetaLeaseHandoffGuard;
+using lavik::meta::MetaNodeHealthObs;
+using lavik::meta::MetaObservationStore;
+using lavik::meta::MetaObservedOwnerProjection;
+using lavik::meta::MetaReplacementDisposition;
+using lavik::meta::MetaStores;
+using lavik::meta::UnfencedSupersededAuthorities;
+using lavik::meta::detail::ApplyLeadershipValidityLimit;
+using lavik::meta::detail::BoundNodeSessionRegistry;
+using lavik::meta::detail::ConfirmedLeaseForHeartbeat;
+using lavik::meta::detail::EstablishedSessionReadTimeout;
+using lavik::meta::detail::FailoverProjectionForHeartbeat;
+using lavik::meta::detail::MetaCommittedViewCache;
+using lavik::meta::detail::PendingHandshakeLimiter;
+using lavik::meta::detail::RecordEquivalentTransferBoundary;
+using lavik::meta::detail::RetainedProjectionLimiter;
+using lavik::meta::detail::TransferBoundaryNeedsProjectionValidation;
 
 template <std::size_t N>
 std::array<std::uint8_t, N> Bytes(std::uint8_t value) {
@@ -360,19 +360,19 @@ TEST(MetaTransferBoundaryTest,
 
 TEST(MetaTransferBoundaryTest,
      SupersessionRetriesInSessionAndPreservesAVisibleObjectsAppliedAck) {
-  EXPECT_EQ(keylane::meta::detail::ClassifyPublisherSupersession(
+  EXPECT_EQ(lavik::meta::detail::ClassifyPublisherSupersession(
                 /*receiver_can_apply=*/false),
-            keylane::meta::detail::MetaPublisherTransferDisposition::
+            lavik::meta::detail::MetaPublisherTransferDisposition::
                 kRetryBeforeApplyInSession);
-  EXPECT_EQ(keylane::meta::detail::ClassifyPublisherSupersession(
+  EXPECT_EQ(lavik::meta::detail::ClassifyPublisherSupersession(
                 /*receiver_can_apply=*/true),
-            keylane::meta::detail::MetaPublisherTransferDisposition::
+            lavik::meta::detail::MetaPublisherTransferDisposition::
                 kAwaitExactAppliedAndRetryInSession);
 }
 
 TEST(MetaPublisherAdoptionGateTest,
      HoldsFollowingHeartbeatUntilPublisherAdoptsAppliedProjection) {
-  keylane::meta::detail::MetaPublisherAdoptionGate gate;
+  lavik::meta::detail::MetaPublisherAdoptionGate gate;
   EXPECT_FALSE(gate.pending());
 
   // Deterministically model the scheduling gap: the reader consumes Applied,
@@ -421,7 +421,7 @@ class HeartbeatFacts : public MetaCommittedFacts {
       std::string_view group_id) const override {
     return group_id == "group-a" ? 9 : 0;
   }
-  keylane::meta::MetaHash256 CurrentPopulationManifestDigest(
+  lavik::meta::MetaHash256 CurrentPopulationManifestDigest(
       std::string_view) const override {
     return {};
   }
@@ -431,13 +431,12 @@ class HeartbeatFacts : public MetaCommittedFacts {
   }
   bool AssignmentMatches(
       std::string_view group_id, std::string_view node_id,
-      const keylane::meta::MetaAssignmentId& assignment_id) const override {
+      const lavik::meta::MetaAssignmentId& assignment_id) const override {
     return group_id == "group-a" && node_id == Identity('1') &&
            assignment_id == Bytes<16>(0x22);
   }
-  bool IsOwnerAssignment(
-      std::string_view, std::string_view,
-      const keylane::meta::MetaAssignmentId&) const override {
+  bool IsOwnerAssignment(std::string_view, std::string_view,
+                         const lavik::meta::MetaAssignmentId&) const override {
     return false;
   }
 };
@@ -449,17 +448,17 @@ class EvidenceFacts final : public HeartbeatFacts {
 class FailoverHeartbeatFacts final : public HeartbeatFacts {
  public:
   std::optional<FailoverTransitionView> FailoverTransitionById(
-      const keylane::meta::MetaFailoverTransitionId& id) const override {
+      const lavik::meta::MetaFailoverTransitionId& id) const override {
     if (id != Bytes<16>(0x31)) return std::nullopt;
-    keylane::meta::MetaFailoverCandidateAction action;
+    lavik::meta::MetaFailoverCandidateAction action;
     action.action_id_ = Bytes<16>(0x32);
     action.candidate_ = {Identity('1'), Bytes<16>(0x22), Bytes<20>(0x22)};
     action.domain_ = {
         6, Identity('3'), Bytes<16>(0x33), Bytes<20>(0x44), Bytes<20>(0x55), 1};
-    keylane::meta::MetaFailoverTransition transition;
+    lavik::meta::MetaFailoverTransition transition;
     transition.transition_id_ = id;
     transition.revision_ = 8;
-    transition.mode_ = keylane::meta::MetaFailoverMode::kUncontrolled;
+    transition.mode_ = lavik::meta::MetaFailoverMode::kUncontrolled;
     transition.target_term_ = 7;
     transition.candidate_action_ = action;
     return FailoverTransitionView{"group-a", std::move(transition)};
@@ -615,12 +614,12 @@ TEST(MetaDataControlProjectionLimitTest, ChargesResizesMovesAndReleases) {
 }
 
 TEST(MetaDataControlProjectionLimitTest, BatchWeightIncludesOwnedCapacities) {
-  keylane::meta::NodeControlBatch batch;
-  const std::size_t empty = keylane::meta::NodeControlBatchRetainedBytes(batch);
+  lavik::meta::NodeControlBatch batch;
+  const std::size_t empty = lavik::meta::NodeControlBatchRetainedBytes(batch);
   batch.encoded_full_state.reserve(1024);
   batch.full_state.nodes.push_back({Identity('1'), "127.0.0.1", 7000, 0});
   batch.full_state.nodes.front().host.reserve(512);
-  EXPECT_GT(keylane::meta::NodeControlBatchRetainedBytes(batch), empty + 1400);
+  EXPECT_GT(lavik::meta::NodeControlBatchRetainedBytes(batch), empty + 1400);
 }
 
 TEST(MetaDataControlOptionsTest, TlsIsAllOrNone) {
@@ -707,19 +706,19 @@ TEST(MetaDataControlOptionsTest,
 
 TEST(MetaDataControlDirectoryTest, UsesOnlyCommittedActiveMembersInIdOrder) {
   MetaStores stores;
-  keylane::meta::BindMetaMember second;
+  lavik::meta::BindMetaMember second;
   second.server_id_ = 2;
-  second.principal_ = "keylane://meta/2";
+  second.principal_ = "lavik://meta/2";
   second.data_control_endpoint_ = "[2001:db8::2]:7200";
   ASSERT_TRUE(stores.identity_.Apply(second).ok());
 
-  keylane::meta::BindMetaMember first;
+  lavik::meta::BindMetaMember first;
   first.server_id_ = 1;
-  first.principal_ = "keylane://meta/1";
+  first.principal_ = "lavik://meta/1";
   first.data_control_endpoint_ = "10.0.0.1:7100";
   ASSERT_TRUE(stores.identity_.Apply(first).ok());
 
-  keylane::meta::RetireMetaMember retire;
+  lavik::meta::RetireMetaMember retire;
   retire.server_id_ = 2;
   ASSERT_TRUE(stores.identity_.Apply(retire).ok());
 
@@ -736,15 +735,15 @@ TEST(MetaDataControlDirectoryTest, UsesOnlyCommittedActiveMembersInIdOrder) {
 TEST(MetaDataControlDirectoryTest,
      MalformedEndpointIsRejectedBeforeCommitAndPriorStateStillProjects) {
   MetaStores stores;
-  keylane::meta::BindMetaMember prior;
+  lavik::meta::BindMetaMember prior;
   prior.server_id_ = 1;
-  prior.principal_ = "keylane://meta/1";
+  prior.principal_ = "lavik://meta/1";
   prior.data_control_endpoint_ = "10.0.0.1:7100";
   ASSERT_TRUE(stores.identity_.Apply(prior).ok());
 
-  keylane::meta::BindMetaMember member;
+  lavik::meta::BindMetaMember member;
   member.server_id_ = 2;
-  member.principal_ = "keylane://meta/2";
+  member.principal_ = "lavik://meta/2";
   member.data_control_endpoint_ = "meta.internal:7100";
   EXPECT_FALSE(stores.identity_.Apply(member).ok());
 
@@ -758,17 +757,17 @@ TEST(MetaDataControlDirectoryTest,
 TEST(MetaDataControlDirectoryTest,
      DuplicateEndpointIsRejectedBeforeCommitAndPriorStateStillProjects) {
   MetaStores stores;
-  keylane::meta::BindMetaMember first;
+  lavik::meta::BindMetaMember first;
   first.server_id_ = 1;
-  first.principal_ = "keylane://meta/1";
+  first.principal_ = "lavik://meta/1";
   first.data_control_endpoint_ = "10.0.0.1:7100";
-  keylane::meta::BindMetaMember middle;
+  lavik::meta::BindMetaMember middle;
   middle.server_id_ = 2;
-  middle.principal_ = "keylane://meta/2";
+  middle.principal_ = "lavik://meta/2";
   middle.data_control_endpoint_ = "10.0.0.2:7100";
-  keylane::meta::BindMetaMember last;
+  lavik::meta::BindMetaMember last;
   last.server_id_ = 3;
-  last.principal_ = "keylane://meta/3";
+  last.principal_ = "lavik://meta/3";
   last.data_control_endpoint_ = "10.0.0.1:7100";
   ASSERT_TRUE(stores.identity_.Apply(first).ok());
   ASSERT_TRUE(stores.identity_.Apply(middle).ok());
@@ -783,9 +782,9 @@ TEST(MetaDataControlDirectoryTest,
 TEST(MetaDataControlDirectoryTest,
      CanonicalizesIpv6ForReplayAndCommittedDirectory) {
   MetaStores stores;
-  keylane::meta::BindMetaMember bind;
+  lavik::meta::BindMetaMember bind;
   bind.server_id_ = 2;
-  bind.principal_ = "keylane://meta/2";
+  bind.principal_ = "lavik://meta/2";
   bind.data_control_endpoint_ = "[0:0:0:0:0:0:0:1]:7302";
   ASSERT_TRUE(stores.identity_.Apply(bind).ok());
 
@@ -809,9 +808,9 @@ TEST(MetaDataControlDirectoryTest,
   MetaStores stores;
   std::uint32_t rejected_id = 0;
   for (std::uint32_t id = 1; id <= 1024; ++id) {
-    keylane::meta::BindMetaMember bind;
+    lavik::meta::BindMetaMember bind;
     bind.server_id_ = id;
-    bind.principal_ = "keylane://meta/" + std::to_string(id);
+    bind.principal_ = "lavik://meta/" + std::to_string(id);
     bind.data_control_endpoint_ = "10." + std::to_string((id >> 16) & 0xff) +
                                   "." + std::to_string((id >> 8) & 0xff) + "." +
                                   std::to_string(id & 0xff) + ":7100";
@@ -862,7 +861,7 @@ TEST(MetaDataControlLeaseTest,
   state.authority_lease_duration_ms = 900;
   auto encoded = control::EncodeFullDesiredState(state);
   ASSERT_TRUE(encoded.ok()) << encoded.status();
-  keylane::meta::NodeControlBatch batch{state, *encoded};
+  lavik::meta::NodeControlBatch batch{state, *encoded};
 
   const absl::Status limited = ApplyLeadershipValidityLimit(batch, 250);
   ASSERT_TRUE(limited.ok()) << limited;
@@ -1292,8 +1291,8 @@ TEST(MetaHeartbeatObservationTest,
                   .AdoptSession({Identity('1'), boot, 1},
                                 /*now_unix_ms=*/1000)
                   .ok());
-  auto owner = keylane::meta::detail::OwnerProjectionForHeartbeat(
-      Desired(), Identity('1'));
+  auto owner = lavik::meta::detail::OwnerProjectionForHeartbeat(Desired(),
+                                                                Identity('1'));
   ASSERT_TRUE(owner.ok()) << owner.status();
   ASSERT_TRUE(owner->has_value());
   const control::HeartbeatHealth health{
@@ -1352,7 +1351,7 @@ TEST(MetaHeartbeatObservationTest,
       .active_groups = 1,
       .summary = "ok",
   };
-  const keylane::meta::MetaObservedFailoverProjection projection_basis{
+  const lavik::meta::MetaObservedFailoverProjection projection_basis{
       .group_id_ = "group-a",
       .group_term_ = 7,
       .transition_id_ = Bytes<16>(0x71),
@@ -1374,7 +1373,7 @@ TEST(MetaHeartbeatObservationTest,
   EXPECT_EQ(session->heartbeat_failover_projection_, projection_basis);
   const auto latest = observations.LatestForNode(Identity('1'), facts);
   ASSERT_TRUE(latest.has_value());
-  ASSERT_TRUE(std::holds_alternative<keylane::meta::MetaCandidateProgressObs>(
+  ASSERT_TRUE(std::holds_alternative<lavik::meta::MetaCandidateProgressObs>(
       latest->payload_));
 
   candidate.partition_replication_epoch = 3;

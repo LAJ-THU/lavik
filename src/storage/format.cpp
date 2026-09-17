@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/storage/format.h"
+#include "lavik/storage/format.h"
 
 #include <sys/random.h>
 
@@ -29,7 +29,7 @@
 
 #include "absl/crc/crc32c.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 std::uint64_t LoadLittleEndian(const std::uint8_t* input) noexcept {
@@ -934,4 +934,4 @@ bool DecodeReplicationFrameHeader(std::span<const std::byte> input,
              : false;
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

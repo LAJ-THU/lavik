@@ -20,7 +20,7 @@ Usage:
 
 The optional workdir is retained for diagnosis.  CTest and callers that care
 where process data is allocated should pass it explicitly or set
-KEYLANE_TEST_DATA_DIR.
+LAVIK_TEST_DATA_DIR.
 """
 
 import argparse
@@ -43,9 +43,9 @@ GROUP = "failover-group"
 OWNER = "1111111111111111111111111111111111111111"
 CANDIDATE = "2222222222222222222222222222222222222222"
 FOLLOWER = "3333333333333333333333333333333333333333"
-PAUSE_BEGIN_HOOK = b"KEYLANE_TEST_PAUSE_FAILOVER_AFTER_BEGIN_MS"
-PAUSE_AUTHORIZE_HOOK = b"KEYLANE_TEST_PAUSE_FAILOVER_AFTER_AUTHORIZE_MS"
-PAUSE_PREPARED_HOOK = b"KEYLANE_TEST_PAUSE_FAILOVER_AFTER_PREPARED_MS"
+PAUSE_BEGIN_HOOK = b"LAVIK_TEST_PAUSE_FAILOVER_AFTER_BEGIN_MS"
+PAUSE_AUTHORIZE_HOOK = b"LAVIK_TEST_PAUSE_FAILOVER_AFTER_AUTHORIZE_MS"
+PAUSE_PREPARED_HOOK = b"LAVIK_TEST_PAUSE_FAILOVER_AFTER_PREPARED_MS"
 
 
 class FailoverMetaNode(H.Node):
@@ -826,7 +826,7 @@ class FailoverFixture:
         # so sockets fit beneath either the case directory or configured root.
         meta_dir = os.path.join(scenario, "m")
         os.makedirs(meta_dir, mode=0o700)
-        socket_root = os.environ.get("KEYLANE_FAILOVER_SOCKET_ROOT")
+        socket_root = os.environ.get("LAVIK_FAILOVER_SOCKET_ROOT")
         self.socket_directory = None
         if socket_root is not None:
             os.makedirs(socket_root, mode=0o700, exist_ok=True)
@@ -1019,7 +1019,7 @@ class FailoverFixture:
             self.leader.data_control_endpoint)
         replica.start()
         registered = self.leader.registernode(
-            node_id, f"keylane://node/{node_id}", "replica",
+            node_id, f"lavik://node/{node_id}", "replica",
             endpoints=(replica.advertised_endpoint,))
         if not registered.startswith("OK "):
             raise H.Failure(
@@ -1414,25 +1414,25 @@ def run_prepared_leader_resume(meta_binary, data_binary, ctl, redis_cli,
         candidate = fixture.by_id[successor]
         prepared_info = replication_info_fields(candidate)
         prepared_history = prepared_info.get("master_replid")
-        if (prepared_info.get("keylane_replication_state") != "syncing" or
+        if (prepared_info.get("lavik_replication_state") != "syncing" or
                 prepared_history is None or len(prepared_history) != 40 or
                 prepared_history == source_history):
             raise H.Failure(
                 "CandidatePrepared did not expose one fenced child history: "
                 f"source={source_history!r} prepared={prepared_info}")
         candidate_fds_before = candidate.metric(
-            "keylane_cluster_control_full_states_applied_total")
+            "lavik_cluster_control_full_states_applied_total")
 
         old_leader.kill9()
         survivors = [meta for meta in fixture.metas
                      if meta.id != old_leader.id]
         fixture.leader = H.find_leader(survivors, timeout=20)
         candidate.wait_metric(
-            "keylane_cluster_control_full_states_applied_total",
+            "lavik_cluster_control_full_states_applied_total",
             lambda value: value > candidate_fds_before,
             "prepared candidate installs replacement-leader FDS", timeout=25)
         candidate.wait_metric(
-            "keylane_cluster_control_connected", lambda value: value == 1,
+            "lavik_cluster_control_connected", lambda value: value == 1,
             "prepared candidate reconnects to replacement Meta", timeout=10)
         # The replacement has a fresh ObservationStore. Reaching this hook on
         # that exact process therefore proves the still-running Data process
@@ -1448,7 +1448,7 @@ def run_prepared_leader_resume(meta_binary, data_binary, ctl, redis_cli,
                 "replacement Meta leader did not restore the Running "
                 "operation at the prepared cut")
         resumed_info = replication_info_fields(candidate)
-        if (resumed_info.get("keylane_replication_state") != "syncing" or
+        if (resumed_info.get("lavik_replication_state") != "syncing" or
                 resumed_info.get("master_replid") != prepared_history):
             raise H.Failure(
                 "replacement Meta session did not preserve the exact "
@@ -1457,7 +1457,7 @@ def run_prepared_leader_resume(meta_binary, data_binary, ctl, redis_cli,
 
         wait_owner(fixture, successor, fixture.data_nodes)
         owner_info = replication_info_fields(candidate)
-        if (owner_info.get("keylane_replication_state") != "master" or
+        if (owner_info.get("lavik_replication_state") != "master" or
                 owner_info.get("master_replid") != prepared_history):
             raise H.Failure(
                 "cutover did not activate the re-reported child history: "
@@ -1531,12 +1531,12 @@ def run_live_leader_demotion(meta_binary, data_binary, ctl, redis_cli, workdir,
             follower.wait_committed(begin_index, timeout=10)
         for data in fixture.data_nodes:
             data.wait_metric(
-                "keylane_cluster_control_connected", lambda value: value == 1,
+                "lavik_cluster_control_connected", lambda value: value == 1,
                 f"Data {data.node_id[:8]} has a live leader session",
                 timeout=10)
         fds_before = {
             data.node_id: data.metric(
-                "keylane_cluster_control_full_states_applied_total")
+                "lavik_cluster_control_full_states_applied_total")
             for data in fixture.data_nodes
         }
         follower_events_before = old_leader.log_tail(lines=2000).count(
@@ -1558,7 +1558,7 @@ def run_live_leader_demotion(meta_binary, data_binary, ctl, redis_cli, workdir,
                 "[raft-cb] event=BecomeFollower") > follower_events_before)
         for data in fixture.data_nodes:
             data.wait_metric(
-                "keylane_cluster_control_connected", lambda value: value == 0,
+                "lavik_cluster_control_connected", lambda value: value == 0,
                 f"Data {data.node_id[:8]} loses the demoted Meta session",
                 timeout=10)
 
@@ -1577,12 +1577,12 @@ def run_live_leader_demotion(meta_binary, data_binary, ctl, redis_cli, workdir,
                 "operation")
         for data in fixture.data_nodes:
             data.wait_metric(
-                "keylane_cluster_control_full_states_applied_total",
+                "lavik_cluster_control_full_states_applied_total",
                 lambda value, data=data: value > fds_before[data.node_id],
                 f"Data {data.node_id[:8]} installs replacement-leader FDS",
                 timeout=25)
             data.wait_metric(
-                "keylane_cluster_control_connected", lambda value: value == 1,
+                "lavik_cluster_control_connected", lambda value: value == 1,
                 f"Data {data.node_id[:8]} reconnects to replacement Meta",
                 timeout=10)
 
@@ -1736,7 +1736,7 @@ def run_lease_fence(meta_binary, data_binary, ctl, redis_cli, workdir,
                 raise H.Failure(
                     "replica write probe succeeded before failover")
 
-        lease_metric = "keylane_cluster_control_lease_expirations_total"
+        lease_metric = "lavik_cluster_control_lease_expirations_total"
         expirations_before = fixture.by_id[OWNER].metric(lease_metric)
         operation_id = fixture.submit_failover()
         if not fixture.wait_post_authorize_pause():

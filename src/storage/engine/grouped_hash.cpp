@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-#include "keylane/storage/detail/grouped_hash.h"
+#include "lavik/storage/detail/grouped_hash.h"
 
 #include <algorithm>
 #include <limits>
 #include <utility>
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
-constexpr std::uint64_t kRootMagic = 0x31544f4f5248474bULL;   // KGHROOT1
-constexpr std::uint64_t kGroupMagic = 0x3150554f5247484bULL;  // KHGROUP1
+constexpr std::uint64_t kRootMagic = 0x31544f4f5248474cULL;   // LGHROOT1
+constexpr std::uint64_t kGroupMagic = 0x3150554f5247484cULL;  // LHGROUP1
 // Version also fixes SipHash-1-2/high-prefix routing. A future hash change is
 // a representation change, not a process-wide lookup optimization.
 constexpr std::uint32_t kVersion = 1;
@@ -609,4 +609,4 @@ absl::StatusOr<HashGroupMutationPlan> PlanHashGroupMutation(
   return plan;
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

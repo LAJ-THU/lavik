@@ -15,9 +15,9 @@
  */
 
 #include "impl.h"
-#include "keylane/random_sample.h"
+#include "lavik/random_sample.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 class BatchReadAwaiter;
@@ -1608,10 +1608,9 @@ StorageEngine::Impl::LoadValueLocal(
     WorkerStore& store, std::uint8_t db_id, std::string_view key,
     RecordLocation location, std::uint64_t replication_epoch,
     ReadLatencyTrace* trace, std::optional<std::uint64_t> expected_db_epoch) {
-  KEYLANE_FAULT_INJECT(
-      if (KEYLANE_FAULT_MATCHES("KEYLANE_FAIL_VALUE_READ_KEY",
-                                key)) co_return absl::
-          InternalError("injected value payload read failure"););
+  LAVIK_FAULT_INJECT(if (LAVIK_FAULT_MATCHES("LAVIK_FAIL_VALUE_READ_KEY",
+                                             key)) co_return absl::
+                         InternalError("injected value payload read failure"););
   if (location.external()) {
     co_return absl::Status(absl::StatusCode::kInternal,
                            "external value was dispatched as inline");
@@ -1832,4 +1831,4 @@ StorageEngine::Impl::LoadValueLocal(
                         record.txid_};
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

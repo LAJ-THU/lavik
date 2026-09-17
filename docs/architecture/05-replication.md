@@ -19,7 +19,7 @@ limitations under the License.
 ## Responsibility and boundary
 
 The replication subsystem owns node role, upstream and downstream session
-lifetime, native Keylane synchronization, Redis PSYNC interoperability, and
+lifetime, native Lavik synchronization, Redis PSYNC interoperability, and
 trusted replay. `ReplicationManager` owns exactly one deep `ReplicationGroup`;
 its administrative boundary is directives, peer sockets, and coherent
 observation. Multiple Redis Cluster source connections are participants
@@ -80,7 +80,7 @@ cannot observe a partial rebuild. A configured replica does not perform
 authoritative active expiration; it applies the source's absolute deadlines
 and replicated deletion effects instead.
 
-Only an unfenced master can accept native KLPSYNC/KLFLOW or Redis PSYNC export.
+Only an unfenced master can accept native LVPSYNC/LVFLOW or Redis PSYNC export.
 An online follower rejects those source handshakes because cascading is not
 implemented. A node detached during an incomplete full sync may report
 `role:master`, but its durable LOADING fence also prevents it from exporting
@@ -224,12 +224,12 @@ unchanged, unexpired gate may remain open. The authenticated FDS supplies the
 number of local `authorize-source` capabilities its directive lane must replay.
 That pending count and every installed capability reserve the current source
 history; a source-valid handshake during the bounded replay gap is denied data
-with `KLLEASESUSPENDED` and uses the target's finite retry path. Each newly
+with `LVLEASESUSPENDED` and uses the target's finite retry path. Each newly
 installed capability consumes one replay slot. An FDS with no such directive,
 or a strong revoke, drops the reservation. When the replacement proves the
 complete source/member/population scope unchanged, every already-published
 matching population session survives, including a session between
-`KLFULLRESYNC` admission and ONLINE. Control-session replacement instead closes
+`LVFULLRESYNC` admission and ONLINE. Control-session replacement instead closes
 the gate, carries the outstanding replay count into the replacement session,
 and may preserve only an exact already-ONLINE export while its identity is
 revalidated. Fence, committed revocation, membership/population change,
@@ -456,8 +456,8 @@ authorization remains fail-closed.
 ## Native control and data flow
 
 Native replication uses authenticated, isolated RESP commands on the ordinary
-Redis listener. Worker 0 owns the `KLPSYNC` control connection. The source has
-one `KLFLOW` data connection per source worker and adopts each flow socket onto
+Redis listener. Worker 0 owns the `LVPSYNC` control connection. The source has
+one `LVFLOW` data connection per source worker and adopts each flow socket onto
 that worker. A target may have a different worker count; it assigns source flow
 `n` to target worker `n % target_worker_count` without changing the source flow
 identity. Native protocol v1 is the only supported native wire format; there is
@@ -467,12 +467,12 @@ replica incarnation, replica boot, requested history context, and complete
 Applied vector; the response supplies the source group, boot, history, session,
 flow count, and a fresh 160-bit flow capability generated from the OS CSPRNG.
 The target captures that vector once for the control handshake and every
-`KLFLOW` request in the session. It reuses the vector only when source
+`LVFLOW` request in the session. It reuses the vector only when source
 group/history and flow layout all match; a missing proof or changed layout
 starts every flow at one, never by copying a matching prefix from an older
 layout. If retained coverage later forces collective FULL, the target installs
 the all-ones vector before destructive reset.
-Every `KLFLOW` presents that bearer capability when claiming its flow id; the
+Every `LVFLOW` presents that bearer capability when claiming its flow id; the
 source compares it in constant time before binding the socket. A guessed
 session number therefore cannot steal a flow from the corresponding control
 session. `Applied[flow]` is the next incomplete logical event and starts at
@@ -484,14 +484,14 @@ sync for the whole group. Mixed continue/full sessions are not allowed.
 Every native data frame carries a payload CRC32C that the receiver verifies
 before parsing, applying, or acknowledging it. A cluster rebuild additionally
 carries the complete `POPULATION` identity, including both target and source
-assignment ids and the partition replication epoch, in `KLPSYNC`; the source
+assignment ids and the partition replication epoch, in `LVPSYNC`; the source
 returns its current boot identity and
 accepts the session only when that identity exactly matches its current ready
 population, an installed source authorization, and the connecting target node.
 A Meta-managed source rejects an anonymous or standalone native export and
 accepts only an exactly authorized `POPULATION` handshake inside its current
 finite-lease deadline. An exact authorization presented while that admission
-gate is closed receives the dedicated `KLLEASESUSPENDED` response before any
+gate is closed receives the dedicated `LVLEASESUSPENDED` response before any
 target mutation. The target retries only that response, only while the same
 immutable rebuild context has no flow and has not crossed its destructive-root
 boundary, at one-second intervals for at most three retries; all other protocol
@@ -506,7 +506,7 @@ client write
   -> canonical command, transaction envelope, control barrier, or ephemeral event
   -> worker-local publisher FIFO
   -> shared in-memory replication frames
-  -> duplex KLFLOW sender and ACK receiver
+  -> duplex LVFLOW sender and ACK receiver
   -> target reassembly queue (at most 256 complete commands)
   -> ordered staging and cross-flow transaction scheduler
   -> trusted apply
@@ -514,7 +514,7 @@ client write
   -> per-flow ordered ACK
 ```
 
-Canonical commands use the KRC1 command-body encoding: explicit logical database,
+Canonical commands use the LRC1 command-body encoding: explicit logical database,
 argument count and lengths, then argument bytes. Large arguments stream into
 the backlog without another complete flattened allocation. The native v1
 transport wraps each fragment in a versioned little-endian header containing
@@ -698,7 +698,7 @@ the same bounded full-sync command FIFOs without creating snapshot state.
 Partition reset epochs are installed on the target in bounded batches, so a
 channel-sharded `PUBLISH` may arrive before its transport partition's batch.
 The target still validates its partition range, frame order, fragmentation,
-and KRC1 body, but only decoded `PUBLISH` is exempt from the installed-epoch
+and LRC1 body, but only decoded `PUBLISH` is exempt from the installed-epoch
 check because it cannot touch the rebuilding dataset. Durable commands and
 runtime envelopes that can apply storage effects continue to require that epoch
 before replay.
@@ -763,13 +763,13 @@ online. Each flow follows a local protocol phase machine: FULL rebuild frames
 are accepted only before its cut, the first online cursor must match the
 installed stable cut, and later reset/snapshot/cut frames are rejected;
 CONTINUE accepts no reset/snapshot frames and requires its first cursor to
-match the exact cursor requested in `KLFLOW`. A cut also rejects an unfinished
+match the exact cursor requested in `LVFLOW`. A cut also rejects an unfinished
 command fragment before any promotion work. The target records every flow's
 stable next-LSN cut and, after storage promotion,
 installs the complete cut vector into shared continuation state before it
 releases the all-flow completion barrier or acknowledges any cut. Online cursor
 frames must agree with that installed vector, so reconnect cannot retain a
-partially updated set of flow cursors. The source's final `KLONLINE` is only a
+partially updated set of flow cursors. The source's final `LVONLINE` is only a
 notification: the target opens its serving generation only after every flow
 has completed its cursor handoff, the FULL cut vector is installed (or the
 CONTINUE population was already valid), every flow remains connected, and the
@@ -810,7 +810,7 @@ this client fence while the population is closed.
 
 The target disables transport-level socket read-ahead on native flow
 connections. Its application receiver nevertheless validates frame identity
-and fragment order, reassembles and decodes complete KRC1 commands, and places
+and fragment order, reassembles and decodes complete LRC1 commands, and places
 at most 256 commands in an owner-local FIFO. A staging coroutine consumes that
 FIFO in flow order. Ordinary commands are applied there; transaction markers
 are registered with the cross-flow scheduler without waiting for apply, up to
@@ -842,11 +842,11 @@ joins both flow-local coroutines and every detached transaction task before
 replacement, so no task can retain the old stream or storage mutation
 lifetime.
 
-Multi-participant writes carry a binary V1 `KTX1` metadata argument on every
+Multi-participant writes carry a binary V1 `LTX1` metadata argument on every
 participant flow. Its little-endian layout is the four-byte magic, transaction
 ID (`u64`), payload flow (`u16`), participant-bitmap length (`u16`), and the
 canonical bitmap with no trailing zero byte. The named flow carries the
-canonical command as the remaining KRC1 arguments while the other flows carry
+canonical command as the remaining LRC1 arguments while the other flows carry
 only the metadata argument. Payload-flow selection rotates across the
 participants so one bounded backlog does not become a hotspot. The target
 verifies and groups these markers by transaction ID, applies the command once,
@@ -910,7 +910,7 @@ The online stream handles `SELECT`, `PING`, `REPLCONF GETACK`, `PUBLISH`,
 Function mutations, keyed writes, and strict `MULTI`/`EXEC`. `PUBLISH` is
 delivered locally without being forwarded again. The offset advances only
 after successful apply.
-In standalone Redis PSYNC compatibility mode, one Keylane process can follow
+In standalone Redis PSYNC compatibility mode, one Lavik process can follow
 multiple masters of one Redis Cluster; these are sources for one imported
 dataset, not multiple cluster-managed replication groups. Each source must be
 a slot-owning master, and `ADDREPLICAOF` accepts only a source with disjoint
@@ -922,7 +922,7 @@ and return the node to loading.
 
 ### Exporting to Redis
 
-Redis export is available only in standalone mode while Keylane is a master,
+Redis export is available only in standalone mode while Lavik is a master,
 requires the replica to advertise diskless EOF support, and permits one export
 connection at a time. Every cluster mode rejects it because Redis PSYNC cannot
 carry the exact population authorization required by the cluster data plane.
@@ -946,7 +946,7 @@ floor is disconnected and must full-sync again. With it enabled, the exporter
 pins its cursors; pressure from those pins follows the global
 `replication-backlog-backpressure` wait-or-full-sync policy.
 
-`KEYLANE.HREPLACE` uses the native command stream between Keylane nodes.
+`LAVIK.HREPLACE` uses the native command stream between Lavik nodes.
 Redis export lowers each successful replacement to `DEL` followed by `HSET`
 inside the enclosing `MULTI`/`EXEC`; source-captured `PERSIST`/`PEXPIREAT`
 effects preserve the final absolute expiry. Failed existence conditions do
@@ -955,7 +955,7 @@ command, and replacement does not require reading old fields for export.
 
 ### Sentinel-managed failover
 
-Keylane exposes the Redis-shaped status surface Sentinel uses. `ROLE` reports
+Lavik exposes the Redis-shaped status surface Sentinel uses. `ROLE` reports
 the master or replica tuple and offsets; `INFO replication` reports downstream
 replicas, upstream address and link state, link-down duration, replication
 offsets, and `slave_priority`. Native and Redis link progress are mapped onto
@@ -964,7 +964,7 @@ connections also appear in `CLIENT LIST` and can be selected by `CLIENT KILL
 TYPE pubsub`.
 
 Sentinel normally queues `REPLICAOF`/`SLAVEOF`, `CONFIG REWRITE`, and `CLIENT
-KILL TYPE normal|pubsub` in one `MULTI`/`EXEC`. Keylane accepts these commands
+KILL TYPE normal|pubsub` in one `MULTI`/`EXEC`. Lavik accepts these commands
 as an isolated management batch, preserves their order and individual replies,
 and rejects mixing ordinary commands into that batch. It does not stop
 unrelated work between the management commands; the role transition itself
@@ -1075,7 +1075,7 @@ connection metrics.
   KEYS array length disagree with emitted elements or violate FLUSHDB
   exclusivity.
 - Malformed, gapped, or divergent online command ingress, including frame
-  identity/order, fragment reassembly, KRC1 decode, rendezvous, and
+  identity/order, fragment reassembly, LRC1 decode, rendezvous, and
   command-apply failures, invalidates the whole continuation domain. Serving
   closes immediately, every flow is cancelled and joined, and a standalone
   target selects a fresh all-flow FULL; a cluster target discards the ready
@@ -1131,7 +1131,7 @@ cover Sentinel management transaction isolation, `FUNCTION2` codecs/catalog
 validation, priority parsing, and atomic config rewrite. Unit tests also cover
 expiration-effect construction and replication-frame validation.
 
-There is no focused malformed-KRC1 decoder matrix, standalone Redis follower
+There is no focused malformed-LRC1 decoder matrix, standalone Redis follower
 E2E distinct from the cluster path, forced slow-reader Redis export test, or
 deterministic gate-order regression across publication-order and
 FLUSH/full-sync interleavings. Two legacy replication tests in
@@ -1141,20 +1141,20 @@ FLUSH/full-sync interleavings. Two legacy replication tests in
 
 | Claim | Repository source |
 |---|---|
-| Public roles, options, status, and manager boundary | `include/keylane/replication.h` |
-| Single-group rebuild identity, safe-source authorization, logical/local epoch mapping, manifest/reset proof, readiness, restart invalidation, and fail-stop contract | `include/keylane/replication_group.h`, `src/replication/replication_group.cpp` |
-| Callable cluster directive/status/source-authorization, failover prepare/activation, source pause, and follow-owner adapters; native control/data protocol, duplex online flow, role lifecycle, Redis follower/export, topology, Function full sync, and reconnect behavior | `include/keylane/replication.h`, `src/replication/replication.cpp` |
+| Public roles, options, status, and manager boundary | `include/lavik/replication.h` |
+| Single-group rebuild identity, safe-source authorization, logical/local epoch mapping, manifest/reset proof, readiness, restart invalidation, and fail-stop contract | `include/lavik/replication_group.h`, `src/replication/replication_group.cpp` |
+| Callable cluster directive/status/source-authorization, failover prepare/activation, source pause, and follow-owner adapters; native control/data protocol, duplex online flow, role lifecycle, Redis follower/export, topology, Function full sync, and reconnect behavior | `include/lavik/replication.h`, `src/replication/replication.cpp` |
 | Lock-free live target Applied frontier and coherent cross-flow snapshots | `src/replication/replica_applied_frontier.h`, `src/replication/replica_applied_frontier.cpp` |
-| Canonical command format and deterministic expiration effects | `include/keylane/replication_command.h`, `src/replication/command.cpp` |
-| REPLICAOF/Sentinel commands, serving-generation fencing, blocking-wait invalidation, MSET publication admission/order, Function and PUBLISH capture, transaction/control capture, and trusted replay | `include/keylane/command.h`, `src/redis/command.cpp`, `src/redis/blocking_wait.cpp`, `src/redis/command_table.cpp` |
+| Canonical command format and deterministic expiration effects | `include/lavik/replication_command.h`, `src/replication/command.cpp` |
+| REPLICAOF/Sentinel commands, serving-generation fencing, blocking-wait invalidation, MSET publication admission/order, Function and PUBLISH capture, transaction/control capture, and trusted replay | `include/lavik/command.h`, `src/redis/command.cpp`, `src/redis/blocking_wait.cpp`, `src/redis/command_table.cpp` |
 | Authenticated listener handoff and module construction | `src/redis/server.cpp` |
-| Redis RDB Function catalog import/export and `FUNCTION2` encoding | `include/keylane/rdb.h`, `src/redis/rdb.cpp`, `src/redis/function_catalog.cpp`, `src/redis/server.cpp` |
-| Pub/Sub delivery and connection/session state used by replicated PUBLISH and Sentinel | `include/keylane/pubsub.h`, `src/redis/pubsub.cpp`, `src/redis/server.cpp` |
-| Runtime source-log and target full-sync interfaces | `include/keylane/storage/engine.h` |
+| Redis RDB Function catalog import/export and `FUNCTION2` encoding | `include/lavik/rdb.h`, `src/redis/rdb.cpp`, `src/redis/function_catalog.cpp`, `src/redis/server.cpp` |
+| Pub/Sub delivery and connection/session state used by replicated PUBLISH and Sentinel | `include/lavik/pubsub.h`, `src/redis/pubsub.cpp`, `src/redis/server.cpp` |
+| Runtime source-log and target full-sync interfaces | `include/lavik/storage/engine.h` |
 | Durable catalog, full-sync invalidation, population eligibility, and promotion base | `src/storage/engine/system_state.cpp`, `src/storage/engine/init.cpp` |
 | Backlog blocks, publisher/session queues, capture state, and target sync state | `src/storage/engine/impl.h` |
 | In-memory append/read/fence/retention, capacity, invalidation, and control publication | `src/storage/engine/replication_log.cpp` |
 | Manifest-filtered full-sync scanning, replacements, handoff, target reset/apply/promotion/abort, detached-index reclaim, cascade and DB-gate limitations | `src/storage/engine/replication.cpp`, `src/storage/engine/write.cpp` |
-| Frame layout, event kinds, fragmentation, and checksums | `include/keylane/storage/format.h`, `src/storage/format.cpp` |
-| Startup/runtime replication configuration, cluster fail-closed admission, and atomic CONFIG REWRITE | `app/keylane.cpp`, `include/keylane/server.h`, `src/config.cpp`, `src/redis/command.cpp`, `src/redis/server.cpp` |
+| Frame layout, event kinds, fragmentation, and checksums | `include/lavik/storage/format.h`, `src/storage/format.cpp` |
+| Startup/runtime replication configuration, cluster fail-closed admission, and atomic CONFIG REWRITE | `app/lavik.cpp`, `include/lavik/server.h`, `src/config.cpp`, `src/redis/command.cpp`, `src/redis/server.cpp` |
 | Native, group-model, cluster-startup/manager/generation/failure/protocol-guard/failover/follow-owner, log, MSET, Pub/Sub, Sentinel, Redis PSYNC/export, RDB, format, and configuration verification | `tests/replication_group_test.cpp`, `tests/cluster/cluster_invariants.cpp`, `tests/cluster/fault_harness_test.cpp`, `tests/cluster/population_integration_test.cpp`, `tests/cluster/replication_manager_integration_test.cpp`, `tests/cluster/serving_generation_integration_test.cpp`, `tests/cluster/rebuild_failure_integration_test.cpp`, `tests/cluster/rebuild_protocol_integration_test.cpp`, `tests/replication_log_e2e_test.cpp`, `tests/list_e2e_test.cpp`, `tests/multikey_e2e_test.cpp`, `tests/pubsub_e2e_test.cpp`, `tests/sentinel_e2e_test.cpp`, `tests/redis_cluster_psync_e2e.sh`, `tests/redis_export_e2e.sh`, `tests/multi_exec_e2e_test.cpp`, `tests/rdb_test.cpp`, `tests/replication_command_test.cpp`, `tests/storage_format_test.cpp`, `tests/config_test.cpp` |

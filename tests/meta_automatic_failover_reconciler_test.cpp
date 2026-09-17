@@ -36,22 +36,22 @@
 #include "bycorf/runtime/runtime.h"
 #include "bycorf/runtime/worker.h"
 #include "gtest/gtest.h"
-#include "keylane/meta/automatic_failover_reconciler.h"
-#include "keylane/meta/cluster_create.h"
-#include "keylane/meta/control_projector.h"
-#include "keylane/meta/data_control_runtime_status.h"
-#include "keylane/meta/data_control_server.h"
-#include "keylane/meta/failover.h"
-#include "keylane/meta/hash.h"
-#include "keylane/meta/nuraft_log_store.h"
-#include "keylane/meta/nuraft_state_mgr.h"
-#include "keylane/meta/observation_store.h"
-#include "keylane/meta/proposal_executor.h"
-#include "keylane/meta/state_machine.h"
+#include "lavik/meta/automatic_failover_reconciler.h"
+#include "lavik/meta/cluster_create.h"
+#include "lavik/meta/control_projector.h"
+#include "lavik/meta/data_control_runtime_status.h"
+#include "lavik/meta/data_control_server.h"
+#include "lavik/meta/failover.h"
+#include "lavik/meta/hash.h"
+#include "lavik/meta/nuraft_log_store.h"
+#include "lavik/meta/nuraft_state_mgr.h"
+#include "lavik/meta/observation_store.h"
+#include "lavik/meta/proposal_executor.h"
+#include "lavik/meta/state_machine.h"
 #include "libnuraft/nuraft.hxx"
 #include "support/test_data_path.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 
 // Trusted test peer for the passkey-protected proposal boundary.
 class MetaCoordinatorTestPeer {
@@ -188,7 +188,7 @@ class MetaAutomaticFailoverReconcilerTest : public ::testing::Test {
   void SetUp() override {
     const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
     dir_ = test::TestDataDirectory() /
-           ("keylane_automatic_reconciler_" + std::string(info->name()) + "_" +
+           ("lavik_automatic_reconciler_" + std::string(info->name()) + "_" +
             std::to_string(::getpid()));
     std::error_code ignored;
     std::filesystem::remove_all(dir_, ignored);
@@ -211,7 +211,7 @@ class MetaAutomaticFailoverReconcilerTest : public ::testing::Test {
     ASSERT_TRUE(initialized_result.get().ok());
     executor_ = runtime_->GetForeignExecutor(0);
 
-    const NuraftMemberConfig local{1, "127.0.0.1:19601", "keylane://meta/1",
+    const NuraftMemberConfig local{1, "127.0.0.1:19601", "lavik://meta/1",
                                    "127.0.0.1:19701", "127.0.0.1:19801"};
     NuraftStateMgrOpenOptions manager_options{.data_dir_ = dir_,
                                               .local_member_ = local};
@@ -293,7 +293,7 @@ class MetaAutomaticFailoverReconcilerTest : public ::testing::Test {
   void ProposeAccepted(const MetaCommand& command) {
     auto result = RunTaskSync(coordinator_->Propose(
         command,
-        MetaCoordinatorTestPeer::Make("keylane://operator/automatic-test")));
+        MetaCoordinatorTestPeer::Make("lavik://operator/automatic-test")));
     ASSERT_TRUE(result.ok()) << result.status();
     ASSERT_EQ(result->verdict_, MetaAuditVerdict::kAccepted) << result->detail_;
   }
@@ -324,7 +324,7 @@ class MetaAutomaticFailoverReconcilerTest : public ::testing::Test {
     RegisterNode owner;
     owner.request_id_ = Bytes<16>(0x04);
     owner.node_id_ = state.owner_;
-    owner.principal_ = "keylane://node/" + state.owner_;
+    owner.principal_ = "lavik://node/" + state.owner_;
     owner.endpoints_ = {"10.0.0.1:7000"};
     owner.role_ = MetaNodeRole::kPrimary;
     ProposeAccepted(owner);
@@ -1742,4 +1742,4 @@ TEST_F(MetaAutomaticFailoverReconcilerTest,
 }
 
 }  // namespace
-}  // namespace keylane::meta
+}  // namespace lavik::meta

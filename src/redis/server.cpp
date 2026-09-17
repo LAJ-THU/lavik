@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/server.h"
+#include "lavik/server.h"
 
 #include <mimalloc.h>
 #include <openssl/crypto.h>
@@ -61,28 +61,28 @@
 #include "bycorf/runtime/sync.h"
 #include "client_limit.h"
 #include "function_catalog.h"
-#include "keylane/cluster/meta_client.h"
-#include "keylane/cluster/runtime.h"
-#include "keylane/command.h"
-#include "keylane/command_table.h"
-#include "keylane/config.h"
-#include "keylane/memory.h"
-#include "keylane/metrics.h"
-#include "keylane/monitor.h"
-#include "keylane/pubsub.h"
-#include "keylane/rdb.h"
-#include "keylane/replication.h"
-#include "keylane/resp.h"
-#include "keylane/session.h"
-#include "keylane/slowlog.h"
-#include "keylane/storage/engine.h"
-#include "keylane/tx/tx_shard.h"
-#include "keylane/version.h"
+#include "lavik/cluster/meta_client.h"
+#include "lavik/cluster/runtime.h"
+#include "lavik/command.h"
+#include "lavik/command_table.h"
+#include "lavik/config.h"
+#include "lavik/memory.h"
+#include "lavik/metrics.h"
+#include "lavik/monitor.h"
+#include "lavik/pubsub.h"
+#include "lavik/rdb.h"
+#include "lavik/replication.h"
+#include "lavik/resp.h"
+#include "lavik/session.h"
+#include "lavik/slowlog.h"
+#include "lavik/storage/engine.h"
+#include "lavik/tx/tx_shard.h"
+#include "lavik/version.h"
 #include "lua_eval.h"
 #include "request_gate.h"
 #include "spdlog/spdlog.h"
 
-namespace keylane {
+namespace lavik {
 using namespace bycorf;
 
 namespace {
@@ -100,7 +100,7 @@ constexpr std::array<std::uint64_t, 28> kLatencyBucketUpperUs{
 
 // Client sockets must never consume the descriptors needed by listeners,
 // io_uring, storage, replication, metrics, logging, and transient maintenance
-// work. This is deliberately larger than Redis's reserve because Keylane has
+// work. This is deliberately larger than Redis's reserve because Lavik has
 // several multi-worker subsystems that keep descriptors open.
 constexpr std::uint64_t kMaxClientsFileDescriptorReserve = 256;
 
@@ -618,7 +618,7 @@ std::string_view ExecuteHello(const PasswordAuthenticator& authenticator,
   reply.SetVersion(requested);
   reply.AppendMapHeader(7);
   reply.AppendBulkString("server");
-  reply.AppendBulkString("keylane");
+  reply.AppendBulkString("lavik");
   reply.AppendBulkString("version");
   reply.AppendBulkString(kVersion);
   reply.AppendBulkString("proto");
@@ -916,7 +916,7 @@ Task<absl::Status> RedisService::ImportRdb() {
           worker, [this, db_id] { return storage_->LocalSize(db_id); });
       if (keys != 0) {
         co_return absl::FailedPreconditionError(
-            "load-rdb requires an empty Keylane dataset");
+            "load-rdb requires an empty Lavik dataset");
       }
     }
   }
@@ -2333,7 +2333,7 @@ int RunServer(ServerOptions options) {
       mi_option_get(mi_option_arena_eager_commit),
       mi_option_get(mi_option_allow_thp));
   spdlog::info(
-      "keylane version={} listening on {}:{} tls_port={} metrics_port={} "
+      "lavik version={} listening on {}:{} tls_port={} metrics_port={} "
       "threads={} "
       "maxclients={} maxclients_fd_reserve={} "
       "pin_workers={} "
@@ -2648,4 +2648,4 @@ int RunServer(ServerOptions options) {
   return exit_code;
 }
 
-}  // namespace keylane
+}  // namespace lavik

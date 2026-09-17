@@ -24,7 +24,7 @@
 #include "absl/strings/str_cat.h"
 #include "tests/cluster/fault_controls.h"
 
-namespace keylane::test::cluster {
+namespace lavik::test::cluster {
 namespace {
 
 constexpr std::array<ScenarioDescriptor, 9> kScenarioDescriptors{
@@ -929,4 +929,4 @@ std::unique_ptr<Scenario> MakeClusterScenario(Counterexample counterexample) {
   return std::make_unique<ClusterScenario>(counterexample);
 }
 
-}  // namespace keylane::test::cluster
+}  // namespace lavik::test::cluster

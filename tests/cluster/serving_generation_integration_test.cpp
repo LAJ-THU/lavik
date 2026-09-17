@@ -29,20 +29,20 @@
 
 namespace {
 using namespace std::chrono_literals;
-using keylane::test::ChildProcess;
-using keylane::test::Connect;
-using keylane::test::CreateDataFile;
-using keylane::test::PortReservation;
-using keylane::test::RespClient;
-using keylane::test::TempDirectory;
-using keylane::test::WaitUntil;
+using lavik::test::ChildProcess;
+using lavik::test::Connect;
+using lavik::test::CreateDataFile;
+using lavik::test::PortReservation;
+using lavik::test::RespClient;
+using lavik::test::TempDirectory;
+using lavik::test::WaitUntil;
 
-std::string g_keylane_binary;
+std::string g_lavik_binary;
 
 std::vector<std::string> ServerArguments(std::uint16_t port,
                                          const std::filesystem::path& data) {
   return {
-      g_keylane_binary,
+      g_lavik_binary,
       "--port",
       std::to_string(port),
       "--threads",
@@ -65,10 +65,10 @@ void WaitForStartup(std::string_view label, std::uint16_t port) {
 
 TEST(ServingGenerationIntegrationTest,
      AdmittedCommandsCannotConsumeAReplacementDataset) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "database admission pause requires Debug or fault server";
 #endif
-  ASSERT_FALSE(g_keylane_binary.empty());
+  ASSERT_FALSE(g_lavik_binary.empty());
   TempDirectory directory("serving-generation");
   const std::filesystem::path source_data = directory.path() / "source.data";
   const std::filesystem::path target_data = directory.path() / "target.data";
@@ -82,9 +82,8 @@ TEST(ServingGenerationIntegrationTest,
   const std::uint16_t source_port = source_reservation.ReleaseForSpawn();
   const std::uint16_t target_port = target_reservation.ReleaseForSpawn();
   ChildProcess source(ServerArguments(source_port, source_data), source_log);
-  ChildProcess target(
-      ServerArguments(target_port, target_data), target_log,
-      {{"KEYLANE_COMMAND_PAUSE_BEFORE_DB_ADMISSION_MS", "5000"}});
+  ChildProcess target(ServerArguments(target_port, target_data), target_log,
+                      {{"LAVIK_COMMAND_PAUSE_BEFORE_DB_ADMISSION_MS", "5000"}});
 
   WaitForStartup("source startup", source_port);
   WaitForStartup("target startup", target_port);
@@ -137,7 +136,7 @@ TEST(ServingGenerationIntegrationTest,
     return client.Command({"KEYS", "*"});
   });
   WaitUntil("KEYS pre-gate pause", 10s, [&] {
-    return keylane::test::ReadFile(target_log)
+    return lavik::test::ReadFile(target_log)
                .find(
                    "client command admitted; pausing before database "
                    "admission") != std::string::npos;
@@ -154,7 +153,7 @@ TEST(ServingGenerationIntegrationTest,
 
   WaitUntil("target full sync", 20s, [&] {
     const std::string reply = target_client.Command({"INFO", "REPLICATION"});
-    return reply.find("keylane_replication_state:online") != std::string::npos;
+    return reply.find("lavik_replication_state:online") != std::string::npos;
   });
   ASSERT_EQ(stale_keys.wait_for(15s), std::future_status::ready);
   const std::string keys_reply = stale_keys.get();
@@ -174,10 +173,10 @@ TEST(ServingGenerationIntegrationTest,
 }
 
 TEST(ServingGenerationIntegrationTest, WatchIsBoundToItsServingGeneration) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "database admission pause requires Debug or fault server";
 #endif
-  ASSERT_FALSE(g_keylane_binary.empty());
+  ASSERT_FALSE(g_lavik_binary.empty());
   TempDirectory directory("watch-serving-generation");
   const std::filesystem::path source_data = directory.path() / "source.data";
   const std::filesystem::path target_data = directory.path() / "target.data";
@@ -191,9 +190,8 @@ TEST(ServingGenerationIntegrationTest, WatchIsBoundToItsServingGeneration) {
   const std::uint16_t source_port = source_reservation.ReleaseForSpawn();
   const std::uint16_t target_port = target_reservation.ReleaseForSpawn();
   ChildProcess source(ServerArguments(source_port, source_data), source_log);
-  ChildProcess target(
-      ServerArguments(target_port, target_data), target_log,
-      {{"KEYLANE_COMMAND_PAUSE_BEFORE_DB_ADMISSION_MS", "5000"}});
+  ChildProcess target(ServerArguments(target_port, target_data), target_log,
+                      {{"LAVIK_COMMAND_PAUSE_BEFORE_DB_ADMISSION_MS", "5000"}});
 
   WaitForStartup("WATCH source startup", source_port);
   WaitForStartup("WATCH target startup", target_port);
@@ -211,7 +209,7 @@ TEST(ServingGenerationIntegrationTest, WatchIsBoundToItsServingGeneration) {
     return watcher.Command({"WATCH", "generation-watch"});
   });
   WaitUntil("WATCH pre-gate pause", 10s, [&] {
-    return keylane::test::ReadFile(target_log)
+    return lavik::test::ReadFile(target_log)
                .find(
                    "client command admitted; pausing before database "
                    "admission") != std::string::npos;
@@ -229,7 +227,7 @@ TEST(ServingGenerationIntegrationTest, WatchIsBoundToItsServingGeneration) {
 
   WaitUntil("WATCH target full sync", 20s, [&] {
     const std::string reply = target_client.Command({"INFO", "REPLICATION"});
-    return reply.find("keylane_replication_state:online") != std::string::npos;
+    return reply.find("lavik_replication_state:online") != std::string::npos;
   });
   ASSERT_EQ(watcher.Command({"READONLY"}), "+OK");
   EXPECT_EQ(watcher.Command({"GET", "generation-watch"}), "$11\r\nreplacement");
@@ -259,7 +257,7 @@ int main(int argc, char** argv) {
   if (argc != 2) {
     return 2;
   }
-  g_keylane_binary = argv[1];
+  g_lavik_binary = argv[1];
   testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

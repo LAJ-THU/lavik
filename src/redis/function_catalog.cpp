@@ -26,11 +26,11 @@
 #include "absl/strings/str_cat.h"
 #include "bycorf/runtime/cross_core.h"
 #include "bycorf/runtime/worker.h"
-#include "keylane/fault_injection.h"
-#include "keylane/rdb.h"
-#include "keylane/replication_command.h"
+#include "lavik/fault_injection.h"
+#include "lavik/rdb.h"
+#include "lavik/replication_command.h"
 
-namespace keylane {
+namespace lavik {
 namespace {
 
 std::unique_ptr<FunctionCatalog> g_function_catalog;
@@ -186,7 +186,7 @@ bycorf::Task<absl::Status> FunctionCatalog::CommitStagedCatalog(
         "Function catalog commit has no durable staging token");
   }
   if (enable_crash_points) {
-    KEYLANE_MAYBE_CRASH_AT("function-catalog-before-runtime-swap");
+    LAVIK_MAYBE_CRASH_AT("function-catalog-before-runtime-swap");
   }
   for (unsigned worker = 0; worker < storage_->worker_count(); ++worker) {
     auto commit = [] {
@@ -202,7 +202,7 @@ bycorf::Task<absl::Status> FunctionCatalog::CommitStagedCatalog(
   ReplaceStoredLuaFunctionCatalog(std::move(staged.libraries_));
   durability_token_ = token;
   if (enable_crash_points) {
-    KEYLANE_MAYBE_CRASH_AT("function-catalog-after-runtime-swap");
+    LAVIK_MAYBE_CRASH_AT("function-catalog-after-runtime-swap");
   }
   co_return absl::OkStatus();
 }
@@ -284,4 +284,4 @@ FunctionCatalog& GlobalFunctionCatalog() {
   return *g_function_catalog;
 }
 
-}  // namespace keylane
+}  // namespace lavik

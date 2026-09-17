@@ -18,8 +18,8 @@ then
 fi
 
 exec "$TCLSH" tests/test_helper.tcl \
-    --host "${KEYLANE_HOST:-127.0.0.1}" \
-    --port "${KEYLANE_PORT:-16379}" \
+    --host "${LAVIK_HOST:-127.0.0.1}" \
+    --port "${LAVIK_PORT:-16379}" \
     --singledb \
     --ignore-encoding \
     --durable \

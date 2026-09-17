@@ -17,10 +17,10 @@
 #include <array>
 
 #include "gtest/gtest.h"
-#include "keylane/storage/detail/grouped_commit.h"
-#include "keylane/storage/engine.h"
+#include "lavik/storage/detail/grouped_commit.h"
+#include "lavik/storage/engine.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 TEST(GroupedCommitDecisionTest, PrePublicationCheckDoesNotPromiseDurability) {
@@ -53,4 +53,4 @@ TEST(GroupedCommitDecisionTest, DurableDecisionCannotBeReversedByLateFailure) {
 }
 
 }  // namespace
-}  // namespace keylane::storage
+}  // namespace lavik::storage

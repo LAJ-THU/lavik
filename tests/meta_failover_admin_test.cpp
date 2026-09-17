@@ -25,11 +25,11 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "gtest/gtest.h"
-#include "keylane/meta/admin_client.h"
-#include "keylane/meta/cluster_status.h"
-#include "keylane/meta/failover_admin.h"
+#include "lavik/meta/admin_client.h"
+#include "lavik/meta/cluster_status.h"
+#include "lavik/meta/failover_admin.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
 template <std::size_t N>
@@ -326,4 +326,4 @@ TEST(MetaFailoverOperatorTest, ExactRetryIdentityRequiresDeadlinePair) {
 }
 
 }  // namespace
-}  // namespace keylane::meta
+}  // namespace lavik::meta

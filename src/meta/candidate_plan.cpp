@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/candidate_plan.h"
+#include "lavik/meta/candidate_plan.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -25,7 +25,7 @@
 
 #include "absl/numeric/int128.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
 bool DomainCanonicalLess(const MetaFailoverCompatibilityDomain& left,
@@ -236,4 +236,4 @@ CandidatePlan UncontrolledCandidatePlanFor(
   return plan;
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

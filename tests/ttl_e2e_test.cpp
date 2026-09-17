@@ -42,10 +42,10 @@
 
 #include "absl/status/status.h"
 #include "bycorf/net/server.h"
-#include "keylane/memory.h"
-#include "keylane/metrics.h"
-#include "keylane/storage/engine.h"
-#include "keylane/tx/tx_shard.h"
+#include "lavik/memory.h"
+#include "lavik/metrics.h"
+#include "lavik/storage/engine.h"
+#include "lavik/tx/tx_shard.h"
 #include "support/test_data_path.h"
 
 namespace {
@@ -211,7 +211,7 @@ RespClient Connect(std::uint16_t port) {
     }
     std::this_thread::sleep_for(10ms);
   }
-  Fail("timed out connecting to Keylane");
+  Fail("timed out connecting to Lavik");
 }
 
 class ServerProcess {
@@ -276,14 +276,14 @@ class ServerProcess {
       if (result == pid_) {
         pid_ = -1;
         if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-          Fail("Keylane exited unsuccessfully");
+          Fail("Lavik exited unsuccessfully");
         }
         return;
       }
       if (result < 0) Fail("waitpid failed");
       std::this_thread::sleep_for(10ms);
     }
-    Fail("Keylane did not stop");
+    Fail("Lavik did not stop");
   }
 
  private:
@@ -404,7 +404,7 @@ void VerifyExpirationConfig(RespClient& client, std::uint16_t port) {
 
 class ExpirationAuthorityService final : public bycorf::Service {
  public:
-  explicit ExpirationAuthorityService(keylane::storage::StorageEngine* storage)
+  explicit ExpirationAuthorityService(lavik::storage::StorageEngine* storage)
       : storage_(storage) {}
 
   void Prepare(unsigned thread_count) override {
@@ -415,8 +415,8 @@ class ExpirationAuthorityService final : public bycorf::Service {
 
   bycorf::Task<absl::Status> Run(bycorf::Worker& worker,
                                  bycorf::ServiceContext) override {
-    keylane::BindMemoryAccountingShard(worker.id());
-    keylane::tx::TxRuntime::Get()->shard(worker.id()).Bind(worker);
+    lavik::BindMemoryAccountingShard(worker.id());
+    lavik::tx::TxRuntime::Get()->shard(worker.id()).Bind(worker);
     result_ = co_await storage_->InitializeWorker(worker);
     if (!result_.ok()) {
       worker.RequestStop();
@@ -446,7 +446,7 @@ class ExpirationAuthorityService final : public bycorf::Service {
       // Change pacing on the already-running coroutine. With one full map
       // pass per cycle it can discover the recovered key without a read
       // queuing a candidate, including after authority was initially withheld.
-      using Key = keylane::storage::ActiveExpirationConfigKey;
+      using Key = lavik::storage::ActiveExpirationConfigKey;
       result_ = storage_->ConfigureActiveExpiration(Key::kIntervalMs, 1);
       if (result_.ok()) {
         result_ = storage_->ConfigureActiveExpiration(Key::kMapStepsPerCycle,
@@ -485,22 +485,22 @@ class ExpirationAuthorityService final : public bycorf::Service {
   const absl::Status& result() const noexcept { return result_; }
 
  private:
-  keylane::storage::StorageEngine* storage_ = nullptr;
+  lavik::storage::StorageEngine* storage_ = nullptr;
   absl::Status result_ =
       absl::UnknownError("expiration authority test did not run");
 };
 
 void VerifyDeferredExpirationAuthority(const std::string& data_path) {
-  keylane::storage::StorageEngineOptions options;
+  lavik::storage::StorageEngineOptions options;
   options.data_files_ = {data_path};
   options.buffers_.registered_bytes_ = 64ULL * 1024 * 1024;
   options.expiration_authority_ = false;
   options.tomb_raider_interval_ms_ = 0;
   options.tx_cleaner_cooldown_ms_ = 0;
-  keylane::storage::StorageEngine storage(std::move(options));
+  lavik::storage::StorageEngine storage(std::move(options));
   // Exercise the largest supported settings before workers can consume them;
   // a live UINT32_MAX interval would intentionally leave a very long sleep.
-  using Key = keylane::storage::ActiveExpirationConfigKey;
+  using Key = lavik::storage::ActiveExpirationConfigKey;
   constexpr std::uint64_t maximum = std::numeric_limits<std::uint32_t>::max();
   for (Key key : {Key::kIntervalMs, Key::kMapStepsPerCycle,
                   Key::kDeletesPerCycle, Key::kIndexMaintenanceStepsPerCycle}) {
@@ -520,12 +520,12 @@ void VerifyDeferredExpirationAuthority(const std::string& data_path) {
       Fail("failed to restore expiration config before recovery");
     }
   }
-  keylane::InitWorkerMetrics(1);
-  absl::Status status = keylane::InitMemoryLimit(512ULL * 1024 * 1024, 1);
+  lavik::InitWorkerMetrics(1);
+  absl::Status status = lavik::InitMemoryLimit(512ULL * 1024 * 1024, 1);
   if (!status.ok()) Fail(std::string(status.message()));
   status = storage.Prepare(1);
   if (!status.ok()) Fail(std::string(status.message()));
-  keylane::tx::TxRuntime::Create(1);
+  lavik::tx::TxRuntime::Create(1);
 
   ExpirationAuthorityService service(&storage);
   bycorf::Server server;
@@ -546,11 +546,11 @@ void VerifyDeferredExpirationAuthority(const std::string& data_path) {
 
 int main(int argc, char** argv) {
   if (argc != 2) {
-    std::cerr << "usage: ttl_e2e_test /path/to/keylane\n";
+    std::cerr << "usage: ttl_e2e_test /path/to/lavik\n";
     return 2;
   }
   const std::string prefix =
-      keylane::test::TestDataPath("keylane-ttl-" + std::to_string(::getpid()));
+      lavik::test::TestDataPath("lavik-ttl-" + std::to_string(::getpid()));
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
   const std::string no_authority_data_path = prefix + "-no-authority.data";
@@ -887,7 +887,7 @@ int main(int argc, char** argv) {
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     const std::string log = ReadFile(log_path);
-    if (!log.empty()) std::cerr << "--- Keylane log ---\n" << log;
+    if (!log.empty()) std::cerr << "--- Lavik log ---\n" << log;
     (void)::unlink(data_path.c_str());
     (void)::unlink(log_path.c_str());
     (void)::unlink(no_authority_data_path.c_str());

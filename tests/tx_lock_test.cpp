@@ -22,19 +22,19 @@
 #include <string>
 #include <vector>
 
-#include "keylane/tx/intent_lock.h"
-#include "keylane/tx/tx_queue.h"
-#include "keylane/tx/tx_shard.h"
+#include "lavik/tx/intent_lock.h"
+#include "lavik/tx/tx_queue.h"
+#include "lavik/tx/tx_shard.h"
 
 namespace {
 
-using keylane::tx::KeyRef;
-using keylane::tx::LockFp;
-using keylane::tx::LockMode;
-using keylane::tx::LockTable;
-using keylane::tx::TxQueue;
-using keylane::tx::TxShard;
-using keylane::tx::TxWaiter;
+using lavik::tx::KeyRef;
+using lavik::tx::LockFp;
+using lavik::tx::LockMode;
+using lavik::tx::LockTable;
+using lavik::tx::TxQueue;
+using lavik::tx::TxShard;
+using lavik::tx::TxWaiter;
 
 #define EXPECT_CHECK(condition, message) EXPECT_TRUE(condition) << message
 

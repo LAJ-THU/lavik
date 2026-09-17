@@ -38,15 +38,15 @@
 
 #include "grouped_write_e2e_support.h"
 #include "gtest/gtest.h"
-#include "keylane/rdb.h"
-#include "keylane/storage/detail/grouped_collection.h"
-#include "keylane/storage/detail/grouped_hash.h"
-#include "keylane/storage/detail/ordered_compact_codec.h"
-#include "keylane/storage/format.h"
+#include "lavik/rdb.h"
+#include "lavik/storage/detail/grouped_collection.h"
+#include "lavik/storage/detail/grouped_hash.h"
+#include "lavik/storage/detail/ordered_compact_codec.h"
+#include "lavik/storage/format.h"
 #include "support/test_data_path.h"
 
 namespace {
-using namespace keylane::storage;
+using namespace lavik::storage;
 using namespace std::chrono_literals;
 std::string server_binary;
 
@@ -68,7 +68,7 @@ class RecordImage {
  public:
   RecordImage() {
     std::string pattern =
-        keylane::test::TestDataPath("keylane-grouped-recovery-XXXXXX");
+        lavik::test::TestDataPath("lavik-grouped-recovery-XXXXXX");
     fd_ = ::mkstemp(pattern.data());
     Check(fd_ >= 0, "mkstemp failed");
     path_ = std::move(pattern);
@@ -347,23 +347,23 @@ class ChildServer {
     Check(pid_ >= 0, "fork failed");
     if (pid_ == 0) {
       if (!crash_point.empty()) {
-        ::setenv("KEYLANE_CRASH_POINT", std::string(crash_point).c_str(), 1);
+        ::setenv("LAVIK_CRASH_POINT", std::string(crash_point).c_str(), 1);
       }
-      if (pause_snapshot) ::setenv("KEYLANE_RDB_SCAN_PAUSE_MS", "1000", 1);
+      if (pause_snapshot) ::setenv("LAVIK_RDB_SCAN_PAUSE_MS", "1000", 1);
       if (!fail_group_batch.empty()) {
-        ::setenv("KEYLANE_FAIL_GROUP_BATCH_KEY",
+        ::setenv("LAVIK_FAIL_GROUP_BATCH_KEY",
                  std::string(fail_group_batch).c_str(), 1);
       }
       if (!fail_transaction_write.empty()) {
-        ::setenv("KEYLANE_FAIL_TX_WRITE",
+        ::setenv("LAVIK_FAIL_TX_WRITE",
                  std::string(fail_transaction_write).c_str(), 1);
       }
       if (!pause_record_write.empty()) {
-        ::setenv("KEYLANE_RECORD_WRITE_PAUSE_KEY",
+        ::setenv("LAVIK_RECORD_WRITE_PAUSE_KEY",
                  std::string(pause_record_write).c_str(), 1);
       }
       if (!pause_root_pin.empty()) {
-        ::setenv("KEYLANE_GROUP_ROOT_PIN_PAUSE_KEY",
+        ::setenv("LAVIK_GROUP_ROOT_PIN_PAUSE_KEY",
                  std::string(pause_root_pin).c_str(), 1);
       }
       const int log = ::open(log_.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0600);
@@ -388,7 +388,7 @@ class ChildServer {
                                     "--data-file",
                                     image.path()};
       args.insert(args.end(),
-                  {"--rdb-dir", keylane::test::TestDataDirectory().string(),
+                  {"--rdb-dir", lavik::test::TestDataDirectory().string(),
                    "--dbfilename", dump_.substr(dump_.rfind('/') + 1)});
       if (!defrag) args.emplace_back("--defrag-paused");
       if (checkpoint) args.emplace_back("--shutdown-checkpoint");
@@ -841,7 +841,7 @@ TEST(GroupedRecoveryE2e, FlushDbDetachesAndRetiresTheCompleteGraph) {
 }
 
 TEST(GroupedRecoveryE2e, AuxiliaryAndRootGcCrashKeepTheDurableGraph) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires Debug or the explicitly test-instrumented module";
 #else
   for (const auto point :
@@ -884,7 +884,7 @@ TEST(GroupedRecoveryE2e, AuxiliaryAndRootGcCrashKeepTheDurableGraph) {
 #endif
 }
 TEST(GroupedRecoveryE2e, CommandBatchCrashNeverPublishesWithoutOuterDecision) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires grouped command decision crash points";
 #else
   for (const auto point :
@@ -920,7 +920,7 @@ TEST(GroupedRecoveryE2e, CommandBatchCrashNeverPublishesWithoutOuterDecision) {
 }
 
 TEST(GroupedRecoveryE2e, FailedPostRootBatchPoisonsOuterCommit) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires grouped command decision failure injection";
 #else
   RecordImage image;
@@ -981,7 +981,7 @@ TEST(GroupedRecoveryE2e, FailedPostRootBatchPoisonsOuterCommit) {
 }
 
 TEST(GroupedRecoveryE2e, FailedMultiKeyOverwriteRestoresTheGroupedGraph) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires transaction write failure injection";
 #else
   for (const bool script : {false, true}) {
@@ -1063,7 +1063,7 @@ TEST(GroupedRecoveryE2e, SameCommandRootsUseRevisionBeforePhysicalLsn) {
 
 TEST(GroupedRecoveryE2e,
      PublicationLsnFollowsGcDuringForegroundAllocationWait) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires deterministic record publication pause";
 #else
   RecordImage image;
@@ -1104,7 +1104,7 @@ TEST(GroupedRecoveryE2e,
 }
 
 TEST(GroupedRecoveryE2e, TaggedRootDependencyPinsCrossRecoveredPhysicalOwners) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires deterministic root dependency pause";
 #else
   for (const bool metadata_only : {true, false}) {
@@ -1166,7 +1166,7 @@ TEST(GroupedRecoveryE2e, TaggedRootDependencyPinsCrossRecoveredPhysicalOwners) {
 }
 
 TEST(GroupedRecoveryE2e, FailedOverwriteReleasesTaggedRootOnItsPhysicalOwner) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires transaction failure and exact root pin hook";
 #else
   RecordImage image;
@@ -1306,7 +1306,7 @@ TEST(GroupedRecoveryE2e, OrderedOversizedItemChecksEveryLiveExtent) {
 }
 
 TEST(GroupedRecoveryE2e, OrderedGcCrashesPreservePagesMarkersAndRoot) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires grouped GC crash points";
 #else
   for (const auto kind :
@@ -1362,7 +1362,7 @@ TEST(GroupedRecoveryE2e, OrderedGcCrashesPreservePagesMarkersAndRoot) {
 }
 
 TEST(GroupedRecoveryE2e, OrderedBgSavePinsExactPreCutPagesAndExpiration) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires deterministic snapshot scan pause";
 #else
   for (const auto kind :
@@ -1413,7 +1413,7 @@ TEST(GroupedRecoveryE2e, OrderedBgSavePinsExactPreCutPagesAndExpiration) {
       ASSERT_EQ(server.Command({"ZADD", key, "2", "new"}), ":1");
     }
     ASSERT_TRUE(server.WaitForLog("RDB backup completed:")) << server.Log();
-    auto reader = keylane::rdb::FileReader::Open(server.DumpPath());
+    auto reader = lavik::rdb::FileReader::Open(server.DumpPath());
     ASSERT_TRUE(reader.ok()) << reader.status();
     auto next = reader->Next();
     ASSERT_TRUE(next.ok()) << next.status();
@@ -1434,7 +1434,7 @@ TEST(GroupedRecoveryE2e, OrderedBgSavePinsExactPreCutPagesAndExpiration) {
 }
 
 TEST(GroupedRecoveryE2e, BgSaveRetainsPreCutGroupedValueAcrossReplacement) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires deterministic snapshot scan pause";
 #else
   RecordImage image;
@@ -1454,7 +1454,7 @@ TEST(GroupedRecoveryE2e, BgSaveRetainsPreCutGroupedValueAcrossReplacement) {
   ASSERT_EQ(server.Command({"HDEL", "hash", "field"}), ":1");
   EXPECT_EQ(server.Command({"HGET", "hash", "field"}), "$-1");
   ASSERT_TRUE(server.WaitForLog("RDB backup completed:")) << server.Log();
-  auto reader = keylane::rdb::FileReader::Open(server.DumpPath());
+  auto reader = lavik::rdb::FileReader::Open(server.DumpPath());
   ASSERT_TRUE(reader.ok()) << reader.status();
   auto next = reader->Next();
   ASSERT_TRUE(next.ok()) << next.status();
@@ -1476,7 +1476,7 @@ TEST(GroupedRecoveryE2e, BgSaveRetainsPreCutGroupedValueAcrossReplacement) {
 
 TEST(GroupedRecoveryE2e,
      FlushDbCancelsPausedGroupedSnapshotWithoutLeakingPins) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires deterministic snapshot scan pause";
 #else
   RecordImage image;

@@ -25,28 +25,28 @@
 
 #include "absl/status/status.h"
 #include "gtest/gtest.h"
-#include "keylane/cluster/control_protocol.h"
-#include "keylane/cluster/meta_control.h"
-#include "keylane/meta/commands.h"
-#include "keylane/meta/control_projector.h"
-#include "keylane/meta/hash.h"
-#include "keylane/meta/policy_store.h"
-#include "keylane/meta/population_manifest_store.h"
-#include "keylane/meta/state_apply.h"
+#include "lavik/cluster/control_protocol.h"
+#include "lavik/cluster/meta_control.h"
+#include "lavik/meta/commands.h"
+#include "lavik/meta/control_projector.h"
+#include "lavik/meta/hash.h"
+#include "lavik/meta/policy_store.h"
+#include "lavik/meta/population_manifest_store.h"
+#include "lavik/meta/state_apply.h"
 #include "meta_topology_test_access.h"
 
 namespace {
 
-namespace control = keylane::cluster::control;
-using keylane::meta::ApplyCommitted;
-using keylane::meta::MetaApplyResult;
-using keylane::meta::MetaAuditVerdict;
-using keylane::meta::MetaCommand;
-using keylane::meta::MetaCommittedView;
-using keylane::meta::MetaControlProjector;
-using keylane::meta::MetaStores;
+namespace control = lavik::cluster::control;
+using lavik::meta::ApplyCommitted;
+using lavik::meta::MetaApplyResult;
+using lavik::meta::MetaAuditVerdict;
+using lavik::meta::MetaCommand;
+using lavik::meta::MetaCommittedView;
+using lavik::meta::MetaControlProjector;
+using lavik::meta::MetaStores;
 
-constexpr std::string_view kActor = "keylane://operator/projector-test";
+constexpr std::string_view kActor = "lavik://operator/projector-test";
 constexpr std::string_view kTime = "2026-09-07T00:00:00Z";
 
 template <std::size_t N>
@@ -84,21 +84,21 @@ void Commit(MetaStores& stores, std::uint64_t index,
   ASSERT_EQ(result.verdict_, MetaAuditVerdict::kAccepted) << result.detail_;
 }
 
-keylane::meta::RegisterNode Register(std::uint8_t node,
-                                     std::vector<std::string> endpoints) {
-  keylane::meta::RegisterNode command;
+lavik::meta::RegisterNode Register(std::uint8_t node,
+                                   std::vector<std::string> endpoints) {
+  lavik::meta::RegisterNode command;
   command.request_id_ = Bytes<16>(node);
   command.node_id_ = NodeId(node);
-  command.principal_ = "keylane://node/" + command.node_id_;
+  command.principal_ = "lavik://node/" + command.node_id_;
   command.endpoints_ = std::move(endpoints);
-  command.role_ = keylane::meta::MetaNodeRole::kPrimary;
+  command.role_ = lavik::meta::MetaNodeRole::kPrimary;
   return command;
 }
 
-keylane::meta::PutPolicy PutPolicy(std::uint8_t request_seed,
-                                   std::string policy_id, std::uint64_t version,
-                                   std::string content) {
-  keylane::meta::PutPolicy command;
+lavik::meta::PutPolicy PutPolicy(std::uint8_t request_seed,
+                                 std::string policy_id, std::uint64_t version,
+                                 std::string content) {
+  lavik::meta::PutPolicy command;
   command.request_id_ = Bytes<16>(request_seed);
   command.policy_id_ = std::move(policy_id);
   command.version_ = version;
@@ -108,7 +108,7 @@ keylane::meta::PutPolicy PutPolicy(std::uint8_t request_seed,
 
 absl::Status ReplaceEndpoints(MetaStores& stores, std::uint8_t node,
                               std::vector<std::string> endpoints) {
-  keylane::meta::UpdateNode update;
+  lavik::meta::UpdateNode update;
   update.request_id_ = Bytes<16>(0x75);
   update.node_id_ = NodeId(node);
   update.expected_revision_ = 1;
@@ -121,15 +121,15 @@ struct Fixture {
   MetaStores stores;
   std::string target = NodeId(1);
   std::string source = NodeId(2);
-  keylane::meta::MetaAssignmentId target_assignment = Bytes<16>(0x21);
-  keylane::meta::MetaAssignmentId source_assignment = Bytes<16>(0x31);
-  keylane::meta::MetaHash256 manifest_digest{};
-  keylane::meta::MetaOperationId operation_id = Bytes<16>(0x41);
-  keylane::meta::MetaDirectiveId directive_id = Bytes<16>(0x51);
-  keylane::meta::MetaAttemptId attempt_id = Bytes<16>(0x61);
-  keylane::meta::MetaBootIncarnation target_boot = Bytes<20>(0x71);
-  keylane::meta::MetaBootIncarnation source_boot = Bytes<20>(0x81);
-  keylane::meta::MetaReplicationHistoryId source_history = Bytes<20>(0x91);
+  lavik::meta::MetaAssignmentId target_assignment = Bytes<16>(0x21);
+  lavik::meta::MetaAssignmentId source_assignment = Bytes<16>(0x31);
+  lavik::meta::MetaHash256 manifest_digest{};
+  lavik::meta::MetaOperationId operation_id = Bytes<16>(0x41);
+  lavik::meta::MetaDirectiveId directive_id = Bytes<16>(0x51);
+  lavik::meta::MetaAttemptId attempt_id = Bytes<16>(0x61);
+  lavik::meta::MetaBootIncarnation target_boot = Bytes<20>(0x71);
+  lavik::meta::MetaBootIncarnation source_boot = Bytes<20>(0x81);
+  lavik::meta::MetaReplicationHistoryId source_history = Bytes<20>(0x91);
   std::uint64_t directive_revision = 0;
 };
 
@@ -138,25 +138,25 @@ Fixture CompleteFixture(std::string operation_kind = "population-rebuild") {
   std::uint64_t index = 1;
 
   Commit(fixture.stores, index++,
-         PutPolicy(0x15, std::string(keylane::meta::kAuthorityLeasePolicyId), 1,
+         PutPolicy(0x15, std::string(lavik::meta::kAuthorityLeasePolicyId), 1,
                    R"({"kind":"authority-lease-v1","duration_ms":5000})"));
   Commit(
       fixture.stores, index++,
       PutPolicy(
           0x16,
-          std::string(keylane::meta::kAutomaticUncontrolledFailoverPolicyId), 1,
+          std::string(lavik::meta::kAutomaticUncontrolledFailoverPolicyId), 1,
           R"({"kind":"automatic-uncontrolled-failover-v1","enabled":true,"suspect_after_ms":5000})"));
 
-  keylane::meta::BindMetaMember meta2;
+  lavik::meta::BindMetaMember meta2;
   meta2.request_id_ = Bytes<16>(0x02);
   meta2.server_id_ = 2;
-  meta2.principal_ = "keylane://meta/2";
+  meta2.principal_ = "lavik://meta/2";
   meta2.data_control_endpoint_ = "10.0.0.12:7200";
   Commit(fixture.stores, index++, meta2);
-  keylane::meta::BindMetaMember meta1;
+  lavik::meta::BindMetaMember meta1;
   meta1.request_id_ = Bytes<16>(0x01);
   meta1.server_id_ = 1;
-  meta1.principal_ = "keylane://meta/1";
+  meta1.principal_ = "lavik://meta/1";
   meta1.data_control_endpoint_ = "10.0.0.11:7100";
   Commit(fixture.stores, index++, meta1);
 
@@ -164,48 +164,48 @@ Fixture CompleteFixture(std::string operation_kind = "population-rebuild") {
          Register(1, {"tls://10.0.0.1:17000", "tcp://10.0.0.1:7000"}));
   Commit(fixture.stores, index++, Register(2, {"tls://10.0.0.2:17001"}));
   Commit(fixture.stores, index++, Register(3, {"10.0.0.3:7002"}));
-  keylane::meta::RetireNode retire;
+  lavik::meta::RetireNode retire;
   retire.request_id_ = Bytes<16>(0x03);
   retire.node_id_ = NodeId(3);
   retire.expected_revision_ = 1;
   Commit(fixture.stores, index++, retire);
 
-  keylane::meta::CreateGroup create;
+  lavik::meta::CreateGroup create;
   create.request_id_ = Bytes<16>(0x10);
   create.group_id_ = "group-a";
   create.new_topology_epoch_ = 1;
   Commit(fixture.stores, index++, create);
 
-  keylane::meta::AssignNodeToGroup assign_source;
+  lavik::meta::AssignNodeToGroup assign_source;
   assign_source.request_id_ = Bytes<16>(0x11);
   assign_source.group_id_ = "group-a";
   assign_source.node_id_ = fixture.source;
   assign_source.assignment_id_ = fixture.source_assignment;
-  assign_source.role_ = keylane::meta::MetaNodeRole::kReplica;
+  assign_source.role_ = lavik::meta::MetaNodeRole::kReplica;
   assign_source.expected_revision_ = 1;
   assign_source.new_topology_epoch_ = 2;
   Commit(fixture.stores, index++, assign_source);
 
-  keylane::meta::AssignNodeToGroup assign_target;
+  lavik::meta::AssignNodeToGroup assign_target;
   assign_target.request_id_ = Bytes<16>(0x12);
   assign_target.group_id_ = "group-a";
   assign_target.node_id_ = fixture.target;
   assign_target.assignment_id_ = fixture.target_assignment;
-  assign_target.role_ = keylane::meta::MetaNodeRole::kPrimary;
+  assign_target.role_ = lavik::meta::MetaNodeRole::kPrimary;
   assign_target.expected_revision_ = 2;
   assign_target.new_topology_epoch_ = 3;
   Commit(fixture.stores, index++, assign_target);
 
-  keylane::meta::PutPopulationManifest put_manifest;
+  lavik::meta::PutPopulationManifest put_manifest;
   put_manifest.request_id_ = Bytes<16>(0x13);
   put_manifest.entries_ = {{1, 11}, {2, 22}, {7, 77}};
   put_manifest.manifest_digest_ =
-      keylane::meta::MetaPopulationManifestStore::CanonicalDigest(
+      lavik::meta::MetaPopulationManifestStore::CanonicalDigest(
           put_manifest.entries_);
   fixture.manifest_digest = put_manifest.manifest_digest_;
   Commit(fixture.stores, index++, put_manifest);
 
-  keylane::meta::SetGroupReplicationState replication;
+  lavik::meta::SetGroupReplicationState replication;
   replication.request_id_ = Bytes<16>(0x14);
   replication.group_id_ = "group-a";
   replication.new_population_manifest_revision_ = 1;
@@ -214,20 +214,20 @@ Fixture CompleteFixture(std::string operation_kind = "population-rebuild") {
   replication.new_topology_epoch_ = 4;
   Commit(fixture.stores, index++, replication);
 
-  keylane::meta::BeginGroupTerm begin;
+  lavik::meta::BeginGroupTerm begin;
   begin.request_id_ = Bytes<16>(0x18);
   begin.group_id_ = "group-a";
   begin.expected_term_ = 0;
   begin.new_term_ = 1;
   Commit(fixture.stores, index++, begin);
 
-  keylane::meta::SetSlotMap slots;
+  lavik::meta::SetSlotMap slots;
   slots.request_id_ = Bytes<16>(0x19);
   slots.ranges_ = {{0, 9, "group-a"}, {20, 29, "group-a"}, {30, 30, "group-a"}};
   slots.new_topology_epoch_ = 5;
   Commit(fixture.stores, index++, slots);
 
-  keylane::meta::ActivateAuthority activate;
+  lavik::meta::ActivateAuthority activate;
   activate.request_id_ = Bytes<16>(0x1a);
   activate.group_id_ = "group-a";
   activate.expected_term_ = 1;
@@ -235,22 +235,22 @@ Fixture CompleteFixture(std::string operation_kind = "population-rebuild") {
   activate.new_topology_epoch_ = 6;
   Commit(fixture.stores, index++, activate);
 
-  keylane::meta::CreateGroup create_empty;
+  lavik::meta::CreateGroup create_empty;
   create_empty.request_id_ = Bytes<16>(0x1b);
   create_empty.group_id_ = "group-empty";
   create_empty.new_topology_epoch_ = 7;
   Commit(fixture.stores, index++, create_empty);
 
-  keylane::meta::SubmitOperation submit;
+  lavik::meta::SubmitOperation submit;
   submit.request_id_ = Bytes<16>(0x1c);
   submit.operation_id_ = fixture.operation_id;
   submit.kind_ = std::move(operation_kind);
   submit.intent_ = "rebuild group-a";
-  submit.intent_hash_ = keylane::meta::MetaSha256(submit.intent_);
+  submit.intent_hash_ = lavik::meta::MetaSha256(submit.intent_);
   submit.replication_history_id_ = Bytes<20>(0x33);
   Commit(fixture.stores, index++, submit);
 
-  keylane::meta::MetaDirectiveSpec directive;
+  lavik::meta::MetaDirectiveSpec directive;
   directive.directive_id_ = fixture.directive_id;
   directive.attempt_id_ = fixture.attempt_id;
   directive.recipient_node_id_ = fixture.target;
@@ -267,9 +267,9 @@ Fixture CompleteFixture(std::string operation_kind = "population-rebuild") {
   directive.population_manifest_digest_ = fixture.manifest_digest;
   directive.partition_replication_epoch_ = 1;
   directive.kind_ = "rebuild";
-  directive.payload_ = *keylane::cluster::control::EncodeRebuildRequest({3});
+  directive.payload_ = *lavik::cluster::control::EncodeRebuildRequest({3});
 
-  keylane::meta::TransitionOperationPhase transition;
+  lavik::meta::TransitionOperationPhase transition;
   transition.request_id_ = Bytes<16>(0x1d);
   transition.operation_id_ = fixture.operation_id;
   transition.kind_phase_blob_ = "dispatch";
@@ -282,7 +282,7 @@ Fixture CompleteFixture(std::string operation_kind = "population-rebuild") {
 TEST(MetaControlProjector, ProjectsRegisteredNodeBeforeAnyGroupExists) {
   MetaStores stores;
   Commit(stores, 1,
-         PutPolicy(0x15, std::string(keylane::meta::kAuthorityLeasePolicyId), 1,
+         PutPolicy(0x15, std::string(lavik::meta::kAuthorityLeasePolicyId), 1,
                    R"({"kind":"authority-lease-v1","duration_ms":3000})"));
   const auto registration = Register(1, {"tcp://10.0.0.1:7000"});
   Commit(stores, 2, registration);
@@ -330,10 +330,10 @@ TEST(MetaControlProjector, ProjectsCompleteCanonicalStateForOneNode) {
   ASSERT_EQ(state.meta_directory.size(), 2u);
   EXPECT_EQ(
       state.meta_directory[0],
-      (control::WireMetaEndpoint{1, "10.0.0.11", 7100, "keylane://meta/1"}));
+      (control::WireMetaEndpoint{1, "10.0.0.11", 7100, "lavik://meta/1"}));
   EXPECT_EQ(
       state.meta_directory[1],
-      (control::WireMetaEndpoint{2, "10.0.0.12", 7200, "keylane://meta/2"}));
+      (control::WireMetaEndpoint{2, "10.0.0.12", 7200, "lavik://meta/2"}));
 
   ASSERT_EQ(state.nodes.size(), 2u);
   EXPECT_EQ(state.nodes[0], (control::WireDataEndpoint{
@@ -409,11 +409,11 @@ TEST(MetaControlProjector, ProjectsCompleteCanonicalStateForOneNode) {
 
 TEST(MetaControlProjector, ProjectsCommittedFailoverExecutionSubset) {
   Fixture fixture = CompleteFixture();
-  keylane::meta::MetaFailoverTransition transition;
+  lavik::meta::MetaFailoverTransition transition;
   transition.transition_id_ = Bytes<16>(0xa1);
-  transition.mode_ = keylane::meta::MetaFailoverMode::kControlled;
+  transition.mode_ = lavik::meta::MetaFailoverMode::kControlled;
   transition.target_term_ = 2;
-  transition.candidate_action_ = keylane::meta::MetaFailoverCandidateAction{
+  transition.candidate_action_ = lavik::meta::MetaFailoverCandidateAction{
       .action_id_ = Bytes<16>(0xa2),
       .candidate_ = {.node_id_ = fixture.source,
                      .assignment_id_ = fixture.source_assignment,
@@ -424,10 +424,10 @@ TEST(MetaControlProjector, ProjectsCommittedFailoverExecutionSubset) {
                   .source_boot_id_ = fixture.target_boot,
                   .source_history_id_ = fixture.source_history,
                   .flow_count_ = 3},
-      .authorization_ = keylane::meta::MetaFailoverAuthorization{
+      .authorization_ = lavik::meta::MetaFailoverAuthorization{
           .authorized_revision_ = 100,
-          .loss_if_cutover_ = keylane::meta::MetaFailoverLoss::kNone}};
-  transition.controlled_ = keylane::meta::MetaControlledFailover{
+          .loss_if_cutover_ = lavik::meta::MetaFailoverLoss::kNone}};
+  transition.controlled_ = lavik::meta::MetaControlledFailover{
       .operation_id_ = fixture.operation_id,
       .absolute_deadline_unix_ms_ = 30'000,
   };
@@ -475,21 +475,21 @@ TEST(MetaControlProjector, ProjectsCommittedFailoverExecutionSubset) {
 
 TEST(MetaControlProjector, ProjectsCurrentGrantActivationActionIdentity) {
   Fixture fixture = CompleteFixture();
-  keylane::meta::BeginGroupTerm begin;
+  lavik::meta::BeginGroupTerm begin;
   begin.group_id_ = "group-a";
   begin.expected_term_ = 1;
   begin.new_term_ = 2;
   ASSERT_TRUE(fixture.stores.topology_.BeginGroupTerm(begin).ok());
-  ASSERT_TRUE(keylane::meta::MetaTopologyTestAccess::SetGroupTerm(
+  ASSERT_TRUE(lavik::meta::MetaTopologyTestAccess::SetGroupTerm(
                   fixture.stores.topology_, "group-a", 2)
                   .ok());
 
-  keylane::meta::ActivateAuthority activate;
+  lavik::meta::ActivateAuthority activate;
   activate.group_id_ = "group-a";
   activate.expected_term_ = 2;
   activate.new_owner_ = fixture.target;
   activate.new_topology_epoch_ = 8;
-  const keylane::meta::MetaFailoverActionId action_id = Bytes<16>(0xb1);
+  const lavik::meta::MetaFailoverActionId action_id = Bytes<16>(0xb1);
   ASSERT_TRUE(
       fixture.stores.topology_.ValidateActivate(activate, action_id).ok());
   ASSERT_TRUE(fixture.stores.topology_.SetTopologyEpoch(8).ok());
@@ -515,7 +515,7 @@ TEST(MetaControlProjector, ProjectedManifestPassesDataPlaneValidation) {
       MetaCommittedView(fixture.stores, 99), fixture.target);
   ASSERT_TRUE(projected.ok()) << projected.status();
 
-  const auto prepared = keylane::cluster::PrepareNodeControlState(
+  const auto prepared = lavik::cluster::PrepareNodeControlState(
       control::SelectNodeControlState(projected->full_state, fixture.target),
       fixture.target, 4);
   ASSERT_TRUE(prepared.ok()) << prepared.status();
@@ -535,7 +535,7 @@ TEST(MetaControlProjector,
   ASSERT_FALSE(creating->full_state.groups.empty());
   EXPECT_FALSE(creating->full_state.groups.front().steady_replication_enabled);
 
-  const keylane::meta::MetaOperationId root = Bytes<16>(0xc1);
+  const lavik::meta::MetaOperationId root = Bytes<16>(0xc1);
   ASSERT_TRUE(fixture.stores.topology_.BeginClusterCreate(root, 1).ok());
   ASSERT_TRUE(fixture.stores.topology_.CompleteClusterCreate(root).ok());
   auto created = MetaControlProjector::ProjectNode(
@@ -563,7 +563,7 @@ TEST(MetaControlProjector,
   MetaStores with_policy_change = fixture.stores;
   ASSERT_TRUE(with_policy_change.policy_
                   .Apply(PutPolicy(
-                      0x70, std::string(keylane::meta::kAuthorityLeasePolicyId),
+                      0x70, std::string(lavik::meta::kAuthorityLeasePolicyId),
                       2, R"({"kind":"authority-lease-v1","duration_ms":6000})"))
                   .ok());
   const auto changed = MetaControlProjector::ProjectNode(
@@ -598,14 +598,14 @@ TEST(MetaControlProjector,
      GrantlessGroupDoesNotProjectHistoricalOwnerAfterMemberRemoval) {
   Fixture fixture = CompleteFixture();
 
-  keylane::meta::FenceGroup fence;
+  lavik::meta::FenceGroup fence;
   fence.request_id_ = Bytes<16>(0x78);
   fence.group_id_ = "group-a";
   fence.expected_term_ = 1;
   fence.new_term_ = 2;
   Commit(fixture.stores, 21, fence);
 
-  keylane::meta::RemoveNodeFromGroup remove;
+  lavik::meta::RemoveNodeFromGroup remove;
   remove.request_id_ = Bytes<16>(0x79);
   remove.group_id_ = "group-a";
   remove.node_id_ = fixture.target;
@@ -628,7 +628,7 @@ TEST(MetaControlProjector,
      FencedGroupProjectsCommittedOwnerRoleWithoutAnActiveGrant) {
   Fixture fixture = CompleteFixture();
 
-  keylane::meta::FenceGroup fence;
+  lavik::meta::FenceGroup fence;
   fence.request_id_ = Bytes<16>(0x78);
   fence.group_id_ = "group-a";
   fence.expected_term_ = 1;
@@ -652,25 +652,25 @@ TEST(MetaControlProjector,
   ASSERT_TRUE(operation.has_value());
   ASSERT_EQ(operation->current_directives_.size(), 1u);
 
-  keylane::meta::MetaDirectiveSpec rebuild =
+  lavik::meta::MetaDirectiveSpec rebuild =
       operation->current_directives_[0].spec_;
   rebuild.directive_id_ = Bytes<16>(0x54);
   rebuild.attempt_id_ = Bytes<16>(0x64);
-  keylane::meta::MetaDirectiveSpec authorize =
+  lavik::meta::MetaDirectiveSpec authorize =
       operation->current_directives_[0].spec_;
   authorize.directive_id_ = Bytes<16>(0x52);
   authorize.attempt_id_ = Bytes<16>(0x62);
   authorize.recipient_node_id_ = fixture.source;
   authorize.kind_ = "authorize-source";
-  authorize.payload_ = *keylane::cluster::control::EncodeRebuildRequest({3});
+  authorize.payload_ = *lavik::cluster::control::EncodeRebuildRequest({3});
 
-  keylane::meta::MetaDirectiveSpec revoke = authorize;
+  lavik::meta::MetaDirectiveSpec revoke = authorize;
   revoke.directive_id_ = Bytes<16>(0x53);
   revoke.attempt_id_ = Bytes<16>(0x63);
   revoke.kind_ = "revoke-sources";
   revoke.payload_.clear();
 
-  keylane::meta::TransitionOperationPhase transition;
+  lavik::meta::TransitionOperationPhase transition;
   transition.request_id_ = Bytes<16>(0x77);
   transition.operation_id_ = fixture.operation_id;
   transition.expected_revision_ = 1;
@@ -721,23 +721,23 @@ TEST(MetaControlProjector,
   for (const bool mismatched_layout : {false, true}) {
     SCOPED_TRACE(mismatched_layout);
     Fixture fixture = CompleteFixture(
-        std::string(keylane::meta::kMetaClusterCreateV1GroupOperationKind));
+        std::string(lavik::meta::kMetaClusterCreateV1GroupOperationKind));
     const auto operation =
         fixture.stores.operation_.FindOperation(fixture.operation_id);
     ASSERT_TRUE(operation.has_value());
     ASSERT_EQ(operation->current_directives_.size(), 1u);
 
-    keylane::meta::MetaDirectiveSpec rebuild =
+    lavik::meta::MetaDirectiveSpec rebuild =
         operation->current_directives_[0].spec_;
     rebuild.directive_id_ = Bytes<16>(0x54);
     rebuild.attempt_id_ = Bytes<16>(0x64);
-    keylane::meta::MetaDirectiveSpec authorize = rebuild;
+    lavik::meta::MetaDirectiveSpec authorize = rebuild;
     authorize.directive_id_ = Bytes<16>(0x52);
     authorize.attempt_id_ = Bytes<16>(0x62);
     authorize.recipient_node_id_ = fixture.source;
-    authorize.kind_ = keylane::meta::kMetaDirectiveAuthorizeSource;
+    authorize.kind_ = lavik::meta::kMetaDirectiveAuthorizeSource;
 
-    keylane::meta::TransitionOperationPhase authorize_transition;
+    lavik::meta::TransitionOperationPhase authorize_transition;
     authorize_transition.request_id_ = Bytes<16>(0x77);
     authorize_transition.operation_id_ = fixture.operation_id;
     authorize_transition.expected_revision_ = 1;
@@ -757,7 +757,7 @@ TEST(MetaControlProjector,
     EXPECT_EQ(source->full_state.current_directives.front().kind,
               control::WireDirectiveKind::kAuthorizeSource);
 
-    keylane::meta::CommitDirectiveResult result;
+    lavik::meta::CommitDirectiveResult result;
     result.request_id_ = Bytes<16>(0x78);
     result.operation_id_ = fixture.operation_id;
     result.directive_id_ = authorize.directive_id_;
@@ -766,12 +766,12 @@ TEST(MetaControlProjector,
     result.recipient_node_id_ = fixture.source;
     result.recipient_boot_id_ = fixture.source_boot;
     result.assignment_id_ = fixture.target_assignment;
-    result.status_ = keylane::meta::MetaDirectiveResultStatus::kSucceeded;
+    result.status_ = lavik::meta::MetaDirectiveResultStatus::kSucceeded;
     result.result_ = "source-authorized";
 
-    keylane::meta::MetaStores failed_stores = fixture.stores;
-    keylane::meta::CommitDirectiveResult failed = result;
-    failed.status_ = keylane::meta::MetaDirectiveResultStatus::kFailed;
+    lavik::meta::MetaStores failed_stores = fixture.stores;
+    lavik::meta::CommitDirectiveResult failed = result;
+    failed.status_ = lavik::meta::MetaDirectiveResultStatus::kFailed;
     failed.result_ = "source-rejected";
     Commit(failed_stores, 22, failed);
     const auto target_after_failure = MetaControlProjector::ProjectNode(
@@ -783,7 +783,7 @@ TEST(MetaControlProjector,
 
     if (mismatched_layout)
       rebuild.payload_ = *control::EncodeRebuildRequest({2});
-    keylane::meta::TransitionOperationPhase rebuild_transition;
+    lavik::meta::TransitionOperationPhase rebuild_transition;
     rebuild_transition.request_id_ = Bytes<16>(0x79);
     rebuild_transition.operation_id_ = fixture.operation_id;
     rebuild_transition.expected_revision_ = 3;
@@ -855,7 +855,7 @@ TEST(MetaControlProjector,
         stores.operation_.FindOperation(fixture.operation_id);
     ASSERT_TRUE(operation.has_value());
     ASSERT_EQ(operation->current_directives_.size(), 1u);
-    keylane::meta::MetaDirectiveSpec directive =
+    lavik::meta::MetaDirectiveSpec directive =
         operation->current_directives_[0].spec_;
     directive.kind_ = test.kind;
     if (test.kind == "unknown") directive.payload_.clear();
@@ -871,7 +871,7 @@ TEST(MetaControlProjector,
       directive.recipient_node_id_ = fixture.source;
       if (test.kind == "revoke-sources") directive.payload_.clear();
     }
-    keylane::meta::TransitionOperationPhase transition;
+    lavik::meta::TransitionOperationPhase transition;
     transition.request_id_ = Bytes<16>(0x76);
     transition.operation_id_ = fixture.operation_id;
     transition.expected_revision_ = 1;

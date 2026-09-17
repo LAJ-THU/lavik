@@ -18,9 +18,9 @@
 
 #include <span>
 
-#include "keylane/command.h"
+#include "lavik/command.h"
 
-namespace keylane {
+namespace lavik {
 
 class ReplyBuilder;
 
@@ -45,4 +45,4 @@ Task<std::string> ExecuteSortCommandLocked(
     std::vector<storage::TxShardWrites>& tx_writes,
     bool deterministic_set_order);
 
-}  // namespace keylane
+}  // namespace lavik

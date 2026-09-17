@@ -21,9 +21,9 @@
 #include <utility>
 
 #include "gtest/gtest.h"
-#include "keylane/meta/owner_serviceability.h"
+#include "lavik/meta/owner_serviceability.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
 template <std::size_t N>
@@ -326,4 +326,4 @@ TEST(MetaOwnerServiceabilityTest, DiagnosticCodesAreStable) {
 }
 
 }  // namespace
-}  // namespace keylane::meta
+}  // namespace lavik::meta

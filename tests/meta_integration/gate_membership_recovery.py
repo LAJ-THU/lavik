@@ -29,9 +29,9 @@ class FaultNode(H.Node):
     action = "add"
 
     def start(self, *args, **kwargs):
-        values = {"KEYLANE_TEST_PAUSE_MEMBERSHIP_PHASE": self.phase,
-                  "KEYLANE_TEST_PAUSE_MEMBERSHIP_TARGET": "4",
-                  "KEYLANE_TEST_PAUSE_MEMBERSHIP_ACTION": self.action}
+        values = {"LAVIK_TEST_PAUSE_MEMBERSHIP_PHASE": self.phase,
+                  "LAVIK_TEST_PAUSE_MEMBERSHIP_TARGET": "4",
+                  "LAVIK_TEST_PAUSE_MEMBERSHIP_ACTION": self.action}
         previous = {key: os.environ.get(key) for key in values}
         try:
             for key, value in values.items():
@@ -198,7 +198,7 @@ def recovery_cut(workdir, add, phase, snapshot=False, failover=False):
 
 
 def has_faults():
-    needle = b"KEYLANE_TEST_PAUSE_MEMBERSHIP_PHASE"
+    needle = b"LAVIK_TEST_PAUSE_MEMBERSHIP_PHASE"
     tail = b""
     with open(BINARY, "rb") as source:
         while chunk := source.read(1 << 20):

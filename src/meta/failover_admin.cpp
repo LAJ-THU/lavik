@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/failover_admin.h"
+#include "lavik/meta/failover_admin.h"
 
 #include <algorithm>
 #include <array>
@@ -28,11 +28,11 @@
 #include <utility>
 
 #include "absl/status/status.h"
-#include "keylane/meta/admin_client.h"
-#include "keylane/meta/cluster_status.h"
+#include "lavik/meta/admin_client.h"
+#include "lavik/meta/cluster_status.h"
 #include "openssl/rand.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
 constexpr std::string_view kRequestPrefix = "failover 1 ";
@@ -385,4 +385,4 @@ absl::StatusOr<FailoverOutcome> ClusterOperator::Failover(
   return *outcome;
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

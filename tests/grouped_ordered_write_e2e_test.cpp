@@ -19,9 +19,9 @@
 #include <tuple>
 
 #include "grouped_write_e2e_support.h"
-#include "keylane/rdb.h"
-#include "keylane/storage/detail/hash_codec.h"
-#include "keylane/storage/detail/ordered_compact_codec.h"
+#include "lavik/rdb.h"
+#include "lavik/storage/detail/hash_codec.h"
+#include "lavik/storage/detail/ordered_compact_codec.h"
 
 namespace {
 using namespace grouped_e2e;
@@ -184,7 +184,7 @@ TEST(GroupedOrderedWriteE2e, LargeListItemUsesExtentsWithoutRewritingAllPages) {
 }
 
 TEST(GroupedOrderedWriteE2e, FailedListBatchCannotLeakIntoLaterExecCommand) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires Debug/fault command-local auxiliary hook";
 #endif
   PrivateDisk disk;
@@ -407,9 +407,9 @@ TEST_P(GroupedFullDiskExpirationE2e, ReclaimsGraphAndRecovers) {
                                         entries);
   }
   ASSERT_TRUE(compact.ok()) << compact.status();
-  auto dump = keylane::rdb::EncodeDump(RawValue{.encoded_ = std::move(*compact),
-                                                .logical_size_ = 1,
-                                                .value_type_ = type});
+  auto dump = lavik::rdb::EncodeDump(RawValue{.encoded_ = std::move(*compact),
+                                              .logical_size_ = 1,
+                                              .value_type_ = type});
   ASSERT_TRUE(dump.ok()) << dump.status();
   std::vector<std::string> expired_keys;
   const auto key_count = external_key ? 3 : 7;
@@ -639,7 +639,7 @@ TEST(GroupedOrderedWriteE2e, GeoUsesGroupedSortedSetAndStoreSurvivesRecovery) {
 
 TEST(GroupedOrderedWriteE2e,
      FailedSortedSetBatchCannotLeakIntoLaterExecCommand) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires Debug/fault command-local auxiliary hook";
 #endif
   PrivateDisk disk;
@@ -677,7 +677,7 @@ TEST(GroupedOrderedWriteE2e,
 class GroupedSortedSetCrashE2e : public testing::TestWithParam<const char*> {};
 
 TEST_P(GroupedSortedSetCrashE2e, InterruptedSortedSetBatchKeepsPreviousValue) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires Debug/fault crash hooks";
 #endif
   PrivateDisk disk;
@@ -722,7 +722,7 @@ INSTANTIATE_TEST_SUITE_P(
 class GroupedListCrashE2e : public testing::TestWithParam<const char*> {};
 
 TEST_P(GroupedListCrashE2e, InterruptedListBatchRestoresCompletePreviousValue) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires Debug/fault crash hooks";
 #endif
   PrivateDisk disk;

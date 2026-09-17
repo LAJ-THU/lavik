@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/cluster/meta_client.h"
+#include "lavik/cluster/meta_client.h"
 
 #include <array>
 #include <chrono>
@@ -24,9 +24,9 @@
 #include <vector>
 
 #include "gtest/gtest.h"
-#include "keylane/cluster/node_control.h"
+#include "lavik/cluster/node_control.h"
 
-namespace keylane::cluster {
+namespace lavik::cluster {
 namespace {
 
 TEST(MetaControlEndpointTest, ParsesOnlyNumericUnambiguousEndpoints) {
@@ -52,20 +52,18 @@ TEST(MetaControlEndpointTest, ParsesOnlyNumericUnambiguousEndpoints) {
 }
 
 TEST(MetaControlIdentityTest, RequiresExactlyOneMatchingUriSan) {
-  const std::vector<std::string> matching{"keylane://meta/7"};
-  const std::vector<std::string> mismatching{"keylane://meta/8"};
-  const std::vector<std::string> duplicate{"keylane://meta/7",
-                                           "keylane://operator/a"};
-  EXPECT_TRUE(
-      ValidateUniqueControlPrincipal(matching, "keylane://meta/7").ok());
-  EXPECT_EQ(ValidateUniqueControlPrincipal({}, "keylane://meta/7").code(),
+  const std::vector<std::string> matching{"lavik://meta/7"};
+  const std::vector<std::string> mismatching{"lavik://meta/8"};
+  const std::vector<std::string> duplicate{"lavik://meta/7",
+                                           "lavik://operator/a"};
+  EXPECT_TRUE(ValidateUniqueControlPrincipal(matching, "lavik://meta/7").ok());
+  EXPECT_EQ(ValidateUniqueControlPrincipal({}, "lavik://meta/7").code(),
             absl::StatusCode::kUnauthenticated);
   EXPECT_EQ(
-      ValidateUniqueControlPrincipal(mismatching, "keylane://meta/7").code(),
+      ValidateUniqueControlPrincipal(mismatching, "lavik://meta/7").code(),
       absl::StatusCode::kPermissionDenied);
-  EXPECT_EQ(
-      ValidateUniqueControlPrincipal(duplicate, "keylane://meta/7").code(),
-      absl::StatusCode::kUnauthenticated);
+  EXPECT_EQ(ValidateUniqueControlPrincipal(duplicate, "lavik://meta/7").code(),
+            absl::StatusCode::kUnauthenticated);
 }
 
 TEST(MetaControlIdentityTest, LearnedDialTargetPinsItsExactPrincipal) {
@@ -73,20 +71,20 @@ TEST(MetaControlIdentityTest, LearnedDialTargetPinsItsExactPrincipal) {
       .host_ = "127.0.0.1",
       .port_ = 7107,
       .server_id_ = 7,
-      .principal_ = "keylane://meta/7",
+      .principal_ = "lavik://meta/7",
   };
   control::WireMetaEndpoint hello_member{
       .server_id = 7,
       .host = "127.0.0.1",
       .port = 7107,
-      .principal = "keylane://meta/7",
+      .principal = "lavik://meta/7",
   };
   EXPECT_TRUE(ValidateDialedMetaIdentity(learned, hello_member).ok());
 
-  hello_member.principal = "keylane://meta/8";
+  hello_member.principal = "lavik://meta/8";
   EXPECT_EQ(ValidateDialedMetaIdentity(learned, hello_member).code(),
             absl::StatusCode::kPermissionDenied);
-  hello_member.principal = "keylane://meta/7";
+  hello_member.principal = "lavik://meta/7";
   hello_member.server_id = 8;
   EXPECT_EQ(ValidateDialedMetaIdentity(learned, hello_member).code(),
             absl::StatusCode::kFailedPrecondition);
@@ -101,7 +99,7 @@ TEST(MetaControlIdentityTest, UnresolvedSeedBootstrapsFromServerHello) {
       .server_id = 7,
       .host = "127.0.0.1",
       .port = 7107,
-      .principal = "keylane://meta/7",
+      .principal = "lavik://meta/7",
   };
   EXPECT_TRUE(ValidateDialedMetaIdentity(seed, hello_member).ok());
 }
@@ -153,11 +151,11 @@ TEST(MetaEndpointDirectoryTest,
       {.server_id = 2,
        .host = "127.0.0.1",
        .port = 7102,
-       .principal = "keylane://meta/2"},
+       .principal = "lavik://meta/2"},
       {.server_id = 3,
        .host = "127.0.0.1",
        .port = 7103,
-       .principal = "keylane://meta/3"},
+       .principal = "lavik://meta/3"},
   };
   ASSERT_TRUE(directory.Update(learned, 3).ok());
   const auto candidates = directory.Candidates();
@@ -178,7 +176,7 @@ TEST(MetaEndpointDirectoryTest,
       {.server_id = 1,
        .host = "127.0.0.1",
        .port = 7101,
-       .principal = "keylane://meta/1"},
+       .principal = "lavik://meta/1"},
   };
   ASSERT_TRUE(directory.Update(learned, 1).ok());
   const auto candidates = directory.Candidates();
@@ -198,22 +196,22 @@ TEST(MetaEndpointDirectoryTest, FullStateRefreshPreservesOnlyLiveLeaderHint) {
       {.server_id = 2,
        .host = "127.0.0.1",
        .port = 7102,
-       .principal = "keylane://meta/2"},
+       .principal = "lavik://meta/2"},
       {.server_id = 3,
        .host = "127.0.0.1",
        .port = 7103,
-       .principal = "keylane://meta/3"},
+       .principal = "lavik://meta/3"},
   };
   ASSERT_TRUE(directory.Update(initial, 3).ok());
   const std::vector<control::WireMetaEndpoint> refreshed{
       {.server_id = 3,
        .host = "127.0.0.1",
        .port = 7103,
-       .principal = "keylane://meta/3"},
+       .principal = "lavik://meta/3"},
       {.server_id = 4,
        .host = "127.0.0.1",
        .port = 7104,
-       .principal = "keylane://meta/4"},
+       .principal = "lavik://meta/4"},
   };
   ASSERT_TRUE(directory.Refresh(refreshed).ok());
   EXPECT_EQ(directory.Candidates().front().server_id_, 3u);
@@ -222,7 +220,7 @@ TEST(MetaEndpointDirectoryTest, FullStateRefreshPreservesOnlyLiveLeaderHint) {
       {.server_id = 4,
        .host = "127.0.0.1",
        .port = 7104,
-       .principal = "keylane://meta/4"},
+       .principal = "lavik://meta/4"},
   };
   ASSERT_TRUE(directory.Refresh(without_old_leader).ok());
   EXPECT_EQ(directory.Candidates().front().server_id_, 4u);
@@ -232,7 +230,7 @@ TEST(MetaEndpointDirectoryTest, FullStateRefreshPreservesOnlyLiveLeaderHint) {
       {.server_id = 5,
        .host = "meta.example",
        .port = 7105,
-       .principal = "keylane://meta/5"}};
+       .principal = "lavik://meta/5"}};
   EXPECT_EQ(directory.Refresh(invalid).code(),
             absl::StatusCode::kInvalidArgument);
   EXPECT_EQ(directory.Candidates(), before_invalid);
@@ -249,7 +247,7 @@ TEST(MetaEndpointDirectoryTest, RejectsMissingOrMismatchedPrincipalBinding) {
       {.server_id = 7,
        .host = "127.0.0.1",
        .port = 7107,
-       .principal = "keylane://meta/8"}};
+       .principal = "lavik://meta/8"}};
   EXPECT_EQ(directory.Update(mismatched, 7).code(),
             absl::StatusCode::kInvalidArgument);
   EXPECT_TRUE(directory.Candidates().empty());
@@ -1556,4 +1554,4 @@ TEST(MetaAuthorityIdentityTest, UsesVersionedUnambiguousEncoding) {
 }
 
 }  // namespace
-}  // namespace keylane::cluster
+}  // namespace lavik::cluster

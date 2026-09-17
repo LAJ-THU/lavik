@@ -16,7 +16,7 @@
 
 #include "impl.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 struct SnapshotReadGuard {
@@ -422,11 +422,11 @@ Task<absl::Status> StorageEngine::Impl::CaptureRdbSnapshotBeforeWriteLocked(
       co_return absl::OkStatus();
     }
     store.store_state_mutex_.Unlock(*store.worker_);
-    KEYLANE_FAULT_INJECT(
+    LAVIK_FAULT_INJECT(
         // Deterministic regression hook for an append-stream rollover while
         // this writer has released the store lock to pin the pre-cut value.
         static std::atomic<bool> pause_claimed = false;
-        const char* pause_text = std::getenv("KEYLANE_RDB_CAPTURE_PAUSE_MS");
+        const char* pause_text = std::getenv("LAVIK_RDB_CAPTURE_PAUSE_MS");
         bool expected_pause = false;
         if (pause_text != nullptr &&
             pause_claimed.compare_exchange_strong(expected_pause, true)) {
@@ -745,7 +745,7 @@ StorageEngine::Impl::ReadRdbSnapshotBatch(std::uint64_t session_id,
   }
   WorkerStore& store = CurrentStore();
   try {
-    KEYLANE_FAULT_INJECT(
+    LAVIK_FAULT_INJECT(
         // Deterministic snapshot tests mutate or detach a grouped key after the
         // global cut but before its first physical read. Pause no captured
         // pointer: the normal session validation below must still reject
@@ -754,7 +754,7 @@ StorageEngine::Impl::ReadRdbSnapshotBatch(std::uint64_t session_id,
         if (cursor.partition_index_ == 0 && cursor.db_id_ == 0 &&
             cursor.index_cursor_ == 0 && cursor.dirty_cursor_ == 0 &&
             !cursor.finalizing_) {
-          if (const char* configured = std::getenv("KEYLANE_RDB_SCAN_PAUSE_MS");
+          if (const char* configured = std::getenv("LAVIK_RDB_SCAN_PAUSE_MS");
               configured != nullptr) {
             std::uint32_t delay_ms = 0;
             const char* end = configured + std::strlen(configured);
@@ -995,9 +995,9 @@ Task<absl::StatusOr<CollectionPage>> StorageEngine::Impl::ReadRdbCollectionPage(
       bool* reading;
       ~ReadingGuard() { *reading = false; }
     } reading_guard{&stream.reading_};
-    KEYLANE_FAULT_INJECT(if (const char* configured = std::getenv(
-                                 "KEYLANE_FAIL_RDB_COLLECTION_PAGE");
-                             configured != nullptr) {
+    LAVIK_FAULT_INJECT(if (const char* configured =
+                               std::getenv("LAVIK_FAIL_RDB_COLLECTION_PAGE");
+                           configured != nullptr) {
       std::uint64_t failed_cursor = 0;
       const char* end = configured + std::strlen(configured);
       const bool allocation =
@@ -1138,9 +1138,8 @@ Task<absl::StatusOr<CollectionPage>> StorageEngine::Impl::ReadRdbCollectionPage(
           "RDB decoded page exceeds its admitted envelope");
     }
     page.retained_charge_.Adopt(&*reservation, retained_bytes);
-    KEYLANE_FAULT_INJECT(if (KEYLANE_FAULT_MATCHES(
-                                 "KEYLANE_RDB_CANCEL_ADMITTED_PAGE",
-                                 stream.key_)) {
+    LAVIK_FAULT_INJECT(if (LAVIK_FAULT_MATCHES("LAVIK_RDB_CANCEL_ADMITTED_PAGE",
+                                               stream.key_)) {
       static std::atomic_flag once;
       if (!once.test_and_set(std::memory_order_relaxed)) {
         // Exercise a real concurrent End, not merely FLUSHDB's invalidation.
@@ -1260,4 +1259,4 @@ Task<absl::Status> StorageEngine::Impl::FinishRdbCollection(
   co_return absl::OkStatus();
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

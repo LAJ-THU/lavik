@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/cluster_status.h"
+#include "lavik/meta/cluster_status.h"
 
 #include <algorithm>
 #include <array>
@@ -32,10 +32,10 @@
 #include <vector>
 
 #include "absl/status/status.h"
-#include "keylane/meta/topology_store.h"
-#include "keylane/numeric_endpoint.h"
+#include "lavik/meta/topology_store.h"
+#include "lavik/numeric_endpoint.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
 constexpr std::uint16_t kHeadWireVersion = 1;
@@ -395,9 +395,9 @@ absl::Status ValidateDirectory(
     ids.push_back(member.server_id_);
     leaders += member.is_leader_ ? 1 : 0;
     if (member.ctl_endpoint_.has_value()) {
-      auto parsed = keylane::ParseNumericEndpoint(*member.ctl_endpoint_);
+      auto parsed = lavik::ParseNumericEndpoint(*member.ctl_endpoint_);
       if (!parsed.has_value() ||
-          keylane::FormatNumericEndpoint(*parsed) != *member.ctl_endpoint_ ||
+          lavik::FormatNumericEndpoint(*parsed) != *member.ctl_endpoint_ ||
           parsed->host_ == "0.0.0.0" || parsed->host_ == "::") {
         return absl::DataLossError("invalid committed ctl endpoint");
       }
@@ -1623,4 +1623,4 @@ absl::StatusOr<std::string> RenderClusterStatusText(
   return text;
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

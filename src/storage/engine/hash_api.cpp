@@ -16,7 +16,7 @@
 
 #include "impl.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 namespace {
 
@@ -69,4 +69,4 @@ Task<absl::StatusOr<HashResult>> StorageEngine::Impl::ExecuteSetLocked(
                                tx, replication, mutation_precondition);
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

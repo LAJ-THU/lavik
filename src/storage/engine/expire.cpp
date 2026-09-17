@@ -21,7 +21,7 @@
 #include "absl/strings/cord.h"
 #include "impl.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 std::uint32_t StorageEngine::Impl::ActiveExpirationConfigValue(
     ActiveExpirationConfigKey key) const noexcept {
@@ -75,7 +75,7 @@ absl::Status StorageEngine::Impl::ConfigureActiveExpiration(
 namespace {
 
 constexpr absl::string_view kExpirationAuthorityCancellationTypeUrl =
-    "type.googleapis.com/keylane.storage.ExpirationAuthorityCancellation";
+    "type.googleapis.com/lavik.storage.ExpirationAuthorityCancellation";
 constexpr std::size_t kMaxQueuedExpiredCandidates = 4096;
 
 std::chrono::nanoseconds BootTimeSinceEpoch() noexcept {
@@ -333,7 +333,7 @@ Task<absl::Status> StorageEngine::Impl::ExpireCandidate(
   // its own expiration timestamp. This is the full-disk escape valve that
   // lets expiration free blocks which can then accept durable tombstones.
   absl::Status durable;
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
   std::optional<absl::Status> injected_durable;
   if (expiration_test_hook_) {
     injected_durable =
@@ -347,7 +347,7 @@ Task<absl::Status> StorageEngine::Impl::ExpireCandidate(
         store, partition, candidate.db_id_, candidate.key_, candidate.digest_,
         {}, RecordKind::kTombstone, ValueType::kNone, 0, nullptr, 0, nullptr,
         nullptr, nullptr, nullptr, true, nullptr, &expiration_precondition);
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
   }
 #endif
   if (IsExpirationAuthorityCancellation(durable)) co_return absl::OkStatus();
@@ -401,7 +401,7 @@ Task<absl::Status> StorageEngine::Impl::ExpireCandidate(
   // Append can fail before reaching its publication precondition. The
   // disk-full fallback has its own no-await mutation cut and must validate the
   // same capability immediately before its first side effect.
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
   if (expiration_test_hook_) {
     (void)expiration_test_hook_(ExpirationTestPoint::kBeforeDiskFullFallback);
   }
@@ -514,9 +514,9 @@ Task<absl::Status> StorageEngine::Impl::ActiveExpiration(WorkerStore* store) {
         }
       }
     }
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
     // Only logical expiration is disabled; index maintenance still runs.
-    if (std::getenv("KEYLANE_DISABLE_ACTIVE_EXPIRATION") != nullptr) continue;
+    if (std::getenv("LAVIK_DISABLE_ACTIVE_EXPIRATION") != nullptr) continue;
 #endif
     // Revoked grants may leave a full queue that would otherwise hide every
     // candidate discovered under the replacement grant. Retire the stale
@@ -656,4 +656,4 @@ Task<absl::Status> StorageEngine::Impl::ActiveExpiration(WorkerStore* store) {
   co_return absl::OkStatus();
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

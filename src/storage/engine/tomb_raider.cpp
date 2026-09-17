@@ -19,7 +19,7 @@
 
 #include "impl.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 namespace {
 
@@ -788,4 +788,4 @@ Task<absl::Status> StorageEngine::Impl::TombReapLocal(WorkerStore& store) {
   co_return absl::OkStatus();
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

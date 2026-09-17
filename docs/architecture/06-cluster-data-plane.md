@@ -18,13 +18,13 @@ limitations under the License.
 
 ## Responsibility and boundary
 
-This subsystem makes a Keylane process a Redis Cluster data node: it decides,
+This subsystem makes a Lavik process a Redis Cluster data node: it decides,
 for every client command, whether this node may serve it, must redirect it to
 the owning node, or must refuse it with a standard cluster error. Ordinary
 requests never consult an external control plane; each node answers from its
 locally committed view of slot ownership, authority, and readiness.
 
-The module under `include/keylane/cluster/` and `src/cluster/` exposes five
+The module under `include/lavik/cluster/` and `src/cluster/` exposes five
 seams:
 
 - `TopologyCache` holds the committed `ServingState` and publishes it
@@ -694,7 +694,7 @@ run a rebuild while it remains unable to serve or obtain a lease.
 
 Cluster routing errors are simple error lines with Redis 7.2 texts; clients
 dispatch on the first token, and the encodings are identical under RESP2 and
-RESP3. Deliberately unsupported administrative mutations use stable Keylane
+RESP3. Deliberately unsupported administrative mutations use stable Lavik
 `ERR` replies.
 
 | Condition | Reply |
@@ -756,7 +756,7 @@ and the maximum Group Term in the complete projection, including empty
 Groups, as `cluster_current_epoch`. These are
 discovery compatibility fields: Group Terms do not order slot conflicts
 between different Groups. Meta owns slot assignment and orders projections
-with its separate cluster-wide `topology_epoch`; Keylane does not participate
+with its separate cluster-wide `topology_epoch`; Lavik does not participate
 in Redis gossip or Redis elections.
 
 `HELLO` reports `mode:cluster`, `INFO` reports `redis_mode:cluster` in its
@@ -790,9 +790,9 @@ deployment is valid.
 
 Data-to-Meta mTLS is optional and all-or-none. When enabled, the Data client
 reuses its existing replication TLS CA/certificate/key and presents the
-committed `keylane://node/<node-id>` identity. A Meta listener reuses that
+committed `lavik://node/<node-id>` identity. A Meta listener reuses that
 member's existing Raft TLS CA/certificate/key and presents its sole
-`keylane://meta/<server-id>` URI SAN. Plaintext mode treats network isolation
+`lavik://meta/<server-id>` URI SAN. Plaintext mode treats network isolation
 as its trust boundary; neither side silently falls back when a TLS identity is
 partially configured.
 
@@ -834,18 +834,18 @@ incomplete-full-sync fence without a local topology source.
 
 | Claim | Repository source |
 |---|---|
-| ServingState model, builder validation, topology cache, content hash, striped in-flight cells, and routing functions | `include/keylane/cluster/topology.h`, `src/cluster/topology.cpp` |
-| Admission decision and owner-side authority re-check | `include/keylane/cluster/authority.h`, `src/cluster/authority.cpp` |
-| Final logical-mutation precondition and WATCH/publication seam | `include/keylane/storage/engine.h`, `src/storage/engine/write.cpp`, `src/storage/engine/hash_tree.cpp` |
-| Meta/Data protocol framing, resolved Authority Lease field and derived heartbeat cadence, independent failover observations, transition/activation projection, complete-object transfer, and bounded writer scheduling | `include/keylane/cluster/control_protocol.h`, `include/keylane/cluster/control_transport.h`, `src/cluster/control_protocol.cpp`, `src/cluster/control_transport.cpp` |
-| Node controller, full-state validation, controlled pause, provisional activation, finite authority, drain, follow-owner reconciliation, and typed replication adaptation | `include/keylane/cluster/node_control.h`, `include/keylane/cluster/meta_control.h`, `src/cluster/node_control.cpp`, `src/cluster/meta_control.cpp`, `include/keylane/replication.h`, `src/replication/replication.cpp` |
-| Meta discovery, outbound Data control session, stop-and-wait causal heartbeat cadence, and finite-lease expiry | `include/keylane/cluster/meta_client.h`, `src/cluster/meta_client.cpp` |
-| Process-wide runtime installation | `include/keylane/cluster/runtime.h`, `src/cluster/runtime.cpp` |
+| ServingState model, builder validation, topology cache, content hash, striped in-flight cells, and routing functions | `include/lavik/cluster/topology.h`, `src/cluster/topology.cpp` |
+| Admission decision and owner-side authority re-check | `include/lavik/cluster/authority.h`, `src/cluster/authority.cpp` |
+| Final logical-mutation precondition and WATCH/publication seam | `include/lavik/storage/engine.h`, `src/storage/engine/write.cpp`, `src/storage/engine/hash_tree.cpp` |
+| Meta/Data protocol framing, resolved Authority Lease field and derived heartbeat cadence, independent failover observations, transition/activation projection, complete-object transfer, and bounded writer scheduling | `include/lavik/cluster/control_protocol.h`, `include/lavik/cluster/control_transport.h`, `src/cluster/control_protocol.cpp`, `src/cluster/control_transport.cpp` |
+| Node controller, full-state validation, controlled pause, provisional activation, finite authority, drain, follow-owner reconciliation, and typed replication adaptation | `include/lavik/cluster/node_control.h`, `include/lavik/cluster/meta_control.h`, `src/cluster/node_control.cpp`, `src/cluster/meta_control.cpp`, `include/lavik/replication.h`, `src/replication/replication.cpp` |
+| Meta discovery, outbound Data control session, stop-and-wait causal heartbeat cadence, and finite-lease expiry | `include/lavik/cluster/meta_client.h`, `src/cluster/meta_client.cpp` |
+| Process-wide runtime installation | `include/lavik/cluster/runtime.h`, `src/cluster/runtime.cpp` |
 | Cluster admission gate, controlled TRYAGAIN/PUBLISH handling, owner/final re-check plumbing, outcome finalization, EXEC/Lua/blocking integration, and mode-restricted command policies | `src/redis/command.cpp`, `src/redis/cluster_gate.h`, `src/redis/blocking_wait.cpp` |
 | CLUSTER subcommands and discovery replies | `src/redis/cluster_command.cpp`, `src/redis/cluster_command.h` |
-| Cluster wire error texts | `include/keylane/resp.h`, `src/redis/resp.cpp` |
-| Per-shard transaction validator hook | `include/keylane/tx/transaction.h`, `src/tx/transaction.cpp` |
+| Cluster wire error texts | `include/lavik/resp.h`, `src/redis/resp.cpp` |
+| Per-shard transaction validator hook | `include/lavik/tx/transaction.h`, `src/tx/transaction.cpp` |
 | Startup wiring, storage-ready publication, and Meta control client ownership | `src/redis/server.cpp` |
-| Cluster configuration directives and validation | `include/keylane/server.h`, `src/config.cpp`, `app/keylane.cpp` |
+| Cluster configuration directives and validation | `include/lavik/server.h`, `src/config.cpp`, `app/lavik.cpp` |
 | Decision matrix, parser, publication, finite-lease test installation, failover projection/activation, and concurrency unit tests | `tests/cluster_authority_test.cpp`, `tests/cluster/test_topology_installer.h`, `tests/cluster_topology_test.cpp`, `tests/cluster_command_test.cpp`, `tests/control_protocol_test.cpp`, `tests/meta_client_test.cpp`, `tests/meta_control_test.cpp`, `tests/node_control_test.cpp`, `tests/cluster/replication_manager_integration_test.cpp` |
 | Real-process Meta/Data discovery, committed failover, mTLS, initial creation, and shutdown gates | `tests/meta_integration/gate_data_control.py`, `tests/meta_integration/gate_cluster_create.py`, `tests/meta_integration/gate_failover.py` |

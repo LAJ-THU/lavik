@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-#include "keylane/storage/detail/grouped_sorted_rewrite.h"
+#include "lavik/storage/detail/grouped_sorted_rewrite.h"
 
 #include <bit>
 #include <cmath>
 #include <limits>
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 bool EqualEntry(const OrderedCollectionEntry& left,
@@ -161,4 +161,4 @@ absl::StatusOr<OrderedCollectionMutationPlan> PlanSortedSetRewrite(
   return plan;
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/encoding.h"
+#include "lavik/meta/encoding.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 
 absl::Status MetaFailStopError(std::string_view message) {
   // kInvalidArgument maps to MetaFailureClass::kFailStop; see the header.
@@ -159,4 +159,4 @@ absl::Status MetaReader::Finish() const {
   return absl::OkStatus();
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

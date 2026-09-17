@@ -16,23 +16,23 @@ limitations under the License.
 
 # Multi-Device Storage
 
-Keylane can use multiple local files or raw block devices for online data.
+Lavik can use multiple local files or raw block devices for online data.
 Object storage remains a backup/restore target rather than part of the active
 write path.
 
 ## Configuration
 
-Repeat `--data-file` once per existing regular file or block device. Keylane
+Repeat `--data-file` once per existing regular file or block device. Lavik
 does not create, extend, truncate, or preallocate storage paths during startup.
 Regular files should be provisioned explicitly by the deployment layer, for
 example with `fallocate`.
 
 ```text
-fallocate -l 1T /var/lib/keylane/data-0
-fallocate -l 2T /var/lib/keylane/data-1
-keylane \
-  --data-file /var/lib/keylane/data-0 \
-  --data-file /var/lib/keylane/data-1
+fallocate -l 1T /var/lib/lavik/data-0
+fallocate -l 2T /var/lib/lavik/data-1
+lavik \
+  --data-file /var/lib/lavik/data-0 \
+  --data-file /var/lib/lavik/data-1
 ```
 
 A fresh regular file must be an 8 MiB multiple. A fresh raw block device uses
@@ -53,27 +53,27 @@ the current catalog.
 
 Device addition is an offline operation. The safe sequence is:
 
-1. Stop Keylane cleanly. Do not change or clear any existing member.
-2. Provision new paths whose first 4 KiB Keylane label page is zero. Include
+1. Stop Lavik cleanly. Do not change or clear any existing member.
+2. Provision new paths whose first 4 KiB Lavik label page is zero. Include
    every existing member and every new path in the next launch.
-3. Start Keylane and wait for `expanded storage set from OLD to NEW devices`
+3. Start Lavik and wait for `expanded storage set from OLD to NEW devices`
    followed by normal recovery completion before sending traffic.
 4. Keep using the complete expanded path list on every later restart.
 
 For a new regular file, allocate its final size before startup:
 
 ```sh
-fallocate -l 1T /var/lib/keylane/data-1
+fallocate -l 1T /var/lib/lavik/data-1
 
-keylane \
-  --data-file /var/lib/keylane/data-0 \
-  --data-file /var/lib/keylane/data-1
+lavik \
+  --data-file /var/lib/lavik/data-0 \
+  --data-file /var/lib/lavik/data-1
 ```
 
 For a raw block device, first verify the exact device and that it is neither
 mounted nor in use. Prefer a genuinely empty or fully sanitized device. A
-device that has never held Keylane data already has a zero label. Clearing only
-the 4 KiB label of a former Keylane member makes it eligible as a new member,
+device that has never held Lavik data already has a zero label. Clearing only
+the 4 KiB label of a former Lavik member makes it eligible as a new member,
 but does not provide secure erasure or a crash-safe stale-media sanitization
 guarantee:
 
@@ -83,13 +83,13 @@ findmnt -rn -S /dev/nvme1n1
 sudo fuser -v /dev/nvme1n1
 sudo blkdiscard -z -f --offset 0 --length 4096 /dev/nvme1n1
 
-keylane \
+lavik \
   --data-file /dev/nvme0n1 \
   --data-file /dev/nvme1n1
 ```
 
-The label reset is destructive to the selected new member's old Keylane
-storage set. It must never target an existing member being preserved. Keylane
+The label reset is destructive to the selected new member's old Lavik
+storage set. It must never target an existing member being preserved. Lavik
 rewrites the new path's fixed metadata prefix, but it does not securely erase
 the data region or prove every crash window between block activation and first
 flush. Use fully sanitized media when stale-data isolation is required, and
@@ -118,7 +118,7 @@ A 64-bit block ID is encoded as:
 
 Changing `--data-file` argument order does not change identity. Startup requires
 the complete persisted set and rejects a missing, duplicate, or foreign device.
-While Keylane is stopped, empty devices may be appended to the complete
+While Lavik is stopped, empty devices may be appended to the complete
 existing set by adding more `--data-file` arguments. Existing data and device
 IDs are preserved; new device IDs are appended independently of argument order.
 
@@ -210,8 +210,8 @@ blocks keep their old writer provenance only for validation and are assigned a
 current runtime owner when necessary. New writes use the current worker/device
 affinity. No data rewrite is required when worker count changes.
 
-Device addition is an offline operation: stop Keylane, provision zero-label
-devices, and restart with the complete old set plus the new paths. Keylane
+Device addition is an offline operation: stop Lavik, provision zero-label
+devices, and restart with the complete old set plus the new paths. Lavik
 initializes each new device's fixed metadata, mirrors the current epochs and
 highest system-state root common to the old members, then publishes the larger
 member count. Normal recovery accepts only the highest valid system-state

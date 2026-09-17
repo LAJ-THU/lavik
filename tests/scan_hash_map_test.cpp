@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/storage/scan_hash_map.h"
+#include "lavik/storage/scan_hash_map.h"
 
 #include <gtest/gtest.h>
 
@@ -23,15 +23,15 @@
 #include <string>
 #include <unordered_map>
 
-#include "keylane/memory.h"
-#include "keylane/storage/format.h"
+#include "lavik/memory.h"
+#include "lavik/storage/format.h"
 
 namespace {
 
-using keylane::storage::ComputeDigest;
-using keylane::storage::Digest;
-using keylane::storage::ScanHashMap;
-using keylane::storage::ScanHashMapEntryArena;
+using lavik::storage::ComputeDigest;
+using lavik::storage::Digest;
+using lavik::storage::ScanHashMap;
+using lavik::storage::ScanHashMapEntryArena;
 
 #define ASSERT_CHECK(condition, message) ASSERT_TRUE(condition) << message
 
@@ -56,7 +56,7 @@ TEST(ScanHashMapTest, CandidatePredicateOnlySeesMatchingKeys) {
             entry);
   EXPECT_EQ(calls, 1);
   EXPECT_EQ(map.FindCandidateIf(ComputeDigest("present"), "present",
-                               [](const auto&) { return false; }),
+                                [](const auto&) { return false; }),
             nullptr);
   EXPECT_EQ(map.Find(ComputeDigest("present"), "present"), entry);
 }
@@ -74,10 +74,11 @@ TEST(ScanHashMapTest, CandidatePredicateFiltersExternalIdentityAndStopsEarly) {
   auto candidates = map.FindCandidates(digest, "external");
   ASSERT_EQ(candidates.size(), 32);
   unsigned calls = 0;
-  EXPECT_EQ(map.FindCandidateIf(digest, "external", [&](const auto&) {
-              ++calls;
-              return true;
-            }),
+  EXPECT_EQ(map.FindCandidateIf(digest, "external",
+                                [&](const auto&) {
+                                  ++calls;
+                                  return true;
+                                }),
             candidates.front());
   EXPECT_EQ(calls, 1);
   calls = 0;
@@ -91,10 +92,11 @@ TEST(ScanHashMapTest, CandidatePredicateFiltersExternalIdentityAndStopsEarly) {
             candidates[20]);
   EXPECT_EQ(calls, 21);
   calls = 0;
-  EXPECT_EQ(map.FindCandidateIf(digest, "external", [&](const auto&) {
-              ++calls;
-              return false;
-            }),
+  EXPECT_EQ(map.FindCandidateIf(digest, "external",
+                                [&](const auto&) {
+                                  ++calls;
+                                  return false;
+                                }),
             nullptr);
   EXPECT_EQ(calls, 32);
 }
@@ -116,20 +118,20 @@ TEST(ScanHashMapTest, CandidatePredicateContinuesIntoRehashTable) {
   ASSERT_NE(wanted, nullptr);
   ASSERT_TRUE(map.rehashing());
   std::vector<std::uint64_t> visited;
-  EXPECT_EQ(map.FindCandidateIf(Digest{63}, "external", [&](const auto& entry) {
-              visited.push_back(entry.value());
-              return entry.value() == 9999;
-            }),
+  EXPECT_EQ(map.FindCandidateIf(Digest{63}, "external",
+                                [&](const auto& entry) {
+                                  visited.push_back(entry.value());
+                                  return entry.value() == 9999;
+                                }),
             wanted);
   EXPECT_EQ(visited, (std::vector<std::uint64_t>{63, 9999}));
   ASSERT_TRUE(map.rehashing());
   for (unsigned i = 0; i < 512 && map.Maintain(); ++i) {
   }
   ASSERT_FALSE(map.rehashing());
-  EXPECT_EQ(map.FindCandidateIf(Digest{63}, "external",
-                               [](const auto& entry) {
-                                 return entry.value() == 9999;
-                               }),
+  EXPECT_EQ(map.FindCandidateIf(
+                Digest{63}, "external",
+                [](const auto& entry) { return entry.value() == 9999; }),
             wanted);
 }
 
@@ -268,12 +270,12 @@ TEST(ScanHashMapTest,
 
 TEST(ScanHashMapTest, AdmissionRejectionDefersShrinkButNotErase) {
   constexpr std::uint64_t kLimit = 4 * 1024 * 1024;
-  ASSERT_TRUE(keylane::InitMemoryLimit(kLimit, 1).ok());
-  keylane::BindMemoryAccountingShard(0);
+  ASSERT_TRUE(lavik::InitMemoryLimit(kLimit, 1).ok());
+  lavik::BindMemoryAccountingShard(0);
   struct RestoreLimit {
     ~RestoreLimit() {
-      (void)keylane::InitMemoryLimit(1024ULL * 1024 * 1024, 1);
-      keylane::BindMemoryAccountingShard(keylane::kMaxMemoryWorkers);
+      (void)lavik::InitMemoryLimit(1024ULL * 1024 * 1024, 1);
+      lavik::BindMemoryAccountingShard(lavik::kMaxMemoryWorkers);
     }
   } restore;
   // Cover both allocator-owned admission and the primary-index domain whose
@@ -286,9 +288,9 @@ TEST(ScanHashMapTest, AdmissionRejectionDefersShrinkButNotErase) {
     ASSERT_NE(map.InsertNew(ComputeDigest("keep"), "keep", 1), nullptr);
     auto* removed = map.InsertNew(ComputeDigest("remove"), "remove", 2);
     ASSERT_NE(removed, nullptr);
-    const auto memory = keylane::GetWorkerMemoryStats(0);
-    auto blocker = keylane::TryReserveMemory(memory.retained_limit_bytes_ -
-                                             memory.retained_bytes_);
+    const auto memory = lavik::GetWorkerMemoryStats(0);
+    auto blocker = lavik::TryReserveMemory(memory.retained_limit_bytes_ -
+                                           memory.retained_bytes_);
     ASSERT_TRUE(blocker.has_value());
     EXPECT_TRUE(map.Erase(removed));
     EXPECT_EQ(map.size(), 1);
@@ -305,12 +307,12 @@ TEST(ScanHashMapTest, AdmissionRejectionDefersShrinkButNotErase) {
 }
 
 TEST(ScanHashMapTest, ShrinkMergeRetriesOverflowAdmissionWithoutLosingEntries) {
-  ASSERT_TRUE(keylane::InitMemoryLimit(4 * 1024 * 1024, 1).ok());
-  keylane::BindMemoryAccountingShard(0);
+  ASSERT_TRUE(lavik::InitMemoryLimit(4 * 1024 * 1024, 1).ok());
+  lavik::BindMemoryAccountingShard(0);
   struct RestoreLimit {
     ~RestoreLimit() {
-      (void)keylane::InitMemoryLimit(1024ULL * 1024 * 1024, 1);
-      keylane::BindMemoryAccountingShard(keylane::kMaxMemoryWorkers);
+      (void)lavik::InitMemoryLimit(1024ULL * 1024 * 1024, 1);
+      lavik::BindMemoryAccountingShard(lavik::kMaxMemoryWorkers);
     }
   } restore;
   for (bool externally_admitted : {false, true}) {
@@ -326,9 +328,9 @@ TEST(ScanHashMapTest, ShrinkMergeRetriesOverflowAdmissionWithoutLosingEntries) {
     // the already full destination chain, so no source slot may be cleared
     // until the overflow allocation (including metadata) has been admitted.
     for (unsigned i = 0; i < 8; ++i) ASSERT_TRUE(map.Maintain());
-    const auto memory = keylane::GetWorkerMemoryStats(0);
-    auto blocker = keylane::TryReserveMemory(memory.retained_limit_bytes_ -
-                                             memory.retained_bytes_);
+    const auto memory = lavik::GetWorkerMemoryStats(0);
+    auto blocker = lavik::TryReserveMemory(memory.retained_limit_bytes_ -
+                                           memory.retained_bytes_);
     ASSERT_TRUE(blocker.has_value());
     EXPECT_FALSE(map.Maintain());
     EXPECT_TRUE(map.rehashing());
@@ -475,19 +477,19 @@ TEST(ScanHashMapTest, UnrepresentablePreallocationLeavesMapEmpty) {
 }
 
 TEST(ScanHashMapTest, RetainedArenaAccountingFollowsStorageLifetime) {
-  ASSERT_TRUE(keylane::InitMemoryLimit(64 * 1024 * 1024, 1).ok());
-  keylane::BindMemoryAccountingShard(0);
-  const std::int64_t before = keylane::WorkerMemoryAccountingBytes(0);
+  ASSERT_TRUE(lavik::InitMemoryLimit(64 * 1024 * 1024, 1).ok());
+  lavik::BindMemoryAccountingShard(0);
+  const std::int64_t before = lavik::WorkerMemoryAccountingBytes(0);
 
   {
     auto arena = std::make_shared<ScanHashMapEntryArena>();
     ScanHashMap<std::uint64_t> map(arena);
     map.InsertNew(ComputeDigest("retained"), "retained", 1);
-    EXPECT_GT(keylane::WorkerMemoryAccountingBytes(0), before);
+    EXPECT_GT(lavik::WorkerMemoryAccountingBytes(0), before);
   }
 
-  EXPECT_EQ(keylane::WorkerMemoryAccountingBytes(0), before);
-  keylane::BindMemoryAccountingShard(keylane::kMaxMemoryWorkers);
+  EXPECT_EQ(lavik::WorkerMemoryAccountingBytes(0), before);
+  lavik::BindMemoryAccountingShard(lavik::kMaxMemoryWorkers);
 }
 
 TEST(ScanHashMapTest, AccountsForOverflowPoolVectorGrowth) {
@@ -538,8 +540,8 @@ TEST(ScanHashMapTest, AmortizesAlignmentAcrossSixteenLogicalPages) {
 
 TEST(ScanHashMapTest, RehashDefersOverflowAllocationWhenAdmissionIsFull) {
   constexpr std::size_t kLimit = 4 * 1024 * 1024;
-  ASSERT_TRUE(keylane::InitMemoryLimit(kLimit, 1).ok());
-  keylane::BindMemoryAccountingShard(0);
+  ASSERT_TRUE(lavik::InitMemoryLimit(kLimit, 1).ok());
+  lavik::BindMemoryAccountingShard(0);
 
   std::vector<std::pair<Digest, std::string>> colliding;
   for (std::uint64_t candidate = 0; colliding.size() < 19; ++candidate) {
@@ -563,11 +565,11 @@ TEST(ScanHashMapTest, RehashDefersOverflowAllocationWhenAdmissionIsFull) {
   }
   ASSERT_TRUE(map.rehashing());
 
-  keylane::RefreshMemoryStats();
-  const std::uint64_t used = keylane::GetMemoryStats().used_bytes_;
+  lavik::RefreshMemoryStats();
+  const std::uint64_t used = lavik::GetMemoryStats().used_bytes_;
   const std::uint64_t steady_limit = kLimit - kLimit / 10;
   ASSERT_LT(used, steady_limit);
-  auto blocker = keylane::TryReserveMemory(steady_limit - used);
+  auto blocker = lavik::TryReserveMemory(steady_limit - used);
   ASSERT_TRUE(blocker.has_value());
   EXPECT_NE(map.Find(colliding[0].first, colliding[0].second), nullptr);
   EXPECT_TRUE(map.rehashing());
@@ -582,8 +584,8 @@ TEST(ScanHashMapTest, RehashDefersOverflowAllocationWhenAdmissionIsFull) {
   // This test deliberately fills a small global admission limit. Restore a
   // normal limit before the following allocator-backed tests run in the same
   // process; rebinding the thread alone does not reset process policy.
-  ASSERT_TRUE(keylane::InitMemoryLimit(1024ULL * 1024 * 1024, 1).ok());
-  keylane::BindMemoryAccountingShard(keylane::kMaxMemoryWorkers);
+  ASSERT_TRUE(lavik::InitMemoryLimit(1024ULL * 1024 * 1024, 1).ok());
+  lavik::BindMemoryAccountingShard(lavik::kMaxMemoryWorkers);
 }
 
 TEST(ScanHashMapTest, InsertScanMoveDetachAndErase) {

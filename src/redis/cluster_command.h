@@ -24,11 +24,11 @@
 // gets Redis's exact unknown-subcommand error. ASK/ASKING and the gossip
 // management subcommands are deliberately out of scope for v1.
 
-#include "keylane/command.h"
+#include "lavik/command.h"
 
-namespace keylane {
+namespace lavik {
 
 Task<CommandReply> ExecuteClusterModeCommand(const CommandRequest& request,
                                              ReplyBuilder& reply_builder);
 
-}  // namespace keylane
+}  // namespace lavik

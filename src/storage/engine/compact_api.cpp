@@ -15,11 +15,11 @@
  */
 
 #include "impl.h"
-#include "keylane/storage/detail/grouped_scratch.h"
-#include "keylane/storage/detail/grouped_sorted_rewrite.h"
-#include "keylane/storage/detail/ordered_compact_codec.h"
+#include "lavik/storage/detail/grouped_scratch.h"
+#include "lavik/storage/detail/grouped_sorted_rewrite.h"
+#include "lavik/storage/detail/ordered_compact_codec.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 absl::StatusOr<OrderedCollectionMutationPlan> PrepareSortedSetGroups(
@@ -58,18 +58,16 @@ Task<absl::Status> StorageEngine::Impl::ExecuteCompact(
   auto key_lock = co_await tx::CurrentTxShard().AcquireKey(
       db_id, tx::FingerprintOf(digest),
       read_only ? tx::LockMode::kShared : tx::LockMode::kExclusive);
-  co_return co_await ExecuteCompactLocked(db_id, key, digest, value_type,
-                                          read_only, callback, nullptr, now_ms,
-                                          replication, false,
-                                          mutation_precondition);
+  co_return co_await ExecuteCompactLocked(
+      db_id, key, digest, value_type, read_only, callback, nullptr, now_ms,
+      replication, false, mutation_precondition);
 }
 
 Task<absl::Status> StorageEngine::Impl::ExecuteCompactLocked(
     std::uint8_t db_id, std::string_view key, const Digest& digest,
     ValueType value_type, bool read_only, const CompactValueCallback& callback,
     TxShardWrites* tx, std::uint64_t now_ms,
-    ReplicationCommandAppend* replication,
-    bool prepare_unlocked,
+    ReplicationCommandAppend* replication, bool prepare_unlocked,
     const MutationPrecondition* mutation_precondition) {
   assert(db_id < kLogicalDatabaseCount);
   if (value_type != ValueType::kString && value_type != ValueType::kSortedSet &&
@@ -195,11 +193,10 @@ Task<absl::Status> StorageEngine::Impl::ExecuteCompactLocked(
       found = nullptr;
       unlock.Unlock();
     }
-    KEYLANE_FAULT_INJECT(if (unlocked_create) {
-      KEYLANE_FAULT_BAD_ALLOC("KEYLANE_FAIL_COLLECTION_CREATE_PREPARE_KEY",
-                              key);
+    LAVIK_FAULT_INJECT(if (unlocked_create) {
+      LAVIK_FAULT_BAD_ALLOC("LAVIK_FAIL_COLLECTION_CREATE_PREPARE_KEY", key);
     });
-    KEYLANE_FAULT_INJECT(if (unlocked_compact_write) {
+    LAVIK_FAULT_INJECT(if (unlocked_compact_write) {
       auto paused = co_await PauseCompactWriteForTest(*store.worker_, key);
       if (!paused.ok()) co_return paused;
     });
@@ -245,7 +242,7 @@ Task<absl::Status> StorageEngine::Impl::ExecuteCompactLocked(
           PrepareSortedSetGroups(update->encoded_, update->logical_size_);
       if (!plan.ok()) co_return plan.status();
       created_groups.emplace(std::move(*plan));
-      KEYLANE_FAULT_INJECT({
+      LAVIK_FAULT_INJECT({
         const auto paused = co_await PauseGroupedWriteForTest(
             *store.worker_, key, "create-members");
         if (!paused.ok()) co_return paused;
@@ -256,7 +253,7 @@ Task<absl::Status> StorageEngine::Impl::ExecuteCompactLocked(
       created_members = std::move(*members);
     }
     if (unlocked_compact_write || unlocked_create) {
-      KEYLANE_FAULT_INJECT(if (unlocked_create) {
+      LAVIK_FAULT_INJECT(if (unlocked_create) {
         const auto paused =
             co_await PauseGroupedWriteForTest(*store.worker_, key, "create");
         if (!paused.ok()) co_return paused;
@@ -388,4 +385,4 @@ Task<absl::Status> StorageEngine::Impl::ExecuteCompactLocked(
   }
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

@@ -25,29 +25,29 @@
 #include <vector>
 
 #include "gtest/gtest.h"
-#include "keylane/meta/candidate_plan.h"
+#include "lavik/meta/candidate_plan.h"
 
 namespace {
 
-using keylane::meta::CandidateCompatibilityDomain;
-using keylane::meta::CandidatePlanDisposition;
-using keylane::meta::CandidatePlanFor;
-using keylane::meta::CandidatePlanForDomain;
-using keylane::meta::CandidateSelectionBasis;
-using keylane::meta::MetaAssignmentId;
-using keylane::meta::MetaBootIncarnation;
-using keylane::meta::MetaCandidateProgressObs;
-using keylane::meta::MetaCommittedFacts;
-using keylane::meta::MetaFailoverCandidate;
-using keylane::meta::MetaFailoverCandidateAction;
-using keylane::meta::MetaHash256;
-using keylane::meta::MetaNodeHealthObs;
-using keylane::meta::MetaObservation;
-using keylane::meta::MetaObservationIdentity;
-using keylane::meta::MetaObservationStore;
-using keylane::meta::MetaOperationId;
-using keylane::meta::MetaReplicationHistoryId;
-using keylane::meta::UncontrolledCandidatePlanFor;
+using lavik::meta::CandidateCompatibilityDomain;
+using lavik::meta::CandidatePlanDisposition;
+using lavik::meta::CandidatePlanFor;
+using lavik::meta::CandidatePlanForDomain;
+using lavik::meta::CandidateSelectionBasis;
+using lavik::meta::MetaAssignmentId;
+using lavik::meta::MetaBootIncarnation;
+using lavik::meta::MetaCandidateProgressObs;
+using lavik::meta::MetaCommittedFacts;
+using lavik::meta::MetaFailoverCandidate;
+using lavik::meta::MetaFailoverCandidateAction;
+using lavik::meta::MetaHash256;
+using lavik::meta::MetaNodeHealthObs;
+using lavik::meta::MetaObservation;
+using lavik::meta::MetaObservationIdentity;
+using lavik::meta::MetaObservationStore;
+using lavik::meta::MetaOperationId;
+using lavik::meta::MetaReplicationHistoryId;
+using lavik::meta::UncontrolledCandidatePlanFor;
 
 template <std::size_t N>
 std::array<std::uint8_t, N> Bytes(std::uint8_t value) {

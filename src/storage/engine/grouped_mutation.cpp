@@ -18,7 +18,7 @@
 
 #include "impl.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 bool SameLogicalView(const GroupedHashObject::Handle& before,
@@ -326,10 +326,10 @@ Task<absl::Status> StorageEngine::Impl::CommitGroupedHashMutationLocked(
     // Fail before the selected auxiliary begins. Already staged earlier
     // auxiliaries exercise command-local batch abort inside an outer EXEC.
     // The key is explicit so unrelated client/maintenance writes are untouched.
-    KEYLANE_FAULT_INJECT(
-        if (KEYLANE_FAULT_MATCHES_NTH("KEYLANE_FAIL_GROUP_AUX_KEY", key,
-                                      "KEYLANE_FAIL_GROUP_AUX_NTH",
-                                      written.size() + 1)) {
+    LAVIK_FAULT_INJECT(
+        if (LAVIK_FAULT_MATCHES_NTH("LAVIK_FAIL_GROUP_AUX_KEY", key,
+                                    "LAVIK_FAIL_GROUP_AUX_NTH",
+                                    written.size() + 1)) {
           const auto abandoned = co_await abandon();
           if (!abandoned.ok()) co_return abandoned;
           co_return absl::ResourceExhaustedError(
@@ -408,7 +408,7 @@ Task<absl::Status> StorageEngine::Impl::CommitGroupedHashMutationLocked(
       .changed_groups_ = written_ids,
       .root_incarnation_ = plan->root_.incarnation_};
   GroupMutationWrite mutation{.sequence_ = sequence, .root_ = &root_write};
-  KEYLANE_MAYBE_CRASH_AT("group-batch-before-root");
+  LAVIK_MAYBE_CRASH_AT("group-batch-before-root");
   const auto appended = co_await AppendLocked(
       store, partition, db_id, key, digest, *root_payload, RecordKind::kValue,
       value_type, expire_at_ms, tx, field_count, nullptr, nullptr, replication,
@@ -424,7 +424,7 @@ Task<absl::Status> StorageEngine::Impl::CommitGroupedHashMutationLocked(
     const auto abandoned = co_await abandon();
     co_return abandoned.ok() ? appended : abandoned;
   }
-  KEYLANE_MAYBE_CRASH_AT("group-root-staged-before-batch-decision");
+  LAVIK_MAYBE_CRASH_AT("group-root-staged-before-batch-decision");
   if (tx->grouped_ingest_batch_ != nullptr) co_return absl::OkStatus();
   // WriteRecord's staged-root guard ends when it returns. Publication is
   // still incomplete until the batch/queue owns its decision: a fence-vector
@@ -443,14 +443,14 @@ Task<absl::Status> StorageEngine::Impl::CommitGroupedHashMutationLocked(
   bool unlocked_for_handoff = false;
   absl::Status handoff_status;
   try {
-    KEYLANE_FAULT_BAD_ALLOC("KEYLANE_FAIL_GROUP_HANDOFF_KEY", key);
+    LAVIK_FAULT_BAD_ALLOC("LAVIK_FAIL_GROUP_HANDOFF_KEY", key);
     if (outer_transaction) {
       // Waiting for this decision before returning the command makes the outer
       // coordinator's later commit causally depend on the complete auxiliary
       // batch. The normal outer decision remains the root's publication gate.
       batch.fences_ = tx->fences_;
       const bool inject_batch_failure =
-          KEYLANE_FAULT_MATCHES("KEYLANE_FAIL_GROUP_BATCH_KEY", key);
+          LAVIK_FAULT_MATCHES("LAVIK_FAIL_GROUP_BATCH_KEY", key);
       store.store_state_mutex_.Unlock(*store.worker_);
       unlocked_for_handoff = true;
       absl::Status committed;
@@ -479,7 +479,7 @@ Task<absl::Status> StorageEngine::Impl::CommitGroupedHashMutationLocked(
         store.write_failed_ = true;
         co_return committed;
       }
-      KEYLANE_MAYBE_CRASH_AT("group-batch-durable-before-outer-decision");
+      LAVIK_MAYBE_CRASH_AT("group-batch-durable-before-outer-decision");
     } else {
       PublishCommittedFullSyncEffects(&standalone);
       std::vector<TxShardWrites> receipts;
@@ -507,4 +507,4 @@ Task<absl::Status> StorageEngine::Impl::CommitGroupedHashMutationLocked(
   co_return absl::OkStatus();
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

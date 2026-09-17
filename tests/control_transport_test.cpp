@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/cluster/control_transport.h"
+#include "lavik/cluster/control_transport.h"
 
 #include <algorithm>
 #include <chrono>
@@ -34,7 +34,7 @@
 #include "bycorf/runtime/worker.h"
 #include "gtest/gtest.h"
 
-namespace keylane::cluster::control {
+namespace lavik::cluster::control {
 
 class ControlDeadlineWatchdogTestPeer {
  public:
@@ -44,11 +44,11 @@ class ControlDeadlineWatchdogTestPeer {
   }
 };
 
-}  // namespace keylane::cluster::control
+}  // namespace lavik::cluster::control
 
 namespace {
 
-namespace control = keylane::cluster::control;
+namespace control = lavik::cluster::control;
 using namespace std::chrono_literals;
 
 control::WireMessage Hello(char node_id_digit) {

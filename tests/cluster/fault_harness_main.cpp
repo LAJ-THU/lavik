@@ -30,7 +30,7 @@
 #include "tests/cluster/fault_harness.h"
 #include "tests/cluster/reference_model.h"
 
-namespace keylane::test::cluster {
+namespace lavik::test::cluster {
 namespace {
 
 struct Options {
@@ -52,7 +52,7 @@ bool ParseInteger(std::string_view text, Integer* output) {
 }
 
 void Usage(std::ostream& output) {
-  output << "usage: keylane_cluster_fault [options]\n"
+  output << "usage: lavik_cluster_fault [options]\n"
             "  --scenario good|dual-authority|stale-evidence|history-gap|"
             "partial-activation|stale-directive|catalog-ack-before-durable|"
             "fullsync-retains-old-state|stale-catalog-promotion\n"
@@ -176,7 +176,7 @@ int RunSoak(const Options& options) {
       const std::filesystem::path directory =
           options.trace_out_.value_or("cluster-fault-artifacts");
       const std::filesystem::path trace_path =
-          directory / ("soak-failure-" + std::to_string(iteration) + ".kft");
+          directory / ("soak-failure-" + std::to_string(iteration) + ".lft");
       const absl::Status written =
           WriteTraceAtomically(result.trace_, trace_path);
       std::cerr << "soak failed at iteration " << iteration
@@ -190,10 +190,10 @@ int RunSoak(const Options& options) {
 }
 
 }  // namespace
-}  // namespace keylane::test::cluster
+}  // namespace lavik::test::cluster
 
 int main(int argc, char** argv) {
-  using namespace keylane::test::cluster;
+  using namespace lavik::test::cluster;
   const std::optional<Options> parsed = ParseOptions(argc, argv);
   if (!parsed.has_value()) {
     return argc > 1 && std::string_view(argv[1]) == "--help" ? 0 : 2;

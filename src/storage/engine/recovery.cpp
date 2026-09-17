@@ -18,7 +18,7 @@
 
 #include "impl.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 Task<absl::StatusOr<std::string>>
 StorageEngine::Impl::LoadExternalKeyForRecovery(WorkerStore& store,
@@ -1414,4 +1414,4 @@ Task<absl::Status> StorageEngine::Impl::ValidateRecoveredGroups(
   co_return absl::OkStatus();
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

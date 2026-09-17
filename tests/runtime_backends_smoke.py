@@ -114,7 +114,7 @@ def main():
     ap = argparse.ArgumentParser(); ap.add_argument('binary', type=Path)
     ap.add_argument('--dpdk', action='store_true'); ap.add_argument('--output', type=Path)
     a = ap.parse_args(); binary = a.binary.resolve()
-    with tempfile.TemporaryDirectory(prefix='keylane-runtime-backends-') as tmp:
+    with tempfile.TemporaryDirectory(prefix='lavik-runtime-backends-') as tmp:
         directory = a.output or Path(tmp); directory.mkdir(parents=True, exist_ok=True)
         data = Path(tmp) / 'data'; data.touch(); data.open('r+b').truncate(512 * 1024 * 1024)
         for args in [ ['--network=invalid'], ['--storage=invalid'],

@@ -26,19 +26,19 @@
 
 namespace {
 using namespace std::chrono_literals;
-using keylane::test::ChildProcess;
-using keylane::test::Connect;
-using keylane::test::CreateDataFile;
-using keylane::test::PortReservation;
-using keylane::test::RespClient;
-using keylane::test::TempDirectory;
-using keylane::test::WaitUntil;
+using lavik::test::ChildProcess;
+using lavik::test::Connect;
+using lavik::test::CreateDataFile;
+using lavik::test::PortReservation;
+using lavik::test::RespClient;
+using lavik::test::TempDirectory;
+using lavik::test::WaitUntil;
 
-std::string g_keylane_binary;
+std::string g_lavik_binary;
 
 TEST(PopulationIntegrationTest,
      ClusterProcessStartsFailClosedAndRejectsStandaloneRoleControl) {
-  ASSERT_FALSE(g_keylane_binary.empty());
+  ASSERT_FALSE(g_lavik_binary.empty());
   TempDirectory directory("cluster-population");
   const std::filesystem::path data = directory.path() / "node.data";
   const std::filesystem::path log = directory.path() / "node.log";
@@ -46,7 +46,7 @@ TEST(PopulationIntegrationTest,
   PortReservation reservation;
   const std::uint16_t port = reservation.ReleaseForSpawn();
   ChildProcess process(
-      {g_keylane_binary, "--cluster-enabled", "--port", std::to_string(port),
+      {g_lavik_binary, "--cluster-enabled", "--port", std::to_string(port),
        "--cluster-node-id", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
        "--cluster-meta-seed", "127.0.0.1:1", "--threads", "1",
        "--no-pin-workers", "--logtostderr", "--recv-buffers-per-worker", "0",
@@ -59,9 +59,9 @@ TEST(PopulationIntegrationTest,
   });
   RespClient client = Connect(port);
   EXPECT_EQ(client.Command({"GET", "unassigned"}),
-            "-LOADING Keylane is loading the dataset from the primary");
+            "-LOADING Lavik is loading the dataset from the primary");
   EXPECT_EQ(client.Command({"SET", "unassigned", "value"}),
-            "-LOADING Keylane is loading the dataset from the primary");
+            "-LOADING Lavik is loading the dataset from the primary");
   EXPECT_EQ(client.Command({"REPLICAOF", "NO", "ONE"}),
             "-ERR REPLICAOF not allowed in cluster mode.");
   process.Stop(SIGINT);
@@ -73,7 +73,7 @@ int main(int argc, char** argv) {
   if (argc != 2) {
     return 2;
   }
-  g_keylane_binary = argv[1];
+  g_lavik_binary = argv[1];
   testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

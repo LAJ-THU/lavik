@@ -18,7 +18,7 @@
 
 #include <gtest/gtest.h>
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 TEST(DeviceAffinityTest, RejectsInsufficientQpairCapacity) {
@@ -77,4 +77,4 @@ TEST(DeviceAffinityTest, AssignsEveryControllerWhenControllersExceedWorkers) {
 }
 
 }  // namespace
-}  // namespace keylane::storage
+}  // namespace lavik::storage

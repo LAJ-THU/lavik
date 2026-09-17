@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-#include "keylane/storage/detail/record_payload_cursor.h"
+#include "lavik/storage/detail/record_payload_cursor.h"
 
 #include <array>
 #include <vector>
 
 #include "gtest/gtest.h"
-#include "keylane/storage/detail/grouped_hash.h"
+#include "lavik/storage/detail/grouped_hash.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 struct Encoder {
@@ -113,4 +113,4 @@ TEST(RecordPayloadCursorTest, ConsumesBorrowedHashFramingAcrossExtentBoundary) {
 }
 
 }  // namespace
-}  // namespace keylane::storage
+}  // namespace lavik::storage

@@ -22,7 +22,7 @@
 
 #include "gtest/gtest.h"
 
-namespace keylane {
+namespace lavik {
 namespace {
 
 TEST(RequestGateTest, CloseRejectsNewEntriesAndWaitsForEveryWorker) {
@@ -90,4 +90,4 @@ TEST(RequestGateTest, ConcurrentCloseCannotLoseAnAdmittedEntry) {
 }
 
 }  // namespace
-}  // namespace keylane
+}  // namespace lavik

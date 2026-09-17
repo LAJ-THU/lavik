@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/control_projector.h"
+#include "lavik/meta/control_projector.h"
 
 #include <algorithm>
 #include <array>
@@ -33,17 +33,17 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
-#include "keylane/cluster/control_protocol.h"
-#include "keylane/meta/commands.h"
-#include "keylane/meta/policy_store.h"
-#include "keylane/meta/population_manifest_store.h"
-#include "keylane/meta/state_apply.h"
-#include "keylane/numeric_endpoint.h"
+#include "lavik/cluster/control_protocol.h"
+#include "lavik/meta/commands.h"
+#include "lavik/meta/policy_store.h"
+#include "lavik/meta/population_manifest_store.h"
+#include "lavik/meta/state_apply.h"
+#include "lavik/numeric_endpoint.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
-namespace control = keylane::cluster::control;
+namespace control = lavik::cluster::control;
 
 struct HostPort {
   std::string host;
@@ -75,7 +75,7 @@ absl::Status Inconsistent(std::string message) {
 
 absl::StatusOr<HostPort> ParseNumericHostPort(std::string_view encoded,
                                               std::string_view field) {
-  auto endpoint = keylane::ParseNumericEndpoint(encoded);
+  auto endpoint = lavik::ParseNumericEndpoint(encoded);
   if (!endpoint.has_value()) {
     return Invalid(absl::StrCat(
         field, " must be numeric IPv4:port or bracketed [IPv6]:port"));
@@ -699,4 +699,4 @@ std::size_t NodeControlBatchRetainedBytes(
   return total;
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

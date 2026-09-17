@@ -16,9 +16,9 @@
 
 #pragma once
 
-#include "keylane/command.h"
+#include "lavik/command.h"
 
-namespace keylane {
+namespace lavik {
 
 class ReplyBuilder;
 
@@ -35,4 +35,4 @@ Task<CommandReply> ExecuteSetCommandLocked(const CommandRequest& request,
 Task<CommandReply> ExecuteSetMultiKey(const CommandRequest& request,
                                       ReplyBuilder& reply_builder);
 
-}  // namespace keylane
+}  // namespace lavik

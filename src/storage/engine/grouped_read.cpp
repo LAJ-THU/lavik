@@ -15,10 +15,10 @@
  */
 
 #include "impl.h"
-#include "keylane/storage/detail/grouped_scratch.h"
-#include "keylane/storage/detail/ordered_compact_codec.h"
+#include "lavik/storage/detail/grouped_scratch.h"
+#include "lavik/storage/detail/ordered_compact_codec.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 Task<absl::StatusOr<LoadedHashGroup>>
 StorageEngine::Impl::LoadHashGroupSnapshot(
@@ -256,4 +256,4 @@ StorageEngine::Impl::LoadGroupedValue(WorkerStore& store,
   co_return LoadedValue{std::move(*buffer), offset, encoded->size()};
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/replication.h"
+#include "lavik/replication.h"
 
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -63,24 +63,24 @@
 #include "bycorf/runtime/cross_core.h"
 #include "bycorf/runtime/sync.h"
 #include "bycorf/runtime/worker.h"
-#include "keylane/cluster/control_protocol.h"
-#include "keylane/cluster/lease_clock.h"
-#include "keylane/command.h"
-#include "keylane/command_table.h"
-#include "keylane/fault_injection.h"
-#include "keylane/memory.h"
-#include "keylane/metrics.h"
-#include "keylane/rdb.h"
-#include "keylane/rdb_collection.h"
-#include "keylane/replication_command.h"
-#include "keylane/replication_group.h"
-#include "keylane/resp.h"
-#include "keylane/storage/engine.h"
+#include "lavik/cluster/control_protocol.h"
+#include "lavik/cluster/lease_clock.h"
+#include "lavik/command.h"
+#include "lavik/command_table.h"
+#include "lavik/fault_injection.h"
+#include "lavik/memory.h"
+#include "lavik/metrics.h"
+#include "lavik/rdb.h"
+#include "lavik/rdb_collection.h"
+#include "lavik/replication_command.h"
+#include "lavik/replication_group.h"
+#include "lavik/resp.h"
+#include "lavik/storage/engine.h"
 #include "replica_applied_frontier.h"
 #include "source_authorization.h"
 #include "spdlog/spdlog.h"
 
-namespace keylane {
+namespace lavik {
 
 namespace detail {
 
@@ -173,7 +173,7 @@ using storage::SnapshotRecord;
 
 constexpr std::string_view kProtocolVersion = "1";
 constexpr auto kHandshakeTimeout = std::chrono::seconds(10);
-constexpr std::string_view kLeaseAdmissionSuspendedReply = "-KLLEASESUSPENDED";
+constexpr std::string_view kLeaseAdmissionSuspendedReply = "-LVLEASESUSPENDED";
 constexpr std::string_view kLeaseAdmissionSuspendedStatus =
     "cluster source admission is suspended until lease renewal";
 constexpr unsigned kLeaseAdmissionPreMutationRetries = 3;
@@ -195,7 +195,7 @@ std::uint64_t SecondsSince(std::uint64_t started_nanos) noexcept {
   return now > started_nanos ? (now - started_nanos) / 1'000'000'000 : 0;
 }
 
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
 // A configured path turns the corresponding promotion stall into a
 // deterministic coroutine barrier. Tests observe the created file, then
 // supersede the action through the public reconciliation API. The runner
@@ -220,7 +220,7 @@ absl::Status SignalFaultBarrier(const char* variable,
 Task<absl::Status> WaitAtSourceAdmissionFaultBarrier(
     const std::atomic<bool>& shutdown_requested) {
   constexpr const char* kBarrierVariable =
-      "KEYLANE_REPLICATION_SOURCE_ADMISSION_BARRIER_PATH";
+      "LAVIK_REPLICATION_SOURCE_ADMISSION_BARRIER_PATH";
   const char* path = std::getenv(kBarrierVariable);
   if (path == nullptr || *path == '\0') co_return absl::OkStatus();
   absl::Status signalled = SignalFaultBarrier(
@@ -267,7 +267,7 @@ constexpr std::size_t kFullSyncInterleaveCommands = kFullSyncSchedulingItems;
 // issuing one metadata durability round-trip for every empty partition.
 constexpr std::size_t kFullSyncResetBatch = 64;
 constexpr std::size_t kMaxDataFrame = 12U * 1024U * 1024U;
-constexpr std::uint32_t kDataFrameMagic = 0x31464c4b;  // "KLF1" in LE.
+constexpr std::uint32_t kDataFrameMagic = 0x3146564c;  // "LVF1" in LE.
 constexpr std::uint8_t kDataFrameVersion = 1;
 constexpr std::size_t kDataFrameHeaderBytes = 16;
 constexpr std::size_t kBacklogBatchBytes = storage::kReplicationTransferBytes;
@@ -603,10 +603,9 @@ Task<absl::Status> WriteDataFrame(TcpStream& stream, DataFrameKind kind,
   if (!reserved.ok()) co_return reserved;
   absl::Status appended = AppendDataFrame(&frame, kind, payload);
   if (!appended.ok()) co_return appended;
-  KEYLANE_FAULT_INJECT(if (kind == DataFrameKind::kRecords &&
-                           !payload.empty()) {
+  LAVIK_FAULT_INJECT(if (kind == DataFrameKind::kRecords && !payload.empty()) {
     const char* corrupt_record =
-        std::getenv("KEYLANE_REPLICATION_CORRUPT_FULLSYNC_RECORD_FRAME_ONCE");
+        std::getenv("LAVIK_REPLICATION_CORRUPT_FULLSYNC_RECORD_FRAME_ONCE");
     static std::atomic<bool> corrupt_record_used{false};
     if (corrupt_record != nullptr && std::string_view(corrupt_record) == "1" &&
         !corrupt_record_used.exchange(true, std::memory_order_acq_rel)) {
@@ -1017,7 +1016,7 @@ Task<absl::StatusOr<std::string>> ReceiveRedisRdb(TcpStream& stream) {
   }
 
   std::array<char, 64> path_template{};
-  constexpr std::string_view prefix = "/tmp/keylane-redis-rdb-XXXXXX";
+  constexpr std::string_view prefix = "/tmp/lavik-redis-rdb-XXXXXX";
   std::copy(prefix.begin(), prefix.end(), path_template.begin());
   const int fd = ::mkstemp(path_template.data());
   if (fd < 0) {
@@ -1557,13 +1556,13 @@ absl::StatusOr<std::string> EncodeRedisExportCommand(
     children.push_back(Child{.db_ = command.db_id_, .args_ = command.args_});
   }
 
-  // Redis does not know Keylane extensions. Export a successful whole-Hash
+  // Redis does not know Lavik extensions. Export a successful whole-Hash
   // replacement as DEL + HSET inside the enclosing atomic envelope. Source
   // append/transaction settlement already supplies the final absolute expiry
   // effect, so this neither reads old fields nor extends the key's lifetime.
   for (const auto& child : children) {
     if (!child.args_.empty() &&
-        EqualCaseInsensitive(child.args_[0], "KEYLANE.HREPLACE")) {
+        EqualCaseInsensitive(child.args_[0], "LAVIK.HREPLACE")) {
       if (child.args_.size() < 4 || child.args_.size() % 2 != 0)
         return absl::InvalidArgumentError("malformed Hash replacement export");
       transactional = true;
@@ -1587,7 +1586,7 @@ absl::StatusOr<std::string> EncodeRedisExportCommand(
       current_db = child.db_;
     }
     if (!child.args_.empty() &&
-        EqualCaseInsensitive(child.args_[0], "KEYLANE.HREPLACE")) {
+        EqualCaseInsensitive(child.args_[0], "LAVIK.HREPLACE")) {
       output +=
           EncodeRespCommand(std::vector<std::string>{"DEL", child.args_[1]});
       child.args_[0] = "HSET";
@@ -2657,7 +2656,7 @@ struct ReplicaSession {
   std::shared_ptr<ClusterRebuildContext> cluster_rebuild_;
   std::shared_ptr<ClusterFollowOwnerContext> cluster_follow_;
   std::shared_ptr<detail::ReplicaAppliedFrontier> applied_frontier_;
-  // No flow may consume data until every KLFLOW response selected the same
+  // No flow may consume data until every LVFLOW response selected the same
   // session mode. FULL then has a second barrier: flow zero drains old client
   // work and maintenance before any flow can issue a destructive reset.
   std::unique_ptr<bycorf::CoroutineBarrier> flow_modes_selected_;
@@ -3361,7 +3360,7 @@ struct MasterSession {
   bycorf::CoroutineBarrier snapshot_capture_stopped_;
   std::atomic<unsigned> snapshot_scans_complete_{0};
   std::atomic<unsigned> connected_flows_{0};
-  // Set only by the owning KLPSYNC coroutine after it has removed the session
+  // Set only by the owning LVPSYNC coroutine after it has removed the session
   // from the registry. Revocation can therefore join a specific non-preserved
   // control instead of subtracting an unstable count of preserved controls.
   std::atomic<bool> control_active_{true};
@@ -3436,7 +3435,7 @@ class ReplicationManager::ReplicationGroup {
         redis_export_backpressure_(options.redis_export_backpressure_) {
     if (cluster_enabled_) {
       cluster_group_ =
-          std::make_unique<keylane::ReplicationGroup>(node_id_, boot_id_);
+          std::make_unique<lavik::ReplicationGroup>(node_id_, boot_id_);
     }
     const auto boot_bytes = std::span<const std::byte>(
         reinterpret_cast<const std::byte*>(boot_id_.data()), boot_id_.size());
@@ -3625,7 +3624,7 @@ class ReplicationManager::ReplicationGroup {
       if (superseding) {
         // Status and serving become invalid synchronously. The strong source
         // retirement below clears capabilities under master_mutex_ before it
-        // joins old flow work, so KLPSYNC classification and publication see
+        // joins old flow work, so LVPSYNC classification and publication see
         // one ordered transition rather than racing a worker-local clear.
         previous_context->ready_token_.reset();
         previous_context->state_.store(ReplicationGroupState::kNotReady,
@@ -3906,7 +3905,7 @@ class ReplicationManager::ReplicationGroup {
     co_return context->completion_;
   }
 
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
   // Fault builds can synthesize the already-proven candidate boundary so the
   // promotion kernel can be exercised without a second process implementing
   // the full destructive-rebuild protocol. The selector is attempt-scoped,
@@ -4007,7 +4006,7 @@ class ReplicationManager::ReplicationGroup {
   }
 #endif
 
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
   Task<absl::StatusOr<bool>> WaitAtPromotionFaultBarrier(
       const std::shared_ptr<ClusterPromotionPrepareContext>& context,
       const char* signal_variable) {
@@ -4082,12 +4081,12 @@ class ReplicationManager::ReplicationGroup {
       return cancelled;
     };
 
-#if KEYLANE_FAULTS_ENABLED
-    if (KEYLANE_FAULT_MATCHES("KEYLANE_REPLICATION_STALL_PROMOTION_ACTION",
-                              context->directive_.identity_.attempt_id_)) {
+#if LAVIK_FAULTS_ENABLED
+    if (LAVIK_FAULT_MATCHES("LAVIK_REPLICATION_STALL_PROMOTION_ACTION",
+                            context->directive_.identity_.attempt_id_)) {
       auto barrier = co_await WaitAtPromotionFaultBarrier(
           context,
-          "KEYLANE_REPLICATION_PROMOTION_PRE_DURABILITY_BARRIER_ACK_PATH");
+          "LAVIK_REPLICATION_PROMOTION_PRE_DURABILITY_BARRIER_ACK_PATH");
       if (!barrier.ok()) co_return fail_stop(barrier.status(), "fault barrier");
       if (!*barrier) {
         auto remaining = std::chrono::milliseconds(200);
@@ -4206,13 +4205,13 @@ class ReplicationManager::ReplicationGroup {
     // outcome and retire any child publisher; early cancellation would make
     // the durable PromotionBase/history outcome unknowable.
     context->durability_mutation_started_ = true;
-#if KEYLANE_FAULTS_ENABLED
-    if (KEYLANE_FAULT_MATCHES(
-            "KEYLANE_REPLICATION_STALL_PROMOTION_AFTER_DURABILITY_BOUNDARY",
+#if LAVIK_FAULTS_ENABLED
+    if (LAVIK_FAULT_MATCHES(
+            "LAVIK_REPLICATION_STALL_PROMOTION_AFTER_DURABILITY_BOUNDARY",
             context->directive_.identity_.attempt_id_)) {
       auto barrier = co_await WaitAtPromotionFaultBarrier(
           context,
-          "KEYLANE_REPLICATION_PROMOTION_POST_DURABILITY_BARRIER_ACK_PATH");
+          "LAVIK_REPLICATION_PROMOTION_POST_DURABILITY_BARRIER_ACK_PATH");
       if (!barrier.ok()) {
         co_return fail_stop(barrier.status(), "durability fault barrier");
       }
@@ -4297,10 +4296,9 @@ class ReplicationManager::ReplicationGroup {
       co_return absl::CancelledError(
           "promotion-prepare admission stopped for process shutdown");
     }
-#if KEYLANE_FAULTS_ENABLED
-    if (KEYLANE_FAULT_MATCHES(
-            "KEYLANE_REPLICATION_SEED_READY_PROMOTION_CANDIDATE",
-            identity.attempt_id_)) {
+#if LAVIK_FAULTS_ENABLED
+    if (LAVIK_FAULT_MATCHES("LAVIK_REPLICATION_SEED_READY_PROMOTION_CANDIDATE",
+                            identity.attempt_id_)) {
       absl::Status seeded =
           co_await SeedReadyPromotionCandidateForFaultTest(directive);
       if (!seeded.ok()) co_return seeded;
@@ -4734,9 +4732,9 @@ class ReplicationManager::ReplicationGroup {
   }
 
   std::chrono::milliseconds FailoverActionWatchdog() const {
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
     if (const char* configured =
-            std::getenv("KEYLANE_REPLICATION_ACTION_WATCHDOG_MS");
+            std::getenv("LAVIK_REPLICATION_ACTION_WATCHDOG_MS");
         configured != nullptr) {
       std::uint64_t parsed = 0;
       const std::string_view text(configured);
@@ -4811,15 +4809,14 @@ class ReplicationManager::ReplicationGroup {
     };
     std::vector<std::uint64_t> minimum_frontier(
         context->desired_.domain_.flow_count_, 1);
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
     // The fault fixture seeds a complete Ready population before this action
     // enters production validation. It is compiled out of ordinary binaries
     // and still passes through every exact domain check below.
     ClusterPromotionPrepareDirective seed =
         BuildFailoverPrepareDirective(context->desired_, minimum_frontier);
-    if (KEYLANE_FAULT_MATCHES(
-            "KEYLANE_REPLICATION_SEED_READY_PROMOTION_CANDIDATE",
-            seed.identity_.attempt_id_)) {
+    if (LAVIK_FAULT_MATCHES("LAVIK_REPLICATION_SEED_READY_PROMOTION_CANDIDATE",
+                            seed.identity_.attempt_id_)) {
       absl::Status seeded =
           co_await SeedReadyPromotionCandidateForFaultTest(seed);
       if (!seeded.ok()) {
@@ -4918,9 +4915,9 @@ class ReplicationManager::ReplicationGroup {
       absl::StatusOr<
           std::shared_ptr<detail::ClusterPromotionPrepareCompletionState>>
           started{absl::UnknownError("failover promotion was not dispatched")};
-#if KEYLANE_FAULTS_ENABLED
-      if (KEYLANE_FAULT_MATCHES(
-              "KEYLANE_REPLICATION_RETRY_FAILOVER_PROMOTION_ADMISSION",
+#if LAVIK_FAULTS_ENABLED
+      if (LAVIK_FAULT_MATCHES(
+              "LAVIK_REPLICATION_RETRY_FAILOVER_PROMOTION_ADMISSION",
               directive.identity_.attempt_id_)) {
         started = absl::UnavailableError(
             "injected retryable failover promotion admission failure");
@@ -4962,16 +4959,16 @@ class ReplicationManager::ReplicationGroup {
       if (context->cancelled_) {
         RequestFailoverPromotionCancellation(context);
       }
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
       const std::string_view attempt_id =
           context->prepare_directive_->identity_.attempt_id_;
-      if (KEYLANE_FAULT_MATCHES("KEYLANE_REPLICATION_STALL_PROMOTION_ACTION",
-                                attempt_id) ||
-          KEYLANE_FAULT_MATCHES(
-              "KEYLANE_REPLICATION_STALL_PROMOTION_AFTER_DURABILITY_BOUNDARY",
+      if (LAVIK_FAULT_MATCHES("LAVIK_REPLICATION_STALL_PROMOTION_ACTION",
+                              attempt_id) ||
+          LAVIK_FAULT_MATCHES(
+              "LAVIK_REPLICATION_STALL_PROMOTION_AFTER_DURABILITY_BOUNDARY",
               attempt_id)) {
         (void)SignalFaultBarrier(
-            "KEYLANE_REPLICATION_FAILOVER_RUNNER_WAITING_ACK_PATH",
+            "LAVIK_REPLICATION_FAILOVER_RUNNER_WAITING_ACK_PATH",
             "promotion fault barrier");
       }
 #endif
@@ -4986,9 +4983,9 @@ class ReplicationManager::ReplicationGroup {
           co_return waited;
         }
       }
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
       (void)SignalFaultBarrier(
-          "KEYLANE_REPLICATION_FAILOVER_RUNNER_TERMINAL_ACK_PATH",
+          "LAVIK_REPLICATION_FAILOVER_RUNNER_TERMINAL_ACK_PATH",
           "promotion fault barrier");
 #endif
       if (!result->ok()) {
@@ -5795,7 +5792,7 @@ class ReplicationManager::ReplicationGroup {
     // Closing role/serving above is the synchronous fail-closed edge. Clear
     // any source capability and join every admission that crossed that edge
     // before an ingress or source-history teardown can suspend. The strong
-    // path owns the ledger under master_mutex_, the same lock as KLPSYNC
+    // path owns the ledger under master_mutex_, the same lock as LVPSYNC
     // classification and registry publication.
     if (previous_was_owner || must_fence_target) {
       absl::Status revoked =
@@ -6506,7 +6503,7 @@ class ReplicationManager::ReplicationGroup {
         // Session loss invalidates the transport incarnation and may retain
         // only ONLINE exports. A live FDS replacement has already proven the
         // exact source/population scope unchanged; retain every session that
-        // was published under that scope, including the KLFULLRESYNC-to-ONLINE
+        // was published under that scope, including the LVFULLRESYNC-to-ONLINE
         // window. Cancelling that window turns a safe projection refresh into
         // an unclassified peer-close after target admission.
         const bool preserve =
@@ -6523,18 +6520,18 @@ class ReplicationManager::ReplicationGroup {
         sessions.push_back(retiring);
         retired_master_sessions_.push_back(std::move(retiring));
       }
-      // Removing the registry entries under the same mutex as KLPSYNC
+      // Removing the registry entries under the same mutex as LVPSYNC
       // publication prevents a revoked control session from accepting a late
-      // KLFLOW while cancellation is propagating.
+      // LVFLOW while cancellation is propagating.
       disconnected_replica_leases_.clear();
     }
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
     // A test barrier observes the completed ledger/publication critical
     // section before cancellation joins an admission deliberately paused at
     // its second check. Release builds contain neither the environment lookup
     // nor the extra syscall.
     absl::Status revocation_signalled = SignalFaultBarrier(
-        "KEYLANE_REPLICATION_SOURCE_REVOCATION_BARRIER_ACK_PATH",
+        "LAVIK_REPLICATION_SOURCE_REVOCATION_BARRIER_ACK_PATH",
         "source authorization fault barrier");
     if (!revocation_signalled.ok()) co_return revocation_signalled;
 #endif
@@ -7568,7 +7565,7 @@ class ReplicationManager::ReplicationGroup {
           stream, "-ERR native cascading replication is not supported\r\n");
       co_return sent.ok()
           ? absl::FailedPreconditionError(
-                "a Keylane replica cannot serve downstream native replication")
+                "a Lavik replica cannot serve downstream native replication")
           : sent;
     }
     // Accepted Redis sockets are normally optimized for batched replies, but
@@ -7580,12 +7577,12 @@ class ReplicationManager::ReplicationGroup {
     if (!accepted_config.ok()) co_return accepted_config;
     unsigned owner = 0;
     std::uint64_t replication_session_id = 0;
-    if (EqualCaseInsensitive(args.front(), "KLFLOW")) {
+    if (EqualCaseInsensitive(args.front(), "LVFLOW")) {
       unsigned flow_id = 0;
       if (args.size() != 7 ||
           !ParseUnsigned(args[2], &replication_session_id) ||
           replication_session_id == 0 || !ParseUnsigned(args[3], &flow_id)) {
-        co_return absl::InvalidArgumentError("invalid KLFLOW handshake");
+        co_return absl::InvalidArgumentError("invalid LVFLOW handshake");
       }
       // flow_id belongs to the upstream worker set. Multiple upstream flows
       // may share one local worker when the worker counts differ.
@@ -7688,9 +7685,9 @@ class ReplicationManager::ReplicationGroup {
     }
     if (is_replica()) {
       absl::Status sent = co_await WriteText(
-          stream, "-ERR detach this Keylane replica before Redis export\r\n");
+          stream, "-ERR detach this Lavik replica before Redis export\r\n");
       co_return sent.ok() ? absl::FailedPreconditionError(
-                                "a Keylane replica cannot export Redis PSYNC")
+                                "a Lavik replica cannot export Redis PSYNC")
                           : sent;
     }
     const std::uint64_t source_role_epoch =
@@ -7764,8 +7761,8 @@ class ReplicationManager::ReplicationGroup {
       if (!status.ok()) co_return status;
     }
 
-    KEYLANE_FAULT_INJECT(
-        status = co_await MaybePauseBeforeRedisExportDbAdmission(););
+    LAVIK_FAULT_INJECT(status =
+                           co_await MaybePauseBeforeRedisExportDbAdmission(););
     if (!status.ok()) co_return status;
     while (!CloseAllCommandDbGates()) {
       if (role_epoch_.load(std::memory_order_acquire) != source_role_epoch ||
@@ -7858,7 +7855,7 @@ class ReplicationManager::ReplicationGroup {
         "+FULLRESYNC ", node_id_, " 0\r\n$EOF:", eof_token, "\r\n");
     status = co_await WriteText(stream, full_resync_header);
     if (status.ok()) {
-      // RDB v10 is accepted by Redis 7.0 and later. Keylane's value opcodes
+      // RDB v10 is accepted by Redis 7.0 and later. Lavik's value opcodes
       // do not require the v11 metadata additions used by backup files.
       rdb::StreamEncoder encoder(10);
       status = co_await WriteText(stream, encoder.Header());
@@ -8325,7 +8322,7 @@ class ReplicationManager::ReplicationGroup {
       co_return status;
     }
     const std::vector<std::string> sync_args{
-        "KLPSYNC", std::string(kProtocolVersion), "?", "?", "?", "?", "?", "?"};
+        "LVPSYNC", std::string(kProtocolVersion), "?", "?", "?", "?", "?", "?"};
     const std::string encoded_sync = EncodeRespCommand(sync_args);
     status = co_await WriteText(stream, encoded_sync);
     if (!status.ok()) {
@@ -8335,19 +8332,19 @@ class ReplicationManager::ReplicationGroup {
     auto response = co_await ReadLine(stream);
     stream.Close().IgnoreError();
     if (!response.ok()) co_return response.status();
-    if (response->starts_with("+KLFULLRESYNC ")) {
+    if (response->starts_with("+LVFULLRESYNC ")) {
       UpstreamDiscovery result;
       result.protocol_ = UpstreamProtocol::kNative;
       co_return result;
     }
     if (response->starts_with('-') &&
         response->find("unknown command") != std::string::npos &&
-        (response->find("KLPSYNC") != std::string::npos ||
-         response->find("klpsync") != std::string::npos)) {
+        (response->find("LVPSYNC") != std::string::npos ||
+         response->find("lvpsync") != std::string::npos)) {
       co_return co_await DiscoverRedis(upstream);
     }
     co_return absl::FailedPreconditionError(
-        absl::StrCat("upstream rejected Keylane protocol probe: ", *response));
+        absl::StrCat("upstream rejected Lavik protocol probe: ", *response));
   }
 
   Task<absl::Status> WaitUntilStorageReady() {
@@ -8602,7 +8599,7 @@ class ReplicationManager::ReplicationGroup {
     }
     for (const auto& session : sessions) session->Cancel();
     spdlog::error(
-        "Redis Cluster topology changed; replication stopped and Keylane "
+        "Redis Cluster topology changed; replication stopped and Lavik "
         "entered LOADING: {}",
         reason);
     RefreshRedisRole();
@@ -9623,7 +9620,7 @@ class ReplicationManager::ReplicationGroup {
       }
     }
     std::vector<std::string> sync_args{
-        "KLPSYNC",
+        "LVPSYNC",
         std::string(kProtocolVersion),
         absl::StrCat("?", node_id_, ":", listen_port_),
         requested_group,
@@ -9684,7 +9681,7 @@ class ReplicationManager::ReplicationGroup {
         scoped_cluster_handshake
             ? words.size() == 8 && IsPopulationGroupToken(words[3])
             : words.size() == 8 && IsReplicationId(words[3]);
-    if (words.size() != 8 || words[0] != "+KLFULLRESYNC" ||
+    if (words.size() != 8 || words[0] != "+LVFULLRESYNC" ||
         !ParseUnsigned(words[1], &session_id) || session_id == 0 ||
         !IsReplicationId(words[2]) || !source_group_valid ||
         !IsReplicationId(words[4]) || !IsReplicationId(words[5]) ||
@@ -9697,7 +9694,7 @@ class ReplicationManager::ReplicationGroup {
       session->sockets_.Remove(control_fd);
       control.Close().IgnoreError();
       co_return absl::InvalidArgumentError(
-          "invalid KLPSYNC response from upstream");
+          "invalid LVPSYNC response from upstream");
     }
     if (role_epoch_.load(std::memory_order_acquire) != role_epoch) {
       session->sockets_.Remove(control_fd);
@@ -9845,7 +9842,7 @@ class ReplicationManager::ReplicationGroup {
     }
 
     auto online = co_await ReadLine(control);
-    if (!online.ok() || *online != "+KLONLINE") {
+    if (!online.ok() || *online != "+LVONLINE") {
       session->sockets_.Remove(control_fd);
       control.Close().IgnoreError();
       absl::Status failed =
@@ -10127,7 +10124,7 @@ class ReplicationManager::ReplicationGroup {
         "replication target session {} flow {} requesting cursor={}:{}",
         session->session_id_, flow_id, cursor.lsn_, cursor.fragment_index_);
     const std::vector<std::string> flow_args{
-        "KLFLOW",
+        "LVFLOW",
         std::string(kProtocolVersion),
         std::to_string(session->session_id_),
         std::to_string(flow_id),
@@ -10152,7 +10149,7 @@ class ReplicationManager::ReplicationGroup {
     const bool continue_mode =
         response_words.size() == 4 && response_words[3] == "CONTINUE";
     if (!response.ok() || response_words.size() != 4 ||
-        response_words[0] != "+KLFLOW" ||
+        response_words[0] != "+LVFLOW" ||
         !ParseUnsigned(response_words[1], &response_session_id) ||
         response_session_id != session->session_id_ ||
         !ParseUnsigned(response_words[2], &response_flow_id) ||
@@ -10161,7 +10158,7 @@ class ReplicationManager::ReplicationGroup {
       stream.Close().IgnoreError();
       session->Cancel();
       co_return response.ok()
-          ? absl::InvalidArgumentError("invalid KLFLOW response")
+          ? absl::InvalidArgumentError("invalid LVFLOW response")
           : response.status();
     }
     absl::Status selected = session->SelectFlowMode(flow_id, fullsync);
@@ -10260,9 +10257,8 @@ class ReplicationManager::ReplicationGroup {
     // active_transaction_applies_. Transport cancellation discards only
     // incomplete arrivals; this task must publish its cursor into the frozen
     // frontier before the role transition can continue.
-    KEYLANE_FAULT_INJECT(
-        if (status.ok()) status =
-            co_await MaybePauseBeforeReplicaTransactionApply(););
+    LAVIK_FAULT_INJECT(if (status.ok()) status =
+                           co_await MaybePauseBeforeReplicaTransactionApply(););
     if (status.ok()) status = co_await ApplyReplicatedCommand(command);
 
     if (status.ok()) {
@@ -10500,8 +10496,8 @@ class ReplicationManager::ReplicationGroup {
 
     if (apply_here) {
       absl::Status status = absl::OkStatus();
-      KEYLANE_FAULT_INJECT(status =
-                               co_await MaybePauseBeforeReplicaControlApply(););
+      LAVIK_FAULT_INJECT(status =
+                             co_await MaybePauseBeforeReplicaControlApply(););
       if (status.ok()) {
         if (std::ranges::any_of(frontier_updates, [](const auto& update) {
               return update.applied_lsn_ ==
@@ -10568,12 +10564,12 @@ class ReplicationManager::ReplicationGroup {
     bool ack_done_ = false;
   };
 
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
   void InjectPeerFlowCancelAfterCommandApply(
       const std::shared_ptr<ReplicaSession>& session, unsigned flow_id,
       const ReplicatedCommand& command) {
     const char* configured = std::getenv(
-        "KEYLANE_REPLICATION_CANCEL_PEER_FLOW_AFTER_COMMAND_APPLY_ONCE");
+        "LAVIK_REPLICATION_CANCEL_PEER_FLOW_AFTER_COMMAND_APPLY_ONCE");
     if (configured == nullptr || command.args_.size() < 2 ||
         command.args_[1] != configured ||
         replication_peer_flow_cancel_fault_used_.exchange(
@@ -10653,13 +10649,13 @@ class ReplicationManager::ReplicationGroup {
             applied = absl::OutOfRangeError(
                 "replicated command LSN cannot advance past UINT64_MAX");
           }
-          KEYLANE_FAULT_INJECT(if (applied.ok()) {
+          LAVIK_FAULT_INJECT(if (applied.ok()) {
             applied = co_await MaybePauseBeforeReplicaCommandApply();
           });
           if (applied.ok()) {
             applied = co_await ApplyReplicatedCommand(pending.command_);
           }
-          KEYLANE_FAULT_INJECT(if (applied.ok()) {
+          LAVIK_FAULT_INJECT(if (applied.ok()) {
             InjectPeerFlowCancelAfterCommandApply(session, flow_id,
                                                   pending.command_);
           });
@@ -11250,9 +11246,9 @@ class ReplicationManager::ReplicationGroup {
                              promoted.message()));
             spdlog::warn(
                 "replica session entered fail-stop before coordinator latch");
-            KEYLANE_FAULT_INJECT(
+            LAVIK_FAULT_INJECT(
                 if (const char* configured = std::getenv(
-                        "KEYLANE_REPLICATION_PAUSE_AFTER_FAIL_STOP_MS");
+                        "LAVIK_REPLICATION_PAUSE_AFTER_FAIL_STOP_MS");
                     configured != nullptr) {
                   std::uint64_t pause_ms = 0;
                   const std::size_t length = std::strlen(configured);
@@ -11434,7 +11430,7 @@ class ReplicationManager::ReplicationGroup {
   }
 
   bool ShouldInjectFlowDrop(unsigned flow_id) {
-    KEYLANE_FAULT_INJECT({
+    LAVIK_FAULT_INJECT({
       const char* configured = replication_drop_flow_after_command_;
       if (configured == nullptr) return false;
       unsigned target = 0;
@@ -11453,7 +11449,7 @@ class ReplicationManager::ReplicationGroup {
   }
 
   bool ShouldInjectControlDropAfterResponse() {
-    KEYLANE_FAULT_INJECT({
+    LAVIK_FAULT_INJECT({
       const char* configured = replication_drop_after_control_response_once_;
       if (configured == nullptr || std::string_view(configured) != "1") {
         return false;
@@ -11466,10 +11462,10 @@ class ReplicationManager::ReplicationGroup {
   }
 
   bool ShouldInjectFullSyncCutDrop(unsigned flow_id) {
-    KEYLANE_FAULT_INJECT({
+    LAVIK_FAULT_INJECT({
       if (flow_id != 0) return false;
       const char* configured =
-          std::getenv("KEYLANE_REPLICATION_DROP_AFTER_FULLSYNC_CUT");
+          std::getenv("LAVIK_REPLICATION_DROP_AFTER_FULLSYNC_CUT");
       if (configured == nullptr) return false;
       unsigned occurrence = 0;
       const std::size_t length = std::strlen(configured);
@@ -11489,9 +11485,9 @@ class ReplicationManager::ReplicationGroup {
   }
 
   bool ShouldInjectReplicaPromotionFailure() {
-    KEYLANE_FAULT_INJECT({
+    LAVIK_FAULT_INJECT({
       const char* configured =
-          std::getenv("KEYLANE_REPLICATION_FAIL_PROMOTE_ONCE");
+          std::getenv("LAVIK_REPLICATION_FAIL_PROMOTE_ONCE");
       if (configured == nullptr || std::string_view(configured) != "1") {
         return false;
       }
@@ -11502,10 +11498,10 @@ class ReplicationManager::ReplicationGroup {
   }
 
   bool ShouldInjectEmptyPopulationResetFailure(unsigned owner) {
-    KEYLANE_FAULT_INJECT({
+    LAVIK_FAULT_INJECT({
       if (owner != 0) return false;
       const char* configured =
-          std::getenv("KEYLANE_REPLICATION_FAIL_EMPTY_RESET_ONCE");
+          std::getenv("LAVIK_REPLICATION_FAIL_EMPTY_RESET_ONCE");
       if (configured == nullptr || std::string_view(configured) != "1") {
         return false;
       }
@@ -11517,9 +11513,9 @@ class ReplicationManager::ReplicationGroup {
   }
 
   bool ShouldInjectEmptyPopulationCatalogFailure() {
-    KEYLANE_FAULT_INJECT({
+    LAVIK_FAULT_INJECT({
       const char* configured =
-          std::getenv("KEYLANE_REPLICATION_FAIL_EMPTY_CATALOG_ONCE");
+          std::getenv("LAVIK_REPLICATION_FAIL_EMPTY_CATALOG_ONCE");
       if (configured == nullptr || std::string_view(configured) != "1") {
         return false;
       }
@@ -11530,9 +11526,9 @@ class ReplicationManager::ReplicationGroup {
   }
 
   bool ShouldInjectPromotionPrepareFailure(std::string_view stage) {
-    KEYLANE_FAULT_INJECT({
-      if (!KEYLANE_FAULT_MATCHES(
-              "KEYLANE_REPLICATION_FAIL_PROMOTION_PREPARE_AT", stage)) {
+    LAVIK_FAULT_INJECT({
+      if (!LAVIK_FAULT_MATCHES("LAVIK_REPLICATION_FAIL_PROMOTION_PREPARE_AT",
+                               stage)) {
         return false;
       }
       return !promotion_prepare_fault_used_.exchange(true,
@@ -11543,14 +11539,14 @@ class ReplicationManager::ReplicationGroup {
   }
 
   bool ShouldInjectEarlyOnline() const {
-    return KEYLANE_FAULT_MATCHES("KEYLANE_REPLICATION_EARLY_ONLINE", "1");
+    return LAVIK_FAULT_MATCHES("LAVIK_REPLICATION_EARLY_ONLINE", "1");
   }
 
   bool ShouldInjectPostCutReset(unsigned flow_id) {
-    KEYLANE_FAULT_INJECT({
+    LAVIK_FAULT_INJECT({
       if (flow_id != 0) return false;
       const char* configured =
-          std::getenv("KEYLANE_REPLICATION_POST_CUT_RESET_ONCE");
+          std::getenv("LAVIK_REPLICATION_POST_CUT_RESET_ONCE");
       if (configured == nullptr || std::string_view(configured) != "1") {
         return false;
       }
@@ -11562,16 +11558,16 @@ class ReplicationManager::ReplicationGroup {
   }
 
   bool ShouldInjectDivergentTail(unsigned flow_id) {
-    KEYLANE_FAULT_INJECT({
+    LAVIK_FAULT_INJECT({
       unsigned target_flow = 0;
       if (const char* target =
-              std::getenv("KEYLANE_REPLICATION_DIVERGENT_TAIL_FLOW");
+              std::getenv("LAVIK_REPLICATION_DIVERGENT_TAIL_FLOW");
           target != nullptr && !ParseUnsigned(target, &target_flow)) {
         return false;
       }
       if (flow_id != target_flow) return false;
       const char* configured =
-          std::getenv("KEYLANE_REPLICATION_DIVERGENT_TAIL_ONCE");
+          std::getenv("LAVIK_REPLICATION_DIVERGENT_TAIL_ONCE");
       if (configured == nullptr || std::string_view(configured) != "1") {
         return false;
       }
@@ -11638,7 +11634,7 @@ class ReplicationManager::ReplicationGroup {
   }
 
   bool ShouldInjectFlowDropAfterTransaction(unsigned flow_id) {
-    KEYLANE_FAULT_INJECT({
+    LAVIK_FAULT_INJECT({
       const char* configured = replication_drop_flow_after_transaction_apply_;
       if (configured == nullptr) return false;
       unsigned target = 0;
@@ -11657,7 +11653,7 @@ class ReplicationManager::ReplicationGroup {
   }
 
   bool ShouldInjectFlowDropAfterCommandApply(unsigned flow_id) {
-    KEYLANE_FAULT_INJECT({
+    LAVIK_FAULT_INJECT({
       const char* configured = replication_drop_flow_after_command_apply_;
       if (configured == nullptr) return false;
       unsigned target = 0;
@@ -11675,7 +11671,7 @@ class ReplicationManager::ReplicationGroup {
     return false;
   }
 
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
   // These coroutines and their call sites are test-only, so ordinary builds
   // do not allocate an empty pause task on each ONLINE mutation or barrier.
   Task<absl::Status> MaybePauseBeforeReplicaCommandApply() {
@@ -11737,7 +11733,7 @@ class ReplicationManager::ReplicationGroup {
 
   Task<absl::Status> MaybePauseBeforeRedisExportDbAdmission() {
     const char* configured =
-        std::getenv("KEYLANE_REPLICATION_PAUSE_REDIS_EXPORT_BEFORE_GATES_MS");
+        std::getenv("LAVIK_REPLICATION_PAUSE_REDIS_EXPORT_BEFORE_GATES_MS");
     if (configured != nullptr) {
       std::uint64_t milliseconds = 0;
       const std::size_t length = std::strlen(configured);
@@ -12114,9 +12110,9 @@ class ReplicationManager::ReplicationGroup {
     // exact even when earlier FUNCTION mutations were also captured while the
     // key snapshot was being scanned.
     auto send_function_catalog = [&]() -> Task<absl::Status> {
-      KEYLANE_FAULT_INJECT(
+      LAVIK_FAULT_INJECT(
           if (const char* configured = std::getenv(
-                  "KEYLANE_REPLICATION_PAUSE_FULLSYNC_BEFORE_CATALOG_ACK_MS");
+                  "LAVIK_REPLICATION_PAUSE_FULLSYNC_BEFORE_CATALOG_ACK_MS");
               configured != nullptr &&
               !replication_fullsync_catalog_pause_used_.exchange(
                   true, std::memory_order_acq_rel)) {
@@ -12291,12 +12287,12 @@ class ReplicationManager::ReplicationGroup {
           fullsync_sequence);
       if (!sent.ok()) co_return sent;
       ++fullsync_sequence;
-      KEYLANE_FAULT_INJECT(if (
-          const char* configured = std::getenv(
-              "KEYLANE_REPLICATION_PAUSE_FULLSYNC_AFTER_HANDOFF_MS");
-          configured != nullptr &&
-          !replication_fullsync_handoff_pause_used_.exchange(
-              true, std::memory_order_acq_rel)) {
+      LAVIK_FAULT_INJECT(if (const char* configured =
+                                 std::getenv("LAVIK_REPLICATION_PAUSE_FULLSYNC_"
+                                             "AFTER_HANDOFF_MS");
+                             configured != nullptr &&
+                             !replication_fullsync_handoff_pause_used_.exchange(
+                                 true, std::memory_order_acq_rel)) {
         std::uint64_t pause_ms = 0;
         const std::size_t length = std::strlen(configured);
         const auto parsed =
@@ -12390,9 +12386,9 @@ class ReplicationManager::ReplicationGroup {
         cleanup();
         co_return sent;
       }
-      KEYLANE_FAULT_INJECT(
+      LAVIK_FAULT_INJECT(
           if (const char* configured = std::getenv(
-                  "KEYLANE_REPLICATION_PAUSE_FULLSYNC_AFTER_RESET_MS");
+                  "LAVIK_REPLICATION_PAUSE_FULLSYNC_AFTER_RESET_MS");
               configured != nullptr &&
               !replication_fullsync_pause_used_.exchange(
                   true, std::memory_order_acq_rel)) {
@@ -12745,9 +12741,9 @@ class ReplicationManager::ReplicationGroup {
     if (flow_id == 0) {
       gate_reopen.Open();
       command_gate_reopen.Open();
-      KEYLANE_FAULT_INJECT(
-          if (const char* configured = std::getenv(
-                  "KEYLANE_REPLICATION_PAUSE_FULLSYNC_BEFORE_CUT_MS");
+      LAVIK_FAULT_INJECT(
+          if (const char* configured =
+                  std::getenv("LAVIK_REPLICATION_PAUSE_FULLSYNC_BEFORE_CUT_MS");
               configured != nullptr) {
             std::uint64_t pause_ms = 0;
             const std::size_t length = std::strlen(configured);
@@ -13083,10 +13079,10 @@ class ReplicationManager::ReplicationGroup {
     ScopedSocketSetMembership source_socket(&source_sockets_,
                                             stream.NativeFd());
     ReplicationConnectionMetricGuard connection_metric(
-        EqualCaseInsensitive(args.front(), "KLPSYNC")
+        EqualCaseInsensitive(args.front(), "LVPSYNC")
             ? ReplicationConnectionKind::kControl
             : ReplicationConnectionKind::kFlow);
-    if (EqualCaseInsensitive(args.front(), "KLPSYNC")) {
+    if (EqualCaseInsensitive(args.front(), "LVPSYNC")) {
       absl::Status result =
           co_await ServeMasterControl(stream, std::move(args), client_id);
       if (IsLeaseAdmissionSuspended(result)) {
@@ -13116,7 +13112,7 @@ class ReplicationManager::ReplicationGroup {
         (args[4] != "?" && !IsReplicationId(args[4])) ||
         (args[5] != "?" && !IsReplicationId(args[5])) ||
         (args[6] != "?" && !IsReplicationId(args[6]))) {
-      co_return absl::InvalidArgumentError("invalid KLPSYNC handshake");
+      co_return absl::InvalidArgumentError("invalid LVPSYNC handshake");
     }
     active_master_controls_.fetch_add(1, std::memory_order_acq_rel);
     active_unpublished_master_controls_.fetch_add(1, std::memory_order_acq_rel);
@@ -13170,7 +13166,7 @@ class ReplicationManager::ReplicationGroup {
           identity.manifest_revision_ == 0 || !manifest.ok() ||
           !ParseUnsigned(args[25], &identity.partition_replication_epoch_)) {
         co_return absl::InvalidArgumentError(
-            "invalid population identity in KLPSYNC handshake");
+            "invalid population identity in LVPSYNC handshake");
       }
       identity.manifest_id_ = *manifest;
       requested_population = std::move(identity);
@@ -13193,7 +13189,7 @@ class ReplicationManager::ReplicationGroup {
                          &relationship.partition_replication_epoch_) ||
           relationship.partition_replication_epoch_ == 0) {
         co_return absl::InvalidArgumentError(
-            "invalid steady FOLLOW identity in KLPSYNC handshake");
+            "invalid steady FOLLOW identity in LVPSYNC handshake");
       }
       relationship.manifest_id_ = *manifest;
       requested_follow = std::move(relationship);
@@ -13240,13 +13236,13 @@ class ReplicationManager::ReplicationGroup {
           !ParseUnsigned(identity.substr(kNodeIdEnd + 1), &replica_port) ||
           replica_port == 0) {
         co_return absl::InvalidArgumentError(
-            "invalid KLPSYNC replica identity");
+            "invalid LVPSYNC replica identity");
       }
       replica_node_id = std::string(identity.substr(1, 40));
       replica_host = PeerHost(stream.NativeFd());
       if (replica_host.empty()) {
         co_return absl::InternalError(
-            "failed to identify KLPSYNC replica endpoint");
+            "failed to identify LVPSYNC replica endpoint");
       }
     }
     if (requested_follow.has_value()) {
@@ -13260,7 +13256,7 @@ class ReplicationManager::ReplicationGroup {
     std::shared_ptr<MasterSession> session;
     auto applied = DecodeAppliedVector(args[7]);
     if (!applied.ok()) co_return applied.status();
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
     if (population_handshake) {
       // Deterministically exercise the only suspension cut between optimistic
       // POPULATION admission and the master_mutex_-guarded classification /
@@ -13434,7 +13430,7 @@ class ReplicationManager::ReplicationGroup {
       }
     }
     const std::string resync_reply = absl::StrCat(
-        "+KLFULLRESYNC ", session_id, " ", node_id_, " ", source_group_id, " ",
+        "+LVFULLRESYNC ", session_id, " ", node_id_, " ", source_group_id, " ",
         boot_id_, " ", source_history_id, " ", storage_->worker_count(), " ",
         session->flow_capability_, "\r\n");
     absl::Status sent = co_await WriteText(stream, resync_reply);
@@ -13442,7 +13438,7 @@ class ReplicationManager::ReplicationGroup {
       (void)co_await RemoveMasterSession(session);
       co_return sent;
     }
-    // Anonymous KLPSYNC is reserved for protocol detection. It deliberately
+    // Anonymous LVPSYNC is reserved for protocol detection. It deliberately
     // avoids leaving a ten-minute flow-stall session or appearing in INFO as
     // a downstream replica. Real protocol-v1 replicas always advertise their
     // node id and listening port.
@@ -13451,7 +13447,7 @@ class ReplicationManager::ReplicationGroup {
       co_return absl::OkStatus();
     }
     if (ShouldInjectEarlyOnline()) {
-      sent = co_await WriteText(stream, "+KLONLINE\r\n");
+      sent = co_await WriteText(stream, "+LVONLINE\r\n");
       if (sent.ok()) sent = co_await WaitForClose(stream);
       (void)co_await RemoveMasterSession(session);
       co_return sent.ok() ? absl::FailedPreconditionError(
@@ -13512,7 +13508,7 @@ class ReplicationManager::ReplicationGroup {
           stalled ? "replica flow made no full-sync progress for 10 minutes"
                   : "replica flows did not complete full synchronization");
     }
-    sent = co_await WriteText(stream, "+KLONLINE\r\n");
+    sent = co_await WriteText(stream, "+LVONLINE\r\n");
     if (!sent.ok()) {
       (void)co_await RemoveMasterSession(session);
       co_return sent;
@@ -13546,7 +13542,7 @@ class ReplicationManager::ReplicationGroup {
         flow_id != bycorf::ThisWorker().id_ ||
         !ParseUnsigned(args[4], &next_lsn) || next_lsn == 0 ||
         !ParseUnsigned(args[5], &fragment_index) || !IsReplicationId(args[6])) {
-      co_return absl::InvalidArgumentError("invalid KLFLOW handshake");
+      co_return absl::InvalidArgumentError("invalid LVFLOW handshake");
     }
     std::shared_ptr<MasterSession> session;
     {
@@ -13558,7 +13554,7 @@ class ReplicationManager::ReplicationGroup {
     if (session == nullptr ||
         !session->SetFlow(flow_id, args[6], stream.NativeFd())) {
       co_return absl::FailedPreconditionError(
-          "KLFLOW references an unavailable session");
+          "LVFLOW references an unavailable session");
     }
     const auto log_info = storage_->LocalReplicationLogInfo();
     const bool continue_mode =
@@ -13596,7 +13592,7 @@ class ReplicationManager::ReplicationGroup {
     }
     const bool selected_continue_mode = *session_continue_mode;
     const std::string flow_reply =
-        absl::StrCat("+KLFLOW ", session_id, " ", flow_id, " ",
+        absl::StrCat("+LVFLOW ", session_id, " ", flow_id, " ",
                      selected_continue_mode ? "CONTINUE" : "FULL", "\r\n");
     absl::Status sent = co_await WriteText(stream, flow_reply);
     if (!sent.ok()) {
@@ -14045,26 +14041,26 @@ class ReplicationManager::ReplicationGroup {
   std::optional<std::string> upstream_node_id_;
   std::optional<std::string> upstream_history_id_;
   std::string failure_reason_;  // worker 0 only
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
   // Fault-injection settings are process-startup inputs in fault-enabled
   // binaries only. Ordinary releases neither read them nor keep fault state.
   // Cache their pointers before workers launch so ONLINE/ACK paths do not enter
   // libc getenv for every replicated mutation. Runtime setenv is unsupported;
   // the environment owns these strings for the process lifetime.
   const char* const replication_drop_flow_after_command_ =
-      std::getenv("KEYLANE_REPLICATION_DROP_FLOW_AFTER_COMMAND");
+      std::getenv("LAVIK_REPLICATION_DROP_FLOW_AFTER_COMMAND");
   const char* const replication_drop_after_control_response_once_ =
-      std::getenv("KEYLANE_REPLICATION_DROP_AFTER_CONTROL_RESPONSE_ONCE");
+      std::getenv("LAVIK_REPLICATION_DROP_AFTER_CONTROL_RESPONSE_ONCE");
   const char* const replication_drop_flow_after_transaction_apply_ =
-      std::getenv("KEYLANE_REPLICATION_DROP_FLOW_AFTER_TRANSACTION_APPLY");
+      std::getenv("LAVIK_REPLICATION_DROP_FLOW_AFTER_TRANSACTION_APPLY");
   const char* const replication_drop_flow_after_command_apply_ =
-      std::getenv("KEYLANE_REPLICATION_DROP_FLOW_AFTER_COMMAND_APPLY");
+      std::getenv("LAVIK_REPLICATION_DROP_FLOW_AFTER_COMMAND_APPLY");
   const char* const replication_pause_before_command_apply_ms_ =
-      std::getenv("KEYLANE_REPLICATION_PAUSE_BEFORE_COMMAND_APPLY_MS");
+      std::getenv("LAVIK_REPLICATION_PAUSE_BEFORE_COMMAND_APPLY_MS");
   const char* const replication_pause_before_transaction_apply_ms_ =
-      std::getenv("KEYLANE_REPLICATION_PAUSE_BEFORE_TRANSACTION_APPLY_MS");
+      std::getenv("LAVIK_REPLICATION_PAUSE_BEFORE_TRANSACTION_APPLY_MS");
   const char* const replication_pause_before_control_apply_ms_ =
-      std::getenv("KEYLANE_REPLICATION_PAUSE_BEFORE_CONTROL_APPLY_MS");
+      std::getenv("LAVIK_REPLICATION_PAUSE_BEFORE_CONTROL_APPLY_MS");
   std::atomic<bool> replication_fault_drop_used_{false};
   std::atomic<bool> replication_control_response_fault_drop_used_{false};
   std::atomic<bool> replication_transaction_fault_drop_used_{false};
@@ -14103,7 +14099,7 @@ class ReplicationManager::ReplicationGroup {
   // Owning the single boot-scoped group here fixes the
   // one-process/one-dataset seam without allowing the control client to create
   // a second local group or making recovered bytes implicitly ready.
-  std::unique_ptr<keylane::ReplicationGroup> cluster_group_;
+  std::unique_ptr<lavik::ReplicationGroup> cluster_group_;
   std::string history_id_;  // guarded by master_mutex_
   const std::uint16_t listen_port_;
   const std::shared_ptr<bycorf::TlsContext> tls_context_;
@@ -14407,8 +14403,8 @@ unsigned ReplicationManager::replica_priority() const noexcept {
 
 bool ReplicationManager::IsNativeHandshake(
     std::span<const std::string> args) noexcept {
-  return !args.empty() && (EqualCaseInsensitive(args.front(), "KLPSYNC") ||
-                           EqualCaseInsensitive(args.front(), "KLFLOW"));
+  return !args.empty() && (EqualCaseInsensitive(args.front(), "LVPSYNC") ||
+                           EqualCaseInsensitive(args.front(), "LVFLOW"));
 }
 
 Task<absl::Status> ReplicationManager::ServeNativeConnection(
@@ -14493,4 +14489,4 @@ std::string_view ReplicationRoleName(ReplicationRole role) noexcept {
   return "unknown";
 }
 
-}  // namespace keylane
+}  // namespace lavik

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/random_sample.h"
+#include "lavik/random_sample.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -23,7 +23,7 @@
 
 #include "gtest/gtest.h"
 
-namespace keylane {
+namespace lavik {
 namespace {
 
 TEST(RandomSampleTest, ChoosesValkeyStrategies) {
@@ -94,4 +94,4 @@ TEST(RandomSampleTest, SequentialSelectionUsesConstantSamplingState) {
 }
 
 }  // namespace
-}  // namespace keylane
+}  // namespace lavik

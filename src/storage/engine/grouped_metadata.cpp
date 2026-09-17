@@ -16,7 +16,7 @@
 
 #include "impl.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 bool SameMetadataSource(const GroupedHashObject::Handle& expected,
@@ -154,7 +154,7 @@ Task<absl::Status> StorageEngine::Impl::UpdateGroupedExpirationLocked(
     bool unlocked_for_handoff = false;
     absl::Status handoff_status;
     try {
-      KEYLANE_FAULT_BAD_ALLOC("KEYLANE_FAIL_GROUP_HANDOFF_KEY", key);
+      LAVIK_FAULT_BAD_ALLOC("LAVIK_FAIL_GROUP_HANDOFF_KEY", key);
       PublishCommittedFullSyncEffects(&standalone);
       std::vector<TxShardWrites> receipts;
       receipts.push_back(std::move(standalone));
@@ -185,4 +185,4 @@ Task<absl::Status> StorageEngine::Impl::UpdateGroupedExpirationLocked(
   co_return absl::OkStatus();
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

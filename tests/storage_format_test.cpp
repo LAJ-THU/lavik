@@ -24,11 +24,11 @@
 #include <string_view>
 #include <vector>
 
-#include "keylane/storage/engine.h"
-#include "keylane/storage/format.h"
+#include "lavik/storage/engine.h"
+#include "lavik/storage/format.h"
 
 TEST(StorageStateTest, PromotionBaseEqualityIncludesDurabilityFrontier) {
-  using namespace keylane::storage;
+  using namespace lavik::storage;
   const PromotionBase base{
       .group_id_ = "group-a",
       .parent_history_id_ = "history-a",
@@ -46,7 +46,7 @@ TEST(StorageStateTest, PromotionBaseEqualityIncludesDurabilityFrontier) {
 }
 
 TEST(StorageFormatTest, ComputesStableProcessLocalDigests) {
-  using namespace keylane::storage;
+  using namespace lavik::storage;
   static_assert(sizeof(Digest) == sizeof(std::uint64_t));
   static_assert(kRecordHeaderBaseBytes == 72);
   static_assert(kMaxRecordFixedHeaderBytes == 88);
@@ -59,11 +59,11 @@ TEST(StorageFormatTest, ComputesStableProcessLocalDigests) {
 
 namespace {
 
-keylane::storage::RecordHeader GroupRecordHeader(std::string_view key,
-                                                 bool external = false,
-                                                 bool transaction = false,
-                                                 bool external_key = false) {
-  using namespace keylane::storage;
+lavik::storage::RecordHeader GroupRecordHeader(std::string_view key,
+                                               bool external = false,
+                                               bool transaction = false,
+                                               bool external_key = false) {
+  using namespace lavik::storage;
   const auto header_bytes =
       RecordHeaderBytes(key.size(), external_key, transaction, false, true);
   const std::uint32_t payload_bytes = external ? 64 : 80;
@@ -93,7 +93,7 @@ keylane::storage::RecordHeader GroupRecordHeader(std::string_view key,
 }  // namespace
 
 TEST(StorageFormatTest, GroupIdentitySurvivesInlineAndExtentHeaderRoundTrips) {
-  using namespace keylane::storage;
+  using namespace lavik::storage;
   constexpr std::string_view key = "hash-key";
   for (const bool external : {false, true}) {
     for (const bool transaction : {false, true}) {
@@ -133,7 +133,7 @@ TEST(StorageFormatTest, GroupIdentitySurvivesInlineAndExtentHeaderRoundTrips) {
 }
 
 TEST(StorageFormatTest, GroupHeaderRejectsAmbiguousOrInvalidIdentity) {
-  using namespace keylane::storage;
+  using namespace lavik::storage;
   constexpr std::string_view key = "hash-key";
   const auto original = GroupRecordHeader(key);
   auto rejected = [&](RecordHeader header) {
@@ -177,7 +177,7 @@ TEST(StorageFormatTest, GroupHeaderRejectsAmbiguousOrInvalidIdentity) {
 }
 
 TEST(StorageFormatTest, GroupRetirementIsCheckedHeaderMetadata) {
-  using namespace keylane::storage;
+  using namespace lavik::storage;
   constexpr std::string_view key = "retired-group";
   for (const bool external : {false, true}) {
     auto header = GroupRecordHeader(key, external, true, external);
@@ -207,7 +207,7 @@ TEST(StorageFormatTest, GroupRetirementIsCheckedHeaderMetadata) {
 }
 
 TEST(StorageFormatTest, GroupBatchDecisionRequiresAnEnclosingTransaction) {
-  using namespace keylane::storage;
+  using namespace lavik::storage;
   constexpr std::string_view key = "nested-group";
   auto header = GroupRecordHeader(key, false, true);
   header.group_batch_txid_ = 37;
@@ -227,7 +227,7 @@ TEST(StorageFormatTest, GroupBatchDecisionRequiresAnEnclosingTransaction) {
 }
 
 TEST(StorageFormatTest, GroupedRootMarkerDoesNotCarryAGroupIdentity) {
-  using namespace keylane::storage;
+  using namespace lavik::storage;
   constexpr std::string_view key = "hash-key";
   RecordHeader root{
       .header_bytes_ =
@@ -261,7 +261,7 @@ TEST(StorageFormatTest, GroupedRootMarkerDoesNotCarryAGroupIdentity) {
 }
 
 TEST(StorageFormatTest, CollectionGroupHeadersKeepTypeAndRoutingSemantics) {
-  using namespace keylane::storage;
+  using namespace lavik::storage;
   constexpr std::string_view key = "collection-key";
   for (const auto type : {ValueType::kHash, ValueType::kSet, ValueType::kList,
                           ValueType::kSortedSet}) {
@@ -308,7 +308,7 @@ TEST(StorageFormatTest, CollectionGroupHeadersKeepTypeAndRoutingSemantics) {
 
 TEST(StorageFormatTest,
      GroupedRootsAllowCollectionsButRejectStringsAndStreams) {
-  using namespace keylane::storage;
+  using namespace lavik::storage;
   constexpr std::string_view key = "collection-key";
   RecordHeader root{
       .header_bytes_ =
@@ -349,7 +349,7 @@ TEST(StorageFormatTest,
 }
 
 TEST(StorageFormatTest, RestoresCheckpointDigestSeedBeforeHashing) {
-  using namespace keylane::storage;
+  using namespace lavik::storage;
   const DigestSeed original = CurrentDigestSeed();
   DigestSeed checkpoint_seed{};
   checkpoint_seed.fill(0xa5);
@@ -367,13 +367,13 @@ TEST(StorageFormatTest, RestoresCheckpointDigestSeedBeforeHashing) {
 }
 
 TEST(StorageFormatTest, KeepsRuntimeAndRecoveryKeyLimitsIdentical) {
-  using namespace keylane::storage;
+  using namespace lavik::storage;
   EXPECT_TRUE(ValidRecordKeySize(MaxKeyBytes()));
   EXPECT_FALSE(ValidRecordKeySize(MaxKeyBytes() + 1));
 }
 
 TEST(StorageFormatTest, ComputesRedisClusterSlotsAndHashTags) {
-  using keylane::storage::RedisSlot;
+  using lavik::storage::RedisSlot;
 
   EXPECT_EQ(RedisSlot("123456789"), 12'739);
   EXPECT_EQ(RedisSlot("foo"), 12'182);
@@ -394,7 +394,7 @@ TEST(StorageFormatTest, ComputesRedisClusterSlotsAndHashTags) {
 }
 
 TEST(StorageFormatTest, EncodesAndValidatesPersistentMetadata) {
-  using namespace keylane::storage;
+  using namespace lavik::storage;
   static_assert(kStorageFormatVersion == 1);
 
   constexpr std::uint64_t device_id = kDeviceIdLimit - 2;
@@ -690,7 +690,7 @@ TEST(StorageFormatTest, EncodesAndValidatesPersistentMetadata) {
 }
 
 TEST(StorageFormatTest, EncodesOutOfIndexKeyWithoutHeaderBytes) {
-  using namespace keylane::storage;
+  using namespace lavik::storage;
 
   const std::string key(8192, 'k');
   const std::size_t header_bytes = RecordHeaderBytes(key.size(), true);
@@ -729,7 +729,7 @@ TEST(StorageFormatTest, EncodesOutOfIndexKeyWithoutHeaderBytes) {
 }
 
 TEST(StorageFormatTest, UsesSparseRecordHeaderExtensions) {
-  using namespace keylane::storage;
+  using namespace lavik::storage;
 
   EXPECT_EQ(RecordFixedHeaderBytes(false, false), 72);
   EXPECT_EQ(RecordFixedHeaderBytes(true, false), 80);
@@ -777,7 +777,7 @@ TEST(StorageFormatTest, UsesSparseRecordHeaderExtensions) {
 }
 
 TEST(StorageFormatTest, EncodesMemoryReplicationFrames) {
-  using namespace keylane::storage;
+  using namespace lavik::storage;
 
   constexpr std::string_view payload = "replication-payload";
   ReplicationFrameHeader frame{
@@ -819,7 +819,7 @@ TEST(StorageFormatTest, EncodesMemoryReplicationFrames) {
 }
 
 TEST(StorageFormatTest, RejectsOversizedInlineHeaderBeforeChecksumCopy) {
-  using namespace keylane::storage;
+  using namespace lavik::storage;
 
   constexpr std::uint32_t key_bytes = 60'000;
   const std::size_t header_bytes = RecordHeaderBytes(key_bytes, false);

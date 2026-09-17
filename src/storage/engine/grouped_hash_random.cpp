@@ -19,10 +19,10 @@
 #include <new>
 
 #include "impl.h"
-#include "keylane/random_sample.h"
-#include "keylane/storage/detail/grouped_scratch.h"
+#include "lavik/random_sample.h"
+#include "lavik/storage/detail/grouped_scratch.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 Task<absl::StatusOr<HashResult>>
 StorageEngine::Impl::ExecuteGroupedHashRandomLocked(
@@ -240,4 +240,4 @@ StorageEngine::Impl::ExecuteGroupedHashRandomLocked(
   }
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

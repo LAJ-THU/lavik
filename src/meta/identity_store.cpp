@@ -14,20 +14,20 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/identity_store.h"
+#include "lavik/meta/identity_store.h"
 
 #include <limits>
 #include <set>
 
 #include "absl/strings/str_cat.h"
-#include "keylane/cluster/control_protocol.h"
-#include "keylane/meta/identity_verifier.h"
-#include "keylane/numeric_endpoint.h"
+#include "lavik/cluster/control_protocol.h"
+#include "lavik/meta/identity_verifier.h"
+#include "lavik/numeric_endpoint.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
-namespace control = keylane::cluster::control;
+namespace control = lavik::cluster::control;
 
 // Field-cap re-validation at the store boundary: commands normally arrive via
 // the strict decoder (which enforces caps), but the store keeps its own
@@ -68,7 +68,7 @@ absl::StatusOr<ParsedDataEndpoint> ParseDataEndpoint(std::string_view encoded) {
     encoded.remove_prefix(6);
   }
 
-  auto endpoint = keylane::ParseNumericEndpoint(encoded);
+  auto endpoint = lavik::ParseNumericEndpoint(encoded);
   if (!endpoint.has_value()) {
     return absl::InvalidArgumentError(
         "Data endpoint must be numeric IPv4:port or [IPv6]:port");
@@ -117,17 +117,17 @@ absl::Status ValidateDataEndpoints(
 
 absl::StatusOr<std::string> CanonicalMetaDataControlEndpoint(
     std::string_view encoded) {
-  auto endpoint = keylane::ParseNumericEndpoint(encoded);
+  auto endpoint = lavik::ParseNumericEndpoint(encoded);
   if (!endpoint.has_value()) {
     return absl::InvalidArgumentError(
         "Meta data-control endpoint must be numeric IPv4:port or [IPv6]:port");
   }
-  return keylane::FormatNumericEndpoint(*endpoint);
+  return lavik::FormatNumericEndpoint(*endpoint);
 }
 
 absl::StatusOr<std::string> CanonicalMetaAdminEndpoint(
     std::string_view encoded) {
-  auto endpoint = keylane::ParseNumericEndpoint(encoded);
+  auto endpoint = lavik::ParseNumericEndpoint(encoded);
   if (!endpoint.has_value()) {
     return absl::InvalidArgumentError(
         "Meta ctl endpoint must be numeric IPv4:port or [IPv6]:port");
@@ -141,12 +141,12 @@ absl::StatusOr<std::string> CanonicalMetaAdminEndpoint(
     return absl::InvalidArgumentError(
         "Meta ctl endpoint must be a concrete routable address");
   }
-  return keylane::FormatNumericEndpoint(*endpoint);
+  return lavik::FormatNumericEndpoint(*endpoint);
 }
 
 absl::StatusOr<control::WireMetaEndpoint> ParseMetaControlEndpoint(
     const MetaMemberRecord& member) {
-  auto endpoint = keylane::ParseNumericEndpoint(member.data_control_endpoint_);
+  auto endpoint = lavik::ParseNumericEndpoint(member.data_control_endpoint_);
   if (!endpoint.has_value()) {
     return absl::InvalidArgumentError(
         "Meta data-control endpoint must be numeric IPv4:port or [IPv6]:port");
@@ -639,4 +639,4 @@ absl::StatusOr<MetaIdentityStore> MetaIdentityStore::Deserialize(
   return store;
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

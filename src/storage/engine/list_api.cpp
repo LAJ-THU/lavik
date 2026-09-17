@@ -16,7 +16,7 @@
 
 #include "impl.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 Task<absl::StatusOr<std::uint64_t>> StorageEngine::Impl::ListPush(
     std::uint8_t db_id, std::string_view key,
@@ -65,4 +65,4 @@ Task<absl::StatusOr<ListResult>> StorageEngine::Impl::ExecuteList(
                                        replication, mutation_precondition);
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

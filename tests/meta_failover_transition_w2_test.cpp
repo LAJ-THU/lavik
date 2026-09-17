@@ -23,18 +23,18 @@
 #include <utility>
 
 #include "gtest/gtest.h"
-#include "keylane/meta/cluster_create.h"
-#include "keylane/meta/commands.h"
-#include "keylane/meta/failover.h"
-#include "keylane/meta/hash.h"
-#include "keylane/meta/state_apply.h"
+#include "lavik/meta/cluster_create.h"
+#include "lavik/meta/commands.h"
+#include "lavik/meta/failover.h"
+#include "lavik/meta/hash.h"
+#include "lavik/meta/state_apply.h"
 #include "meta_topology_test_access.h"
 
 namespace {
 
-namespace meta = keylane::meta;
+namespace meta = lavik::meta;
 
-constexpr std::string_view kActor = "keylane://operator/failover-w2-test";
+constexpr std::string_view kActor = "lavik://operator/failover-w2-test";
 constexpr std::string_view kTime = "2026-09-15T00:00:00Z";
 
 template <std::size_t N>
@@ -74,8 +74,7 @@ std::array<std::string, 6> DomainBytes(const meta::MetaStores& stores) {
   // A rejected command still appends its mandatory audit record. Compare the
   // canonical serialization of every other committed store to prove that no
   // partial domain effect escaped before the rejection.
-  return {stores.identity_.Serialize(),
-          stores.topology_.Serialize(),
+  return {stores.identity_.Serialize(), stores.topology_.Serialize(),
           stores.policy_.Serialize(),
           stores.operation_.Serialize().value_or("invalid-operation"),
           stores.population_manifest_.Serialize()};
@@ -164,7 +163,7 @@ void RegisterNode(Fixture& fixture, const std::string& node_id,
   meta::RegisterNode node;
   node.request_id_ = Filled<16>(request_seed);
   node.node_id_ = node_id;
-  node.principal_ = "keylane://node/" + node_id;
+  node.principal_ = "lavik://node/" + node_id;
   node.endpoints_ = {"tcp://127.0.0.1:" + std::to_string(port)};
   node.role_ = role;
   AcceptFresh(fixture, meta::MetaCommand{node});
@@ -831,7 +830,7 @@ TEST(MetaFailoverTransitionW2,
   term_only.expected_term_ = 1;
   term_only.new_term_ = 2;
   ASSERT_TRUE(fixture.stores.topology_.BeginGroupTerm(term_only).ok());
-  ASSERT_TRUE(keylane::meta::MetaTopologyTestAccess::SetGroupTerm(
+  ASSERT_TRUE(lavik::meta::MetaTopologyTestAccess::SetGroupTerm(
                   fixture.stores.topology_, "g1", 2)
                   .ok());
   RejectFresh(fixture, meta::MetaCommand{commit});

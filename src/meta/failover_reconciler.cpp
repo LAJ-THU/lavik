@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/failover_reconciler.h"
+#include "lavik/meta/failover_reconciler.h"
 
 #include <algorithm>
 #include <array>
@@ -37,13 +37,13 @@
 #include "absl/status/status.h"
 #include "bycorf/io/storage.h"
 #include "bycorf/runtime/worker.h"
-#include "keylane/cluster/control_protocol.h"
-#include "keylane/fault_injection.h"
-#include "keylane/meta/candidate_plan.h"
-#include "keylane/meta/failover.h"
+#include "lavik/cluster/control_protocol.h"
+#include "lavik/fault_injection.h"
+#include "lavik/meta/candidate_plan.h"
+#include "lavik/meta/failover.h"
 #include "spdlog/spdlog.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
 template <std::size_t N>
@@ -68,7 +68,7 @@ bool WarmupComplete(const MetaFailoverPlannerContext& context) {
          context.leadership_started_unix_ms_ + context.observation_grace_ms_;
 }
 
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
 std::chrono::milliseconds TestPauseDelay(const char* variable) {
   const char* configured = std::getenv(variable);
   std::uint64_t delay_ms = 0;
@@ -805,7 +805,7 @@ struct MetaFailoverReconciler::Core {
   std::vector<std::shared_ptr<std::promise<void>>> waiters_;
   std::atomic<bool> stopping_{false};
   std::atomic<bool> stopped_{false};
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
   // One leader-local deterministic cut lets process tests observe Data's
   // committed post-Begin pause without changing the durable transition.
   bool test_pause_after_begin_applied_ = false;
@@ -910,10 +910,10 @@ bycorf::Task<absl::Status> MetaFailoverReconciler::Run(
       subscribed.view_ = context->CommittedView();
     }
 
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
     if (!core->test_pause_after_automatic_begin_applied_) {
-      const auto delay = TestPauseDelay(
-          "KEYLANE_TEST_PAUSE_FAILOVER_AFTER_AUTOMATIC_BEGIN_MS");
+      const auto delay =
+          TestPauseDelay("LAVIK_TEST_PAUSE_FAILOVER_AFTER_AUTOMATIC_BEGIN_MS");
       const auto groups = subscribed.view_.topology().Groups();
       const auto paused_group =
           std::ranges::find_if(groups, [](const auto& group) {
@@ -948,7 +948,7 @@ bycorf::Task<absl::Status> MetaFailoverReconciler::Run(
     }
     if (!core->test_pause_after_begin_applied_) {
       const auto delay =
-          TestPauseDelay("KEYLANE_TEST_PAUSE_FAILOVER_AFTER_BEGIN_MS");
+          TestPauseDelay("LAVIK_TEST_PAUSE_FAILOVER_AFTER_BEGIN_MS");
       const auto groups = subscribed.view_.topology().Groups();
       const auto paused_group =
           std::ranges::find_if(groups, [](const auto& group) {
@@ -985,7 +985,7 @@ bycorf::Task<absl::Status> MetaFailoverReconciler::Run(
     }
     if (!core->test_pause_after_authorize_applied_) {
       const auto delay =
-          TestPauseDelay("KEYLANE_TEST_PAUSE_FAILOVER_AFTER_AUTHORIZE_MS");
+          TestPauseDelay("LAVIK_TEST_PAUSE_FAILOVER_AFTER_AUTHORIZE_MS");
       const auto groups = subscribed.view_.topology().Groups();
       const auto paused_group =
           std::ranges::find_if(groups, [](const auto& group) {
@@ -1024,7 +1024,7 @@ bycorf::Task<absl::Status> MetaFailoverReconciler::Run(
     }
     if (!core->test_pause_after_prepared_observed_) {
       const auto delay =
-          TestPauseDelay("KEYLANE_TEST_PAUSE_FAILOVER_AFTER_PREPARED_MS");
+          TestPauseDelay("LAVIK_TEST_PAUSE_FAILOVER_AFTER_PREPARED_MS");
       const std::int64_t observed_at = core->options_.now_unix_ms_();
       const MetaStoresFacts facts(subscribed.view_.stores());
       const auto groups = subscribed.view_.topology().Groups();
@@ -1117,4 +1117,4 @@ bycorf::Task<absl::Status> MetaFailoverReconciler::Run(
   co_return absl::OkStatus();
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

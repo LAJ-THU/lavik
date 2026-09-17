@@ -1,4 +1,4 @@
-#include "keylane/rdb.h"
+#include "lavik/rdb.h"
 
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -26,10 +26,10 @@
 #include <vector>
 
 #include "absl/strings/str_cat.h"
-#include "keylane/memory.h"
-#include "keylane/storage/format.h"
+#include "lavik/memory.h"
+#include "lavik/storage/format.h"
 
-namespace keylane::rdb {
+namespace lavik::rdb {
 namespace {
 
 // Redis 7.2 RDB constants. The format and CRC implementation are derived from
@@ -69,12 +69,12 @@ constexpr std::uint8_t kSelectDb = 254;
 constexpr std::uint8_t kEof = 255;
 
 constexpr std::uint64_t kCrcPolynomial = 0xad93d23594c935a9ULL;
-constexpr std::string_view kListMagic = "KLL1";
+constexpr std::string_view kListMagic = "LVL1";
 
-constexpr std::string_view kZSetMagic = "KZS1";
-// Keylane's v1 Stream layout includes macro-node counts; it is independent of
+constexpr std::string_view kZSetMagic = "LZS1";
+// Lavik's v1 Stream layout includes macro-node counts; it is independent of
 // the standard Redis RDB version and has no legacy development decoder.
-constexpr std::string_view kStreamMagic = "KXS1";
+constexpr std::string_view kStreamMagic = "LXS1";
 constexpr std::uint32_t kDefaultStreamNodeMaxEntries = 100;
 
 absl::Status Bad(std::string_view detail = {}) {
@@ -289,7 +289,7 @@ absl::StatusOr<std::string> ReadString(Reader* reader) try {
         length->value > reader->remaining())
       return Bad("string length exceeds payload");
     if (!reader->AccountExpanded(length->value)) {
-      return Bad("expanded value exceeds Keylane limits");
+      return Bad("expanded value exceeds Lavik limits");
     }
     std::string_view value;
     reader->Bytes(static_cast<std::size_t>(length->value), &value);
@@ -308,7 +308,7 @@ absl::StatusOr<std::string> ReadString(Reader* reader) try {
                                       : static_cast<std::int32_t>(raw);
     std::string output = std::to_string(value);
     if (!reader->AccountExpanded(output.size())) {
-      return Bad("expanded value exceeds Keylane limits");
+      return Bad("expanded value exceeds Lavik limits");
     }
     return output;
   }
@@ -322,7 +322,7 @@ absl::StatusOr<std::string> ReadString(Reader* reader) try {
       compressed_size->value > reader->remaining())
     return Bad("invalid LZF lengths");
   if (!reader->AccountExpanded(output_size->value)) {
-    return Bad("expanded value exceeds Keylane limits");
+    return Bad("expanded value exceeds Lavik limits");
   }
   std::string_view compressed;
   reader->Bytes(static_cast<std::size_t>(compressed_size->value), &compressed);
@@ -1526,26 +1526,26 @@ absl::StatusOr<LogicalValue> DecodeRaw(const storage::RawValue& raw) {
     return LogicalValue{raw.value_type_, std::string(input)};
   if (raw.value_type_ == storage::ValueType::kList) {
     if (!input.starts_with(kListMagic) || input.size() < 8)
-      return Bad("invalid Keylane List");
+      return Bad("invalid Lavik List");
     Reader reader(input.substr(4));
     std::uint32_t count = 0;
     if (!reader.Le32(&count) || count != raw.logical_size_ || count == 0)
-      return Bad("invalid Keylane List count");
+      return Bad("invalid Lavik List count");
     Strings values;
     values.reserve(count);
     for (std::uint32_t i = 0; i < count; ++i) {
       std::uint32_t size = 0;
       std::string_view value;
       if (!reader.Le32(&size) || !reader.Bytes(size, &value))
-        return Bad("truncated Keylane List");
+        return Bad("truncated Lavik List");
       values.emplace_back(value);
     }
-    if (!reader.done()) return Bad("trailing Keylane List data");
+    if (!reader.done()) return Bad("trailing Lavik List data");
     return LogicalValue{raw.value_type_, std::move(values)};
   }
   if (raw.value_type_ == storage::ValueType::kSet ||
       raw.value_type_ == storage::ValueType::kHash) {
-    if (input.size() < 32) return Bad("invalid Keylane Hash");
+    if (input.size() < 32) return Bad("invalid Lavik Hash");
     Reader reader(input);
     std::uint64_t magic = 0, bytes = 0;
     std::uint32_t version = 0, header = 0, count = 0, reserved = 0;
@@ -1556,7 +1556,7 @@ absl::StatusOr<LogicalValue> DecodeRaw(const storage::RawValue& raw) {
         version != storage::kStorageFormatVersion || header != 32 ||
         reserved != 0 || bytes != input.size() || count == 0 ||
         count != raw.logical_size_)
-      return Bad("invalid Keylane Hash header");
+      return Bad("invalid Lavik Hash header");
     Pairs pairs;
     pairs.reserve(count);
     for (std::uint32_t i = 0; i < count; ++i) {
@@ -1564,15 +1564,15 @@ absl::StatusOr<LogicalValue> DecodeRaw(const storage::RawValue& raw) {
       std::uint32_t fs = 0, vs = 0;
       if (!reader.Le32(&fs) || !reader.Le32(&vs) || !reader.Bytes(fs, &field) ||
           !reader.Bytes(vs, &value))
-        return Bad("truncated Keylane Hash");
+        return Bad("truncated Lavik Hash");
       pairs.emplace_back(std::string(field), std::string(value));
     }
-    if (!reader.done()) return Bad("trailing Keylane Hash data");
+    if (!reader.done()) return Bad("trailing Lavik Hash data");
     if (raw.value_type_ == storage::ValueType::kSet) {
       Strings values;
       values.reserve(pairs.size());
       for (auto& [member, unused] : pairs) {
-        if (!unused.empty()) return Bad("invalid Keylane Set value");
+        if (!unused.empty()) return Bad("invalid Lavik Set value");
         values.push_back(std::move(member));
       }
       return LogicalValue{raw.value_type_, std::move(values)};
@@ -1581,11 +1581,11 @@ absl::StatusOr<LogicalValue> DecodeRaw(const storage::RawValue& raw) {
   }
   if (raw.value_type_ == storage::ValueType::kSortedSet) {
     if (!input.starts_with(kZSetMagic) || input.size() < 8)
-      return Bad("invalid Keylane Zset");
+      return Bad("invalid Lavik Zset");
     Reader reader(input.substr(4));
     std::uint32_t count = 0;
     if (!reader.Le32(&count) || count != raw.logical_size_ || count == 0)
-      return Bad("invalid Keylane Zset count");
+      return Bad("invalid Lavik Zset count");
     ZElements values;
     values.reserve(count);
     for (std::uint32_t i = 0; i < count; ++i) {
@@ -1594,17 +1594,17 @@ absl::StatusOr<LogicalValue> DecodeRaw(const storage::RawValue& raw) {
       std::string_view member;
       if (!reader.Le64(&bits) || !reader.Le32(&size) ||
           !reader.Bytes(size, &member))
-        return Bad("truncated Keylane Zset");
+        return Bad("truncated Lavik Zset");
       double score = std::bit_cast<double>(bits);
-      if (std::isnan(score)) return Bad("NaN Keylane Zset score");
+      if (std::isnan(score)) return Bad("NaN Lavik Zset score");
       values.push_back({std::string(member), score});
     }
-    if (!reader.done()) return Bad("trailing Keylane Zset data");
+    if (!reader.done()) return Bad("trailing Lavik Zset data");
     return LogicalValue{raw.value_type_, std::move(values)};
   }
   if (raw.value_type_ == storage::ValueType::kStream) {
     if (!input.starts_with(kStreamMagic) || input.size() < 48)
-      return Bad("invalid Keylane Stream");
+      return Bad("invalid Lavik Stream");
     Reader reader(input.substr(4));
     Stream stream;
     std::uint32_t entries = 0, groups = 0;
@@ -1613,7 +1613,7 @@ absl::StatusOr<LogicalValue> DecodeRaw(const storage::RawValue& raw) {
         !reader.Le64(&stream.max_deleted.seq) ||
         !reader.Le64(&stream.entries_added) || !reader.Le32(&entries) ||
         entries != raw.logical_size_)
-      return Bad("invalid Keylane Stream header");
+      return Bad("invalid Lavik Stream header");
     auto read_text = [&](std::string* value) {
       std::uint32_t size = 0;
       std::string_view text;
@@ -1626,26 +1626,26 @@ absl::StatusOr<LogicalValue> DecodeRaw(const storage::RawValue& raw) {
       std::uint32_t fields = 0;
       if (!reader.Le64(&entry.id.ms) || !reader.Le64(&entry.id.seq) ||
           !reader.Le32(&fields) || fields % 2)
-        return Bad("invalid Keylane Stream entry");
+        return Bad("invalid Lavik Stream entry");
       for (std::uint32_t f = 0; f < fields; ++f) {
         std::string text;
-        if (!read_text(&text)) return Bad("truncated Keylane Stream field");
+        if (!read_text(&text)) return Bad("truncated Lavik Stream field");
         entry.fields.push_back(std::move(text));
       }
       stream.entries.push_back(std::move(entry));
     }
     std::uint32_t nodes = 0;
     if (!reader.Le32(&nodes) || nodes > stream.entries.size())
-      return Bad("invalid Keylane Stream nodes");
+      return Bad("invalid Lavik Stream nodes");
     stream.node_entries.reserve(nodes);
     for (std::uint32_t i = 0; i < nodes; ++i) {
       std::uint32_t count = 0;
-      if (!reader.Le32(&count)) return Bad("truncated Keylane Stream nodes");
+      if (!reader.Le32(&count)) return Bad("truncated Lavik Stream nodes");
       stream.node_entries.push_back(count);
     }
     if (!ValidStreamNodes(stream))
-      return Bad("invalid Keylane Stream node counts");
-    if (!reader.Le32(&groups)) return Bad("truncated Keylane Stream groups");
+      return Bad("invalid Lavik Stream node counts");
+    if (!reader.Le32(&groups)) return Bad("truncated Lavik Stream groups");
     for (std::uint32_t i = 0; i < groups; ++i) {
       Group group;
       std::uint64_t read_bits = 0;
@@ -1653,30 +1653,30 @@ absl::StatusOr<LogicalValue> DecodeRaw(const storage::RawValue& raw) {
       if (!read_text(&group.name) || !reader.Le64(&group.last.ms) ||
           !reader.Le64(&group.last.seq) || !reader.Le64(&read_bits) ||
           !reader.Le32(&consumers))
-        return Bad("truncated Keylane Stream group");
+        return Bad("truncated Lavik Stream group");
       group.entries_read = std::bit_cast<std::int64_t>(read_bits);
       for (std::uint32_t c = 0; c < consumers; ++c) {
         Consumer consumer;
         if (!read_text(&consumer.name) || !reader.Le64(&consumer.seen) ||
             !reader.Le64(&consumer.active))
-          return Bad("truncated Keylane Stream consumer");
+          return Bad("truncated Lavik Stream consumer");
         group.consumers.push_back(std::move(consumer));
       }
-      if (!reader.Le32(&pending)) return Bad("truncated Keylane Stream PEL");
+      if (!reader.Le32(&pending)) return Bad("truncated Lavik Stream PEL");
       for (std::uint32_t p = 0; p < pending; ++p) {
         Pending item;
         if (!reader.Le64(&item.id.ms) || !reader.Le64(&item.id.seq) ||
             !read_text(&item.consumer) || !reader.Le64(&item.delivery) ||
             !reader.Le64(&item.count))
-          return Bad("truncated Keylane Stream PEL");
+          return Bad("truncated Lavik Stream PEL");
         group.pending.push_back(std::move(item));
       }
       stream.groups.push_back(std::move(group));
     }
-    if (!reader.done()) return Bad("trailing Keylane Stream data");
+    if (!reader.done()) return Bad("trailing Lavik Stream data");
     return LogicalValue{raw.value_type_, std::move(stream)};
   }
-  return Bad("unsupported Keylane type");
+  return Bad("unsupported Lavik type");
 }
 
 void AppendHashRaw(std::string* output, const Pairs& pairs) {
@@ -1716,7 +1716,7 @@ absl::StatusOr<storage::RawValue> EncodeRaw(LogicalValue logical) {
     auto values = std::move(std::get<Strings>(logical.value));
     std::uint64_t bytes = 8;
     for (const auto& value : values) {
-      if (!text_size(&bytes, value)) return Bad("value exceeds Keylane limits");
+      if (!text_size(&bytes, value)) return Bad("value exceeds Lavik limits");
     }
     raw.logical_size_ = values.size();
     raw.encoded_ = std::string(kListMagic);
@@ -1737,7 +1737,7 @@ absl::StatusOr<storage::RawValue> EncodeRaw(LogicalValue logical) {
       if (!add_size(&bytes, 8) || !add_size(&bytes, field.size()) ||
           !add_size(&bytes, value.size()) || field.size() > UINT32_MAX ||
           value.size() > UINT32_MAX)
-        return Bad("value exceeds Keylane limits");
+        return Bad("value exceeds Lavik limits");
     }
     raw.logical_size_ = pairs.size();
     raw.encoded_.reserve(bytes);
@@ -1750,7 +1750,7 @@ absl::StatusOr<storage::RawValue> EncodeRaw(LogicalValue logical) {
       if (!add_size(&bytes, 8) || !add_size(&bytes, field.size()) ||
           !add_size(&bytes, value.size()) || field.size() > UINT32_MAX ||
           value.size() > UINT32_MAX)
-        return Bad("value exceeds Keylane limits");
+        return Bad("value exceeds Lavik limits");
     }
     raw.logical_size_ = pairs.size();
     raw.encoded_.reserve(bytes);
@@ -1766,7 +1766,7 @@ absl::StatusOr<storage::RawValue> EncodeRaw(LogicalValue logical) {
     for (const auto& value : values) {
       if (!add_size(&bytes, 12) || !add_size(&bytes, value.member.size()) ||
           value.member.size() > UINT32_MAX)
-        return Bad("value exceeds Keylane limits");
+        return Bad("value exceeds Lavik limits");
     }
     raw.logical_size_ = values.size();
     raw.encoded_ = std::string(kZSetMagic);
@@ -1781,33 +1781,32 @@ absl::StatusOr<storage::RawValue> EncodeRaw(LogicalValue logical) {
     auto stream = std::move(std::get<Stream>(logical.value));
     if (stream.node_entries.empty() && !stream.entries.empty())
       SynthesizeStreamNodes(&stream);
-    if (!ValidStreamNodes(stream)) return Bad("invalid Keylane Stream nodes");
+    if (!ValidStreamNodes(stream)) return Bad("invalid Lavik Stream nodes");
     std::uint64_t bytes = 48;
     for (const auto& entry : stream.entries) {
       if (!add_size(&bytes, 20) || entry.fields.size() > UINT32_MAX)
-        return Bad("value exceeds Keylane limits");
+        return Bad("value exceeds Lavik limits");
       for (const auto& field : entry.fields) {
-        if (!text_size(&bytes, field))
-          return Bad("value exceeds Keylane limits");
+        if (!text_size(&bytes, field)) return Bad("value exceeds Lavik limits");
       }
     }
     if (!add_size(&bytes, 4 + 4 * stream.node_entries.size()))
-      return Bad("value exceeds Keylane limits");
-    if (!add_size(&bytes, 4)) return Bad("value exceeds Keylane limits");
+      return Bad("value exceeds Lavik limits");
+    if (!add_size(&bytes, 4)) return Bad("value exceeds Lavik limits");
     for (const auto& group : stream.groups) {
       if (!text_size(&bytes, group.name) || !add_size(&bytes, 28) ||
           group.consumers.size() > UINT32_MAX ||
           group.pending.size() > UINT32_MAX)
-        return Bad("value exceeds Keylane limits");
+        return Bad("value exceeds Lavik limits");
       for (const auto& consumer : group.consumers) {
         if (!text_size(&bytes, consumer.name) || !add_size(&bytes, 16))
-          return Bad("value exceeds Keylane limits");
+          return Bad("value exceeds Lavik limits");
       }
-      if (!add_size(&bytes, 4)) return Bad("value exceeds Keylane limits");
+      if (!add_size(&bytes, 4)) return Bad("value exceeds Lavik limits");
       for (const auto& pending : group.pending) {
         if (!add_size(&bytes, 16) || !text_size(&bytes, pending.consumer) ||
             !add_size(&bytes, 16))
-          return Bad("value exceeds Keylane limits");
+          return Bad("value exceeds Lavik limits");
       }
     }
     raw.logical_size_ = stream.entries.size();
@@ -1856,7 +1855,7 @@ absl::StatusOr<storage::RawValue> EncodeRaw(LogicalValue logical) {
   }
   if (raw.encoded_.size() > storage::kMaxStringBytes ||
       raw.logical_size_ > UINT32_MAX)
-    return Bad("value exceeds Keylane limits");
+    return Bad("value exceeds Lavik limits");
   return raw;
 }
 
@@ -1963,7 +1962,7 @@ absl::StatusOr<std::string> EncodeRdbObject(const LogicalValue& logical) {
     out.push_back(kStreamListpacks3);
     EncodeStreamRdb(&out, std::get<Stream>(logical.value));
   } else
-    return Bad("unsupported Keylane type");
+    return Bad("unsupported Lavik type");
   PutLe16(&out, kVersion);
   PutLe64(&out, Crc64(out));
   return out;
@@ -2202,7 +2201,7 @@ absl::StatusOr<std::optional<FileEntry>> FileReader::NextImpl(
       auto db = ReadLength(&impl_->reader_);
       if (!db.ok()) return db.status();
       if (db->encoded || db->value >= storage::kLogicalDatabaseCount) {
-        return Bad("RDB database is outside Keylane's DB range");
+        return Bad("RDB database is outside Lavik's DB range");
       }
       impl_->db_id_ = static_cast<std::uint8_t>(db->value);
       continue;
@@ -2253,7 +2252,7 @@ absl::StatusOr<std::optional<FileEntry>> FileReader::NextImpl(
       return Bad("pre-release Redis Module format is not skippable");
     }
     if (key->size() > storage::MaxKeyBytes()) {
-      return Bad("RDB key exceeds Keylane limits");
+      return Bad("RDB key exceeds Lavik limits");
     }
     impl_->reader_.ResetExpandedAccounting();
     if (stream_collections &&
@@ -2664,4 +2663,4 @@ absl::StatusOr<storage::RawValue> DumpReader::ReadRawValue() {
 }
 absl::Status DumpReader::Rewind() { return impl_->Initialize(); }
 
-}  // namespace keylane::rdb
+}  // namespace lavik::rdb

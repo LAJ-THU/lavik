@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/cluster_create.h"
+#include "lavik/meta/cluster_create.h"
 
 #include <algorithm>
 #include <cctype>
@@ -32,12 +32,12 @@
 #include <vector>
 
 #include "absl/status/status.h"
-#include "keylane/CLI11.hpp"
-#include "keylane/meta/cluster_status.h"
-#include "keylane/numeric_endpoint.h"
+#include "lavik/CLI11.hpp"
+#include "lavik/meta/cluster_status.h"
+#include "lavik/numeric_endpoint.h"
 #include "openssl/rand.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
 constexpr std::size_t kMaxManifestBytes = 64 * 1024;
@@ -1011,4 +1011,4 @@ absl::StatusOr<ClusterCreateOutcome> ClusterOperator::Create(
   return *outcome;
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

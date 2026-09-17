@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/audit_store.h"
+#include "lavik/meta/audit_store.h"
 
 #include <cstdlib>
 #include <string>
 
 #include "spdlog/spdlog.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 
 namespace {
 
@@ -290,4 +290,4 @@ absl::StatusOr<MetaAuditExport> DecodeMetaAuditExport(std::string_view bytes) {
   return out;
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

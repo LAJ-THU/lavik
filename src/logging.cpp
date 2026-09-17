@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/logging.h"
+#include "lavik/logging.h"
 
 #include <exception>
 #include <filesystem>
@@ -29,7 +29,7 @@
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include "spdlog/spdlog.h"
 
-namespace keylane {
+namespace lavik {
 namespace {
 
 constexpr std::size_t kMiB = 1024 * 1024;
@@ -51,7 +51,7 @@ absl::Status ValidateLoggingOptions(const LoggingOptions& options) {
   if (options.max_log_files_ == 0) {
     return absl::InvalidArgumentError("max-log-files must be nonzero");
   }
-  // spdlog counts archived files, while Keylane's option includes the active
+  // spdlog counts archived files, while Lavik's option includes the active
   // file.
   if (options.max_log_files_ - 1 > kMaxRotatedFiles) {
     return absl::OutOfRangeError("max-log-files is too large");
@@ -67,7 +67,7 @@ absl::Status InitializeLogging(const LoggingOptions& options) {
     std::vector<spdlog::sink_ptr> sinks;
     if (!options.log_to_stderr_) {
       const std::filesystem::path filename =
-          std::filesystem::path(options.log_dir_) / "keylane.log";
+          std::filesystem::path(options.log_dir_) / "lavik.log";
       const std::size_t max_file_size = options.max_log_size_mb_ * kMiB;
       const std::size_t archived_files = options.max_log_files_ - 1;
       sinks.push_back(std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
@@ -79,7 +79,7 @@ absl::Status InitializeLogging(const LoggingOptions& options) {
     }
 
     auto logger =
-        std::make_shared<spdlog::logger>("keylane", sinks.begin(), sinks.end());
+        std::make_shared<spdlog::logger>("lavik", sinks.begin(), sinks.end());
     logger->set_level(spdlog::level::info);
     logger->flush_on(spdlog::level::warn);
     spdlog::set_default_logger(std::move(logger));
@@ -97,4 +97,4 @@ void ShutdownLogging() {
   spdlog::shutdown();
 }
 
-}  // namespace keylane
+}  // namespace lavik

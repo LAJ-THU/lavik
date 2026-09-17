@@ -261,7 +261,7 @@ RespClient Connect(std::uint16_t port) {
     ::close(fd);
     std::this_thread::sleep_for(10ms);
   }
-  Fail("timed out connecting to Keylane");
+  Fail("timed out connecting to Lavik");
 }
 
 RespClient ConnectReady(std::uint16_t port) {
@@ -277,7 +277,7 @@ RespClient ConnectReady(std::uint16_t port) {
     }
     std::this_thread::sleep_for(10ms);
   }
-  Fail("timed out waiting for Keylane readiness");
+  Fail("timed out waiting for Lavik readiness");
 }
 
 class ServerProcess {
@@ -337,14 +337,14 @@ class ServerProcess {
       if (result == pid_) {
         pid_ = -1;
         if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-          Fail("Keylane exited unsuccessfully");
+          Fail("Lavik exited unsuccessfully");
         }
         return;
       }
       if (result < 0) Fail("waitpid failed");
       std::this_thread::sleep_for(10ms);
     }
-    Fail("Keylane did not stop");
+    Fail("Lavik did not stop");
   }
 
  private:
@@ -421,14 +421,14 @@ std::string ReadFile(const std::string& path) {
 
 int main(int argc, char** argv) {
   if (argc != 2) {
-    std::cerr << "usage: multi_exec_e2e_test /path/to/keylane\n";
+    std::cerr << "usage: multi_exec_e2e_test /path/to/lavik\n";
     return 1;
   }
   const std::string suffix = std::to_string(::getpid());
   const std::string data_path =
-      keylane::test::TestDataPath("keylane-multiexec-" + suffix + ".data");
+      lavik::test::TestDataPath("lavik-multiexec-" + suffix + ".data");
   const std::string log_path =
-      keylane::test::TestDataPath("keylane-multiexec-" + suffix + ".log");
+      lavik::test::TestDataPath("lavik-multiexec-" + suffix + ".log");
   (void)::unlink(data_path.c_str());
   (void)::unlink(log_path.c_str());
 
@@ -462,80 +462,77 @@ int main(int argc, char** argv) {
            "FUNCTION DELETE named argument fixture");
 
     constexpr std::string_view function_library =
-        "#!lua name=keylane_test\n"
+        "#!lua name=lavik_test\n"
         "local prefix = 'fn:'\n"
-        "redis.register_function('keylane_set', function(keys, args) "
+        "redis.register_function('lavik_set', function(keys, args) "
         "return redis.call('SET', keys[1], prefix .. args[1]) end)\n"
-        "redis.register_function{function_name='keylane_get', "
+        "redis.register_function{function_name='lavik_get', "
         "callback=function(keys, args) return redis.call('GET', keys[1]) "
         "end, description='read a value', flags={'no-writes'}}\n"
-        "redis.register_function{function_name='keylane_wait', "
+        "redis.register_function{function_name='lavik_wait', "
         "callback=function(keys, args) return redis.call('WAIT', args[1], "
         "args[2]) end, flags={'no-writes'}}\n"
-        "redis.register_function{function_name='keylane_no_writes_set', "
+        "redis.register_function{function_name='lavik_no_writes_set', "
         "callback=function(keys, args) return redis.call('SET', keys[1], "
         "args[1]) end, flags={'no-writes'}}\n"
-        "redis.register_function{function_name='keylane_loop', "
+        "redis.register_function{function_name='lavik_loop', "
         "callback=function(keys, args) while true do "
         "redis.call('GET', keys[1]) end end, flags={'no-writes'}}\n"
-        "redis.register_function{function_name='keylane_globals', "
+        "redis.register_function{function_name='lavik_globals', "
         "callback=function(keys, args) return type(KEYS)..':'..type(ARGV) "
         "end, flags={'no-writes'}}\n"
-        "redis.register_function{function_name='keylane_json', "
+        "redis.register_function{function_name='lavik_json', "
         "callback=function(keys, args) local value=cjson.decode(args[1]); "
         "return cjson.encode({answer=value.number + 1}) end, "
         "flags={'no-writes'}}";
     Expect(client.Command({"FUNCTION", "LOAD", function_library}),
-           Bulk("keylane_test"), "FUNCTION LOAD");
-    Expect(
-        client.Command({"FCALL", "keylane_set", "1", "function:key", "value"}),
-        "+OK", "FCALL write function");
-    Expect(client.Command({"FCALL", "keylane_get", "1", "function:key"}),
+           Bulk("lavik_test"), "FUNCTION LOAD");
+    Expect(client.Command({"FCALL", "lavik_set", "1", "function:key", "value"}),
+           "+OK", "FCALL write function");
+    Expect(client.Command({"FCALL", "lavik_get", "1", "function:key"}),
            Bulk("fn:value"), "FCALL read function");
-    Expect(client.Command({"FCALL_RO", "keylane_get", "1", "function:key"}),
+    Expect(client.Command({"FCALL_RO", "lavik_get", "1", "function:key"}),
            Bulk("fn:value"), "FCALL_RO no-writes function");
-    Expect(client.Command({"FCALL_RO", "keylane_wait", "0", "1", "0"}), ":0",
+    Expect(client.Command({"FCALL_RO", "lavik_wait", "0", "1", "0"}), ":0",
            "FCALL_RO WAIT returns immediately");
-    Expect(client.Command({"FCALL_RO", "keylane_no_writes_set", "1",
+    Expect(client.Command({"FCALL_RO", "lavik_no_writes_set", "1",
                            "function:key", "blocked"}),
            "-ERR Write commands are not allowed from read-only scripts.",
            "FCALL_RO returns the direct read-only write error");
-    ExpectContains(client.Command({"FCALL_RO", "keylane_globals", "0"}),
+    ExpectContains(client.Command({"FCALL_RO", "lavik_globals", "0"}),
                    "Script attempted to access nonexistent global variable "
                    "'KEYS'",
                    "FCALL does not inherit EVAL globals");
-    Expect(client.Command({"FCALL_RO", "keylane_json", "0", "{\"number\":41}"}),
+    Expect(client.Command({"FCALL_RO", "lavik_json", "0", "{\"number\":41}"}),
            Bulk("{\"answer\":42}"), "FCALL cjson encode and decode");
 
     ExpectContains(
         client.Command(
-            {"FCALL_RO", "keylane_set", "1", "function:key", "blocked"}),
+            {"FCALL_RO", "lavik_set", "1", "function:key", "blocked"}),
         "Can not execute a script with write flag using *_ro command",
         "FCALL_RO rejects write function");
     const std::string function_list =
         client.Command({"FUNCTION", "LIST", "WITHCODE"});
-    ExpectContains(function_list, "keylane_test", "FUNCTION LIST library");
-    ExpectContains(function_list, "keylane_get", "FUNCTION LIST function");
+    ExpectContains(function_list, "lavik_test", "FUNCTION LIST library");
+    ExpectContains(function_list, "lavik_get", "FUNCTION LIST function");
     ExpectContains(function_list, "read a value", "FUNCTION LIST description");
     ExpectContains(function_list, "no-writes", "FUNCTION LIST flags");
-    ExpectContains(function_list, "#!lua name=keylane_test",
+    ExpectContains(function_list, "#!lua name=lavik_test",
                    "FUNCTION LIST WITHCODE");
     const std::string function_dump =
         BulkPayload(client.Command({"FUNCTION", "DUMP"}));
-    Expect(client.Command({"FUNCTION", "DELETE", "keylane_test"}), "+OK",
+    Expect(client.Command({"FUNCTION", "DELETE", "lavik_test"}), "+OK",
            "FUNCTION DELETE");
-    ExpectContains(
-        client.Command({"FCALL", "keylane_get", "1", "function:key"}),
-        "Function not found", "FCALL after FUNCTION DELETE");
+    ExpectContains(client.Command({"FCALL", "lavik_get", "1", "function:key"}),
+                   "Function not found", "FCALL after FUNCTION DELETE");
     Expect(client.Command({"FUNCTION", "RESTORE", function_dump}), "+OK",
            "FUNCTION RESTORE");
-    Expect(client.Command({"FCALL", "keylane_get", "1", "function:key"}),
+    Expect(client.Command({"FCALL", "lavik_get", "1", "function:key"}),
            Bulk("fn:value"), "FCALL after FUNCTION RESTORE");
     Expect(client.Command({"FUNCTION", "FLUSH", "ASYNC"}), "+OK",
            "FUNCTION FLUSH ASYNC");
-    ExpectContains(
-        client.Command({"FCALL", "keylane_get", "1", "function:key"}),
-        "Function not found", "FCALL after FUNCTION FLUSH");
+    ExpectContains(client.Command({"FCALL", "lavik_get", "1", "function:key"}),
+                   "Function not found", "FCALL after FUNCTION FLUSH");
     Expect(client.Command({"FUNCTION", "RESTORE", function_dump, "FLUSH"}),
            "+OK", "FUNCTION RESTORE FLUSH");
     ExpectContains(client.Command({"FUNCTION", "RESTORE", "broken"}),
@@ -607,10 +604,10 @@ int main(int argc, char** argv) {
 
     RespClient looping_function = Connect(port);
     looping_function.SendCommand(
-        {"FCALL", "keylane_loop", "1", "lua:function-kill-loop"});
+        {"FCALL", "lavik_loop", "1", "lua:function-kill-loop"});
     const std::string function_stats =
         WaitForCommandContains(script_killer, {"FUNCTION", "STATS"},
-                               "keylane_loop", "FUNCTION STATS name");
+                               "lavik_loop", "FUNCTION STATS name");
     ExpectContains(function_stats, "duration_ms", "FUNCTION STATS duration");
     ExpectContains(script_killer.Command({"SCRIPT", "KILL"}),
                    "You can only call FUNCTION KILL",
@@ -707,7 +704,7 @@ int main(int argc, char** argv) {
         seeded_random) {
       Fail("different math.random seeds returned the same sequence");
     }
-    constexpr std::string_view lua_log_marker = "keylane-lua-log-e2e-marker";
+    constexpr std::string_view lua_log_marker = "lavik-lua-log-e2e-marker";
     Expect(client.Command(
                {"EVAL", "redis.log(redis.LOG_WARNING,ARGV[1],42); return true",
                 "0", lua_log_marker}),
@@ -891,7 +888,7 @@ int main(int argc, char** argv) {
         "Attempt to modify a readonly table",
         "Lua global protection metatable is readonly");
     ExpectContains(
-        client.Command({"EVAL", "keylane_persistent_global=1; return 1", "0"}),
+        client.Command({"EVAL", "lavik_persistent_global=1; return 1", "0"}),
         "Attempt to modify a readonly table", "Lua global table is readonly");
 
     Expect(client.Command({"EVAL",
@@ -1515,7 +1512,7 @@ int main(int argc, char** argv) {
       }
     };
     contains(info, "# Server", "server section");
-    contains(info, "keylane_version:", "version field");
+    contains(info, "lavik_version:", "version field");
     contains(info, "worker_threads:4", "threads field");
     contains(info, "# Clients", "clients section");
     contains(info, "connected_clients:", "clients field");
@@ -1631,13 +1628,13 @@ int main(int argc, char** argv) {
       ServerProcess restarted(argv[1], port, data_path, log_path);
       RespClient recovered = ConnectReady(port);
       ExpectContains(
-          recovered.Command({"FCALL_RO", "keylane_globals", "0"}),
+          recovered.Command({"FCALL_RO", "lavik_globals", "0"}),
           "Script attempted to access nonexistent global variable 'KEYS'",
           "Function catalog preserves protected globals after restart");
       Expect(recovered.Command({"FCALL", "transaction_set", "1",
                                 "function:restart", "durable"}),
              "+OK", "transaction-loaded Function survives restart");
-      Expect(recovered.Command({"FUNCTION", "DELETE", "keylane_test"}), "+OK",
+      Expect(recovered.Command({"FUNCTION", "DELETE", "lavik_test"}), "+OK",
              "durable FUNCTION DELETE");
       restarted.Stop();
     }
@@ -1645,7 +1642,7 @@ int main(int argc, char** argv) {
       ServerProcess restarted(argv[1], port, data_path, log_path);
       RespClient recovered = ConnectReady(port);
       ExpectContains(
-          recovered.Command({"FCALL", "keylane_get", "1", "function:key"}),
+          recovered.Command({"FCALL", "lavik_get", "1", "function:key"}),
           "Function not found", "FUNCTION DELETE survives restart");
       Expect(recovered.Command({"GET", "function:restart"}), Bulk("durable"),
              "Function write survives restart");
@@ -1662,7 +1659,7 @@ int main(int argc, char** argv) {
       restarted.Stop();
     }
   } catch (const std::exception& error) {
-    std::cerr << error.what() << "\n--- Keylane log ---\n"
+    std::cerr << error.what() << "\n--- Lavik log ---\n"
               << ReadFile(log_path) << std::flush;
     exit_code = 1;
   }

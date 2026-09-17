@@ -28,20 +28,20 @@
 
 namespace {
 using namespace std::chrono_literals;
-using keylane::test::ChildProcess;
-using keylane::test::Connect;
-using keylane::test::CreateDataFile;
-using keylane::test::Fail;
-using keylane::test::PortReservation;
-using keylane::test::ReadFile;
-using keylane::test::RespClient;
-using keylane::test::TempDirectory;
-using keylane::test::WaitUntil;
-using keylane::test::WriteFile;
+using lavik::test::ChildProcess;
+using lavik::test::Connect;
+using lavik::test::CreateDataFile;
+using lavik::test::Fail;
+using lavik::test::PortReservation;
+using lavik::test::ReadFile;
+using lavik::test::RespClient;
+using lavik::test::TempDirectory;
+using lavik::test::WaitUntil;
+using lavik::test::WriteFile;
 
-std::vector<std::string> KeylaneArgs(const std::string& binary,
-                                     const std::string& config,
-                                     const std::string& data) {
+std::vector<std::string> LavikArgs(const std::string& binary,
+                                   const std::string& config,
+                                   const std::string& data) {
   return {binary,
           config,
           "--data-file",
@@ -73,7 +73,7 @@ std::size_t Count(std::string_view haystack, std::string_view needle) {
 int main(int argc, char** argv) {
   try {
     if (argc != 3) {
-      Fail("usage: sentinel_e2e_test KEYLANE_BINARY REDIS_SERVER_BINARY");
+      Fail("usage: sentinel_e2e_test LAVIK_BINARY REDIS_SERVER_BINARY");
     }
     TempDirectory root("sentinel-e2e");
     PortReservation master_reservation;
@@ -108,19 +108,19 @@ int main(int argc, char** argv) {
     CreateDataFile(other_data, 128ULL * 1024 * 1024);
 
     (void)master_reservation.ReleaseForSpawn();
-    ChildProcess master(KeylaneArgs(argv[1], master_config, master_data),
+    ChildProcess master(LavikArgs(argv[1], master_config, master_data),
                         root.path() / "master.log");
     (void)preferred_reservation.ReleaseForSpawn();
     ChildProcess preferred(
-        KeylaneArgs(argv[1], preferred_config, preferred_data),
+        LavikArgs(argv[1], preferred_config, preferred_data),
         root.path() / "preferred.log",
         {
-#if KEYLANE_TEST_FAULTS_AVAILABLE
-            {"KEYLANE_REPLICATION_PAUSE_FULLSYNC_AFTER_RESET_MS", "1000"}
+#if LAVIK_TEST_FAULTS_AVAILABLE
+            {"LAVIK_REPLICATION_PAUSE_FULLSYNC_AFTER_RESET_MS", "1000"}
 #endif
         });
     (void)other_reservation.ReleaseForSpawn();
-    ChildProcess other(KeylaneArgs(argv[1], other_config, other_data),
+    ChildProcess other(LavikArgs(argv[1], other_config, other_data),
                        root.path() / "other.log");
 
     WaitUntil("both replicas online", 60s, [&] {
@@ -153,11 +153,11 @@ int main(int argc, char** argv) {
       WriteFile(sentinel_configs[index],
                 "port " + std::to_string(sentinel_ports[index]) + "\n" +
                     "dir " + root.path().string() + "\n" +
-                    "sentinel monitor keylane 127.0.0.1 " +
+                    "sentinel monitor lavik 127.0.0.1 " +
                     std::to_string(master_port) + " 2\n" +
-                    "sentinel down-after-milliseconds keylane 1000\n" +
-                    "sentinel failover-timeout keylane 15000\n" +
-                    "sentinel parallel-syncs keylane 1\n");
+                    "sentinel down-after-milliseconds lavik 1000\n" +
+                    "sentinel failover-timeout lavik 15000\n" +
+                    "sentinel parallel-syncs lavik 1\n");
     }
     (void)sentinel_reservations[0].ReleaseForSpawn();
     ChildProcess sentinel0({argv[2], sentinel_configs[0], "--sentinel"},
@@ -172,7 +172,7 @@ int main(int argc, char** argv) {
       for (const std::uint16_t sentinel_port : sentinel_ports) {
         RespClient client = Connect(sentinel_port);
         const std::string replicas =
-            client.Command({"SENTINEL", "REPLICAS", "keylane"});
+            client.Command({"SENTINEL", "REPLICAS", "lavik"});
         if (replicas.find(std::to_string(preferred_port)) ==
                 std::string::npos ||
             replicas.find(std::to_string(other_port)) == std::string::npos ||
@@ -180,7 +180,7 @@ int main(int argc, char** argv) {
           return false;
         }
         const std::string peers =
-            client.Command({"SENTINEL", "SENTINELS", "keylane"});
+            client.Command({"SENTINEL", "SENTINELS", "lavik"});
         if (!peers.starts_with("*2\r\n")) return false;
       }
       return true;
@@ -203,14 +203,14 @@ int main(int argc, char** argv) {
     WaitUntil("quorum priority-selected master", 60s, [&] {
       for (const std::uint16_t sentinel_port : sentinel_ports) {
         RespClient client = Connect(sentinel_port);
-        if (client.Command({"SENTINEL", "GET-MASTER-ADDR-BY-NAME",
-                            "keylane"}) != preferred_address) {
+        if (client.Command({"SENTINEL", "GET-MASTER-ADDR-BY-NAME", "lavik"}) !=
+            preferred_address) {
           return false;
         }
       }
       return true;
     });
-    WaitUntil("promoted Keylane role", 30s, [&] {
+    WaitUntil("promoted Lavik role", 30s, [&] {
       RespClient client = Connect(preferred_port);
       return client.Command({"ROLE"}).starts_with("*3\r\n$6\r\nmaster");
     });
@@ -257,7 +257,7 @@ int main(int argc, char** argv) {
         std::string::npos) {
       Fail("PUBLISH raced ahead of its full-sync partition reset");
     }
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
     std::cout << "sentinel reset-pause injection not exercised: requires a "
                  "Debug/fault server; quorum and replication checks passed\n";
 #endif

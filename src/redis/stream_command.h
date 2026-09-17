@@ -20,9 +20,9 @@
 #include <span>
 
 #include "absl/status/status.h"
-#include "keylane/command.h"
+#include "lavik/command.h"
 
-namespace keylane {
+namespace lavik {
 
 void InitStreamCommandStorage(storage::StorageEngine* engine);
 std::uint32_t StreamNodeMaxEntries() noexcept;
@@ -45,4 +45,4 @@ Task<std::string> ExecuteStreamReadLocked(
     const CommandRequest& request, std::span<const StreamExecKey> keys,
     std::vector<storage::TxShardWrites>& tx_writes);
 
-}  // namespace keylane
+}  // namespace lavik

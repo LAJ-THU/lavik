@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/cluster/meta_control.h"
+#include "lavik/cluster/meta_control.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -31,13 +31,13 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
-#include "keylane/cluster/control_protocol.h"
-#include "keylane/cluster/control_types.h"
-#include "keylane/cluster/topology.h"
-#include "keylane/numeric_endpoint.h"
-#include "keylane/replication_group.h"
+#include "lavik/cluster/control_protocol.h"
+#include "lavik/cluster/control_types.h"
+#include "lavik/cluster/topology.h"
+#include "lavik/numeric_endpoint.h"
+#include "lavik/replication_group.h"
 
-namespace keylane::cluster {
+namespace lavik::cluster {
 namespace {
 
 bool IsZero(const control::WireId128& value) {
@@ -59,7 +59,7 @@ bool IsCanonicalNumericHost(std::string_view host) {
   const std::string encoded = host.find(':') == std::string_view::npos
                                   ? absl::StrCat(host, ":1")
                                   : absl::StrCat("[", host, "]:1");
-  const auto parsed = keylane::ParseNumericEndpoint(encoded);
+  const auto parsed = lavik::ParseNumericEndpoint(encoded);
   return parsed.has_value() && parsed->host_ == host;
 }
 
@@ -471,4 +471,4 @@ absl::StatusOr<PreparedFullState> PrepareNodeControlState(
   return prepared;
 }
 
-}  // namespace keylane::cluster
+}  // namespace lavik::cluster

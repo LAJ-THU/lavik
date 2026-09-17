@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/command_table.h"
+#include "lavik/command_table.h"
 
 #include <charconv>
 #include <limits>
@@ -22,9 +22,9 @@
 
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
-#include "keylane/redis_parse.h"
+#include "lavik/redis_parse.h"
 
-namespace keylane {
+namespace lavik {
 
 namespace {
 
@@ -159,7 +159,7 @@ constexpr CommandSpec kCommandTable[] = {
          kCmdMayBlock},
     {"hset", CommandKind::kHSet, 4, 0, 1, 1, 1, kKeyedWrite},
     {"hmset", CommandKind::kHMSet, 4, 0, 1, 1, 1, kKeyedWrite},
-    {"keylane.hreplace", CommandKind::kHReplace, 4, 0, 1, 1, 1, kKeyedWrite},
+    {"lavik.hreplace", CommandKind::kHReplace, 4, 0, 1, 1, 1, kKeyedWrite},
     {"hsetnx", CommandKind::kHSetNx, 4, 4, 1, 1, 1, kKeyedWrite},
     {"hget", CommandKind::kHGet, 3, 3, 1, 1, 1, kKeyedRead},
     {"hmget", CommandKind::kHMGet, 3, 0, 1, 1, 1, kKeyedRead},
@@ -667,4 +667,4 @@ absl::StatusOr<KeyIndexView> DetermineKeys(const CommandSpec& spec,
   };
 }
 
-}  // namespace keylane
+}  // namespace lavik

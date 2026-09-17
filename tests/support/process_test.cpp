@@ -15,7 +15,6 @@
  */
 
 #include "tests/support/process.h"
-#include "tests/support/test_data_path.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -36,8 +35,9 @@
 #include <utility>
 
 #include "gtest/gtest.h"
+#include "tests/support/test_data_path.h"
 
-namespace keylane::test {
+namespace lavik::test {
 namespace {
 
 class ScopedEnvironment {
@@ -69,17 +69,17 @@ class ScopedEnvironment {
 TEST(ProcessSupportTest, AcceptsConfiguredRootWithTrailingSeparator) {
   TempDirectory root("process-support-root");
   {
-    ScopedEnvironment environment("KEYLANE_TEST_DATA_DIR",
+    ScopedEnvironment environment("LAVIK_TEST_DATA_DIR",
                                   root.path().string() + "/");
     TempDirectory directory("configured-root");
     EXPECT_TRUE(std::filesystem::equivalent(directory.path().parent_path(),
-                                           root.path()));
+                                            root.path()));
   }
   EXPECT_TRUE(std::filesystem::is_empty(root.path()));
 }
 
 TEST(ProcessSupportTest, DefaultsToTmpForEmptyConfiguredRoot) {
-  ScopedEnvironment environment("KEYLANE_TEST_DATA_DIR", "");
+  ScopedEnvironment environment("LAVIK_TEST_DATA_DIR", "");
   // Verify the fallback without writing outside the configured test volume.
   EXPECT_EQ(TestDataDirectory(), std::filesystem::path("/tmp"));
 }
@@ -88,8 +88,8 @@ TEST(ProcessSupportTest, SpawnsWithEnvironmentAndControlsLifecycle) {
   TempDirectory directory("process-support");
   const std::filesystem::path log = directory.path() / "child.log";
   ChildProcess child(
-      {"/bin/sh", "-c", "printf '%s\\n' \"$KEYLANE_PROCESS_TEST\"; sleep 60"},
-      log, {{"KEYLANE_PROCESS_TEST", "ready"}});
+      {"/bin/sh", "-c", "printf '%s\\n' \"$LAVIK_PROCESS_TEST\"; sleep 60"},
+      log, {{"LAVIK_PROCESS_TEST", "ready"}});
 
   WaitUntil("child output", std::chrono::seconds(2), [&] {
     return std::filesystem::exists(log) &&
@@ -104,7 +104,7 @@ TEST(ProcessSupportTest, SpawnsWithEnvironmentAndControlsLifecycle) {
 TEST(ProcessSupportTest, CreatesTemporaryDirectoriesUnderTestDataRoot) {
   TempDirectory directory("configured-root");
   EXPECT_TRUE(std::filesystem::equivalent(directory.path().parent_path(),
-                                         TestDataDirectory()));
+                                          TestDataDirectory()));
 }
 
 TEST(ProcessSupportTest, HoldsPortUntilExplicitRelease) {
@@ -149,4 +149,4 @@ TEST(ProcessSupportTest, RejectsOversizedAndDeepRespReplies) {
 }
 
 }  // namespace
-}  // namespace keylane::test
+}  // namespace lavik::test

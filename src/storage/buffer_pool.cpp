@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/storage/buffer_pool.h"
+#include "lavik/storage/buffer_pool.h"
 
 #include <sys/resource.h>
 #include <sys/uio.h>
@@ -31,7 +31,7 @@
 #include "bycorf/runtime/worker.h"
 #include "spdlog/spdlog.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 bool IsPowerOfTwo(std::size_t value) noexcept {
@@ -673,4 +673,4 @@ void RegisteredBufferPool::HandleRemoteOverflowRelease(
       static_cast<std::size_t>(value));
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

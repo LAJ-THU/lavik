@@ -24,13 +24,13 @@ Optimized local builds use the current machine's instruction set by default:
 ./scripts/build_release.sh
 ```
 
-`KEYLANE_KERNEL_BYPASS` defaults to `OFF`: Keylane and `keylane-meta` build
+`LAVIK_KERNEL_BYPASS` defaults to `OFF`: Lavik and `lavik-meta` build
 with kernel networking and io_uring and do not configure or link DPDK, SPDK or
-the private FreeBSD stack. Set `-DKEYLANE_KERNEL_BYPASS=ON` to include both
-bypass capabilities. Keylane sets `BYCORF_KERNEL_BYPASS` from this single
+the private FreeBSD stack. Set `-DLAVIK_KERNEL_BYPASS=ON` to include both
+bypass capabilities. Lavik sets `BYCORF_KERNEL_BYPASS` from this single
 option, including when reconfiguring an existing build directory.
 
-This configures `KEYLANE_MARCH=native`, including Bycorf, mimalloc, and the
+This configures `LAVIK_MARCH=native`, including Bycorf, mimalloc, and the
 Abseil CRC translation units used by the durable storage format. The latter is
 important because Abseil compiles its hardware CRC engine only when the target
 exposes the required instruction macros; leaving those translation units at
@@ -41,9 +41,9 @@ headers and static archives (`libssl-dev` on Ubuntu, which provides `libssl.a`
 and `libcrypto.a`).
 
 For a different local CPU target, configure CMake directly with
-`-DKEYLANE_MARCH=<target>`. An empty value disables the explicit `-march` flag.
+`-DLAVIK_MARCH=<target>`. An empty value disables the explicit `-march` flag.
 
-Use `-DKEYLANE_BYCORF_SOURCE_DIR=/absolute/path/to/bycorf-worktree` to build and
+Use `-DLAVIK_BYCORF_SOURCE_DIR=/absolute/path/to/bycorf-worktree` to build and
 test a separate Bycorf checkout without replacing the repository's submodule.
 The default remains the pinned `bycorf/` checkout. Record both revisions when
 comparing performance with an alternate runtime.
@@ -65,15 +65,15 @@ production libraries. Clang test links enable its LLVM bitcode reader without
 compiling the test sources with IPO. Debug builds also omit IPO to keep iteration time
 predictable. LTO is not required for functional correctness.
 
-When `KEYLANE_BUILD_META=ON`, the source build also provides `keylane-meta`
-and the Raft-free `keylane-ctl` operator target for direct administration
+When `LAVIK_BUILD_META=ON`, the source build also provides `lavik-meta`
+and the Raft-free `lavik-ctl` operator target for direct administration
 and cluster readiness:
 
 ```bash
-cmake --build <build-dir> --target keylane-meta keylane-ctl
+cmake --build <build-dir> --target lavik-meta lavik-ctl
 ```
 
-The downloadable release archive below continues to contain only `keylane`;
+The downloadable release archive below continues to contain only `lavik`;
 build the Meta and operator binaries from source for this release.
 
 ### Experimental DPDK networking
@@ -90,10 +90,10 @@ git -C bycorf submodule update --init third_party/liburing third_party/abseil \
   third_party/spdk third_party/dpdk
 git -C bycorf/third_party/spdk submodule update --init isa-l isa-l-crypto
 cmake -S . -B build-dpdk-net -G Ninja \
-  -DCMAKE_BUILD_TYPE=RelWithDebInfo -DKEYLANE_ENABLE_OPT=OFF \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLAVIK_ENABLE_OPT=OFF \
   -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
-  -DKEYLANE_KERNEL_BYPASS=ON -DBUILD_TESTING=OFF
-cmake --build build-dpdk-net --target keylane -j4
+  -DLAVIK_KERNEL_BYPASS=ON -DBUILD_TESTING=OFF
+cmake --build build-dpdk-net --target lavik -j4
 ```
 
 On AArch64, use GCC for the bypass build because the pinned SPDK ISA-L Crypto
@@ -122,7 +122,7 @@ worker; hash steering can use fewer queues. See Bycorf's
 
 ### Runtime backend selection
 
-Build with `-DKEYLANE_KERNEL_BYPASS=ON` to include all four
+Build with `-DLAVIK_KERNEL_BYPASS=ON` to include all four
 combinations in one executable. Startup defaults are `--network=kernel
 --storage=uring`, independent of build capabilities.
 
@@ -148,9 +148,9 @@ The private TCP stack still has the prototype compatibility limits above.
 The disposable-file regression covers kernel networking and recovery:
 
 ```bash
-python3 tests/runtime_backends_smoke.py build-dpdk-net/keylane
+python3 tests/runtime_backends_smoke.py build-dpdk-net/lavik
 # Optional TAP test, without physical NIC rebinding:
-sudo python3 tests/runtime_backends_smoke.py build-dpdk-net/keylane --dpdk
+sudo python3 tests/runtime_backends_smoke.py build-dpdk-net/lavik --dpdk
 ```
 
 ### AddressSanitizer builds
@@ -164,18 +164,18 @@ ctest --test-dir build_asan --output-on-failure
 ```
 
 The script defaults to `clang-18` and `clang++-18`. Override them with
-`KEYLANE_ASAN_CC`, `KEYLANE_ASAN_CXX`, and use `KEYLANE_ASAN_BUILD_DIR` to select
+`LAVIK_ASAN_CC`, `LAVIK_ASAN_CXX`, and use `LAVIK_ASAN_BUILD_DIR` to select
 a different build directory. It enables the non-packageable fault-server
 variant so crash-safety hooks remain available even though RelWithDebInfo may
 define `NDEBUG`.
 
 Tests place disposable data under `/tmp` by default. Set
-`KEYLANE_TEST_DATA_DIR` to an existing, writable directory to relocate test
+`LAVIK_TEST_DATA_DIR` to an existing, writable directory to relocate test
 devices, logs, snapshots, and other generated artifacts for CTest, direct
 test-binary, shell, and Python test runs:
 
 ```bash
-KEYLANE_TEST_DATA_DIR=/path/to/test-data \
+LAVIK_TEST_DATA_DIR=/path/to/test-data \
   ctest --test-dir <build-dir> --output-on-failure
 ```
 
@@ -187,11 +187,11 @@ paths to stay within the platform's socket-name limit.
 
 The focused large-Hash durability suite uses its own temporary 128 MiB files
 and local child servers. Run it against a Debug build or a build configured
-with `KEYLANE_BUILD_FAULT_SERVER=ON` to exercise the crash injections:
+with `LAVIK_BUILD_FAULT_SERVER=ON` to exercise the crash injections:
 
 ```bash
-cmake --build bld-clang18-debug --target keylane keylane_list_e2e_test -j 8
-ctest --test-dir bld-clang18-debug -R '^keylane_large_hash_durability_e2e$' --output-on-failure
+cmake --build bld-clang18-debug --target lavik lavik_list_e2e_test -j 8
+ctest --test-dir bld-clang18-debug -R '^lavik_large_hash_durability_e2e$' --output-on-failure
 ```
 
 Substitute your configured build directory. This suite covers large Hash
@@ -202,7 +202,7 @@ Crash cases require exit code 86 at their armed boundary; ordinary
 release builds without test instrumentation skip those cases and the injected
 storage-admission failure case. Bounded-device reclamation and command-level
 RESP OOM cases run without fault instrumentation. The grouped side-index
-memory/admission tests are part of `keylane_unit_tests`.
+memory/admission tests are part of `lavik_unit_tests`.
 
 The grouped-storage recovery suite constructs its own temporary disk images
 and starts local child servers. It exercises actual group-record recovery,
@@ -210,8 +210,8 @@ transaction decisions, GC and snapshot lifetimes without touching configured
 benchmark devices:
 
 ```bash
-cmake --build bld-clang18-debug --target keylane keylane_grouped_recovery_e2e_test -j 8
-ctest --test-dir bld-clang18-debug -R '^keylane_grouped_recovery_e2e$' --output-on-failure
+cmake --build bld-clang18-debug --target lavik lavik_grouped_recovery_e2e_test -j 8
+ctest --test-dir bld-clang18-debug -R '^lavik_grouped_recovery_e2e$' --output-on-failure
 ```
 
 Finish linking the child server before running either integration suite; do
@@ -220,8 +220,8 @@ The foreground suites use the actual command handlers and their own temporary
 devices, including oversized elements, transaction failure and cold restart:
 
 ```bash
-cmake --build bld-clang18-debug --target keylane keylane_grouped_hash_write_e2e_test keylane_grouped_ordered_write_e2e_test -j 8
-ctest --test-dir bld-clang18-debug -R '^keylane_grouped_(hash|ordered)_write_e2e$' --output-on-failure
+cmake --build bld-clang18-debug --target lavik lavik_grouped_hash_write_e2e_test lavik_grouped_ordered_write_e2e_test -j 8
+ctest --test-dir bld-clang18-debug -R '^lavik_grouped_(hash|ordered)_write_e2e$' --output-on-failure
 ```
 
 The collection write-concurrency suite uses cold compact and grouped records
@@ -234,8 +234,8 @@ values, both Sorted Set indexes, oversized extents, expired/deleted predecessors
 and allocation failure before publication:
 
 ```bash
-cmake --build bld-clang18-debug --target keylane keylane_compact_collection_write_e2e_test -j 8
-ctest --test-dir bld-clang18-debug -R '^keylane_compact_collection_write_e2e$' --output-on-failure
+cmake --build bld-clang18-debug --target lavik lavik_compact_collection_write_e2e_test -j 8
+ctest --test-dir bld-clang18-debug -R '^lavik_compact_collection_write_e2e$' --output-on-failure
 ```
 
 Hash, Set, List and Sorted Set automatically promote to grouped storage at
@@ -247,34 +247,34 @@ The current adapter and integration limits are documented in
 
 ### Adding deterministic fault sites
 
-Use `include/keylane/fault_injection.h` for internal crash, allocation-failure
+Use `include/lavik/fault_injection.h` for internal crash, allocation-failure
 and scheduling hooks. Its single build policy enables hooks in Debug or with
-`KEYLANE_BUILD_FAULT_SERVER=ON`; ordinary Release builds erase the hook bodies
+`LAVIK_BUILD_FAULT_SERVER=ON`; ordinary Release builds erase the hook bodies
 and their arguments, including environment lookups and injected suspension
 points. Set fault environment variables before launching the server, not
 concurrently with its workers.
 
 ```cpp
-KEYLANE_FAULT_BAD_ALLOC("KEYLANE_FAIL_GROUP_HANDOFF_KEY", key);
-KEYLANE_MAYBE_CRASH_AT("group-batch-before-root");
-KEYLANE_FAULT_INJECT(
-    if (KEYLANE_FAULT_MATCHES("KEYLANE_TEST_PAUSE_KEY", key)) {
+LAVIK_FAULT_BAD_ALLOC("LAVIK_FAIL_GROUP_HANDOFF_KEY", key);
+LAVIK_MAYBE_CRASH_AT("group-batch-before-root");
+LAVIK_FAULT_INJECT(
+    if (LAVIK_FAULT_MATCHES("LAVIK_TEST_PAUSE_KEY", key)) {
       // Keep the existing coroutine, lock ownership and error handling.
       auto status = co_await bycorf::SleepFor(worker, delay);
       if (!status.ok()) co_return status;
     });
 ```
 
-Use `KEYLANE_FAULT_MATCHES_NTH` for an exact key plus a one-based position
+Use `LAVIK_FAULT_MATCHES_NTH` for an exact key plus a one-based position
 within the current operation. It does not introduce a shared hit counter.
 Keep fault effects inside the existing rollback/commit boundary.
-`KEYLANE_FAULT_INJECT` introduces a block, not a coroutine or lambda;
+`LAVIK_FAULT_INJECT` introduces a block, not a coroutine or lambda;
 cross-scope diagnostic declarations and outer-loop `break`/`continue` need
-the central `#if KEYLANE_FAULTS_ENABLED` guard instead. The crash selector
-`KEYLANE_CRASH_POINT` is cached on first use and terminates with exit code 86
+the central `#if LAVIK_FAULTS_ENABLED` guard instead. The crash selector
+`LAVIK_CRASH_POINT` is cached on first use and terminates with exit code 86
 without flushing or unwinding.
 
-The `keylane_fault_injection_*` CTest cases independently compile the helper
+The `lavik_fault_injection_*` CTest cases independently compile the helper
 in Debug, ordinary Release and fault-enabled Release modes. Integration
 fixtures that require a hook must skip against ordinary Release servers.
 
@@ -285,8 +285,8 @@ retained index memory. It writes 102,400 inline keys of 1 KiB each (100 MiB of
 key bytes), with one-byte values:
 
 ```bash
-cmake --build build-clang --target keylane keylane_tomb_raider_e2e_test -j 8
-ctest --test-dir build-clang -R '^keylane_tomb_raider_e2e$' --output-on-failure
+cmake --build build-clang --target lavik lavik_tomb_raider_e2e_test -j 8
+ctest --test-dir build-clang -R '^lavik_tomb_raider_e2e$' --output-on-failure
 ```
 
 Substitute the configured build directory as needed. The suite owns a
@@ -301,11 +301,11 @@ The opt-in aggregate-size tests exercise collections whose encoded contents
 exceed 1 GiB, without a single aggregate import or COPY buffer:
 
 ```bash
-cmake --build bld-clang18-debug --target keylane_replica_abort_reclaim_e2e_test keylane_grouped_ordered_write_e2e_test keylane -j 8
-bld-clang18-debug/keylane_replica_abort_reclaim_e2e_test --large-list
-bld-clang18-debug/keylane_replica_abort_reclaim_e2e_test --large-hash
-KEYLANE_RUN_LARGE_RDB=1 bld-clang18-debug/keylane_grouped_ordered_write_e2e_test \
-  bld-clang18-debug/keylane \
+cmake --build bld-clang18-debug --target lavik_replica_abort_reclaim_e2e_test lavik_grouped_ordered_write_e2e_test lavik -j 8
+bld-clang18-debug/lavik_replica_abort_reclaim_e2e_test --large-list
+bld-clang18-debug/lavik_replica_abort_reclaim_e2e_test --large-hash
+LAVIK_RUN_LARGE_RDB=1 bld-clang18-debug/lavik_grouped_ordered_write_e2e_test \
+  bld-clang18-debug/lavik \
   --gtest_filter=GroupedRdbStreamE2e.LargeListOverOneGiBImportsAndExportsWithoutAggregate
 ```
 
@@ -324,8 +324,8 @@ Cluster fault tests use a dedicated build and bounded tier runner:
 
 ```bash
 cmake -S . -B build_cluster_fault -DCMAKE_BUILD_TYPE=Debug \
-  -DKEYLANE_ENABLE_OPT=OFF -DKEYLANE_STATIC_OPENSSL=ON \
-  -DBUILD_TESTING=ON -DKEYLANE_BUILD_FAULT_SERVER=ON
+  -DLAVIK_ENABLE_OPT=OFF -DLAVIK_STATIC_OPENSSL=ON \
+  -DBUILD_TESTING=ON -DLAVIK_BUILD_FAULT_SERVER=ON
 ./scripts/run_cluster_fault_tests.sh --tier model
 ./scripts/run_cluster_fault_tests.sh --tier integration
 ./scripts/run_cluster_fault_tests.sh --tier soak --duration 600
@@ -338,7 +338,7 @@ allowlist rules. The CTest labels are `cluster-model`,
 
 ## Source formatting
 
-Keylane uses the Google style, parses source as C++23, and pins clang-format
+Lavik uses the Google style, parses source as C++23, and pins clang-format
 23.1.0. Its Bycorf submodule maintains its own formatter pin. Install
 `pre-commit` once and enable the repository hook:
 
@@ -348,7 +348,7 @@ pre-commit install
 ```
 
 The first run creates an isolated hook environment and downloads the pinned
-formatter; clang-format is not a Keylane runtime or build dependency. Commits
+formatter; clang-format is not a Lavik runtime or build dependency. Commits
 then format staged first-party C and C++ files. When formatting changes a file,
 the commit stops so the result can be reviewed and staged before retrying. To
 format every maintained source file explicitly, run:
@@ -371,9 +371,9 @@ portable path when that system binary is unavailable.
 The packaging script performs a Release build, statically links OpenSSL plus
 the GNU C++/compiler runtimes, strips a staged copy of the executable, verifies
 that no dynamic OpenSSL or C++ runtime dependency remains, and writes a
-versioned archive and SHA-256 checksum under `dist/`. The archive also carries
+versioned archive and SHA-256 checksum under `dist/`. The archive carries the project LICENSE and NOTICE, plus
 the Apache-2.0 license text required by the statically linked OpenSSL code.
-It explicitly configures `KEYLANE_BUILD_FAULT_SERVER=OFF`; CMake also rejects
+It explicitly configures `LAVIK_BUILD_FAULT_SERVER=OFF`; CMake also rejects
 that option whenever `BUILD_TESTING` is off.
 
 Unlike a local build, a package uses a portable CPU baseline:
@@ -381,9 +381,9 @@ Unlike a local build, a package uses a portable CPU baseline:
 - `x86_64`: `-march=x86-64-v2`
 - `aarch64`: `-march=armv8-a`
 
-Override it with `KEYLANE_PACKAGE_MARCH` when producing a package for a more
-specific fleet. Other useful overrides are `KEYLANE_PACKAGE_BUILD_DIR`,
-`KEYLANE_PACKAGE_OUTPUT_DIR`, and `KEYLANE_PACKAGE_JOBS`.
+Override it with `LAVIK_PACKAGE_MARCH` when producing a package for a more
+specific fleet. Other useful overrides are `LAVIK_PACKAGE_BUILD_DIR`,
+`LAVIK_PACKAGE_OUTPUT_DIR`, and `LAVIK_PACKAGE_JOBS`.
 
 The release remains a normal Linux ELF executable and therefore uses the
 platform C library. Build official artifacts in the oldest supported Linux

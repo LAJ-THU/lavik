@@ -15,10 +15,10 @@
  */
 
 #include "gtest/gtest.h"
-#include "keylane/meta/hash.h"
-#include "keylane/meta/membership_reconciler.h"
+#include "lavik/meta/hash.h"
+#include "lavik/meta/membership_reconciler.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 class MembershipRecoveryTest : public testing::Test {
  protected:
@@ -26,7 +26,7 @@ class MembershipRecoveryTest : public testing::Test {
     return {
         .id_ = id,
         .endpoint_ = "127.0.0.1:" + std::to_string(7100 + id),
-        .principal_ = "keylane://meta/" + std::to_string(id),
+        .principal_ = "lavik://meta/" + std::to_string(id),
         .data_control_endpoint_ = "127.0.0.1:" + std::to_string(7300 + id),
         .ctl_endpoint_ = "127.0.0.1:" + std::to_string(7200 + id),
     };
@@ -37,7 +37,7 @@ class MembershipRecoveryTest : public testing::Test {
   }
   void Apply(MetaCommand c) {
     auto result =
-        ApplyCommitted(stores_, ++index_, c, "keylane://operator/test", "now");
+        ApplyCommitted(stores_, ++index_, c, "lavik://operator/test", "now");
     ASSERT_EQ(result.verdict_, MetaAuditVerdict::kAccepted) << result.detail_;
     // Recover after every effect, including effect/checkpoint gaps.
     auto bytes = stores_.Serialize();
@@ -244,7 +244,7 @@ TEST_F(MembershipRecoveryTest, RejectsConcurrentCreationAndMembershipAtApply) {
        {kMetaMembershipOperationKind, kMetaClusterCreateOperationKind}) {
     c.kind_ = kind;
     auto result =
-        ApplyCommitted(stores_, ++index_, c, "keylane://operator/test", "now");
+        ApplyCommitted(stores_, ++index_, c, "lavik://operator/test", "now");
     EXPECT_EQ(result.verdict_, MetaAuditVerdict::kRejected);
   }
   c.kind_ = kMetaMembershipOperationKind;
@@ -270,4 +270,4 @@ TEST_F(MembershipRecoveryTest, CodecIsBoundedStrictAndCanonical) {
   EXPECT_FALSE(EncodeMembershipIntent(intent_).ok());
 }
 }  // namespace
-}  // namespace keylane::meta
+}  // namespace lavik::meta

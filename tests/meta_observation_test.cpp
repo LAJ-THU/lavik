@@ -39,28 +39,28 @@
 
 #include "absl/status/status.h"
 #include "gtest/gtest.h"
-#include "keylane/meta/encoding.h"
-#include "keylane/meta/hash.h"
-#include "keylane/meta/observation_store.h"
+#include "lavik/meta/encoding.h"
+#include "lavik/meta/hash.h"
+#include "lavik/meta/observation_store.h"
 
 namespace {
 
-using keylane::meta::MetaAssignmentId;
-using keylane::meta::MetaBootIncarnation;
-using keylane::meta::MetaCandidateProgressObs;
-using keylane::meta::MetaCommittedFacts;
-using keylane::meta::MetaFailureClass;
-using keylane::meta::MetaFailureClassOf;
-using keylane::meta::MetaNodeBootObs;
-using keylane::meta::MetaNodeHealthObs;
-using keylane::meta::MetaObsAuditEvent;
-using keylane::meta::MetaObsAuditKind;
-using keylane::meta::MetaObservation;
-using keylane::meta::MetaObservationIdentity;
-using keylane::meta::MetaObservationStore;
-using keylane::meta::MetaObservedOwnerProjection;
-using keylane::meta::MetaOperationId;
-using keylane::meta::MetaReplicationHistoryId;
+using lavik::meta::MetaAssignmentId;
+using lavik::meta::MetaBootIncarnation;
+using lavik::meta::MetaCandidateProgressObs;
+using lavik::meta::MetaCommittedFacts;
+using lavik::meta::MetaFailureClass;
+using lavik::meta::MetaFailureClassOf;
+using lavik::meta::MetaNodeBootObs;
+using lavik::meta::MetaNodeHealthObs;
+using lavik::meta::MetaObsAuditEvent;
+using lavik::meta::MetaObsAuditKind;
+using lavik::meta::MetaObservation;
+using lavik::meta::MetaObservationIdentity;
+using lavik::meta::MetaObservationStore;
+using lavik::meta::MetaObservedOwnerProjection;
+using lavik::meta::MetaOperationId;
+using lavik::meta::MetaReplicationHistoryId;
 
 // Scripted committed state: the conservative-answer contract (unknown -> 0 /
 // false) is honored by the fake the same way the real projection does, so
@@ -79,11 +79,11 @@ class FakeCommittedFacts : public MetaCommittedFacts {
     const auto it = group_manifests_.find(std::string(group_id));
     return it != group_manifests_.end() ? it->second : 0;
   }
-  keylane::meta::MetaHash256 CurrentPopulationManifestDigest(
+  lavik::meta::MetaHash256 CurrentPopulationManifestDigest(
       std::string_view group_id) const override {
     const auto it = group_manifest_digests_.find(std::string(group_id));
     return it != group_manifest_digests_.end() ? it->second
-                                               : keylane::meta::MetaHash256{};
+                                               : lavik::meta::MetaHash256{};
   }
   std::uint64_t CurrentPartitionReplicationEpoch(
       std::string_view group_id) const override {
@@ -109,7 +109,7 @@ class FakeCommittedFacts : public MetaCommittedFacts {
   }
 
   std::set<std::string> active_nodes_;
-  std::map<std::string, keylane::meta::MetaHash256> group_manifest_digests_;
+  std::map<std::string, lavik::meta::MetaHash256> group_manifest_digests_;
   std::map<std::string, std::string> owners_;
   std::map<std::string, std::uint64_t> group_terms_;
   std::map<std::string, std::uint64_t> group_manifests_;
@@ -157,7 +157,7 @@ std::string HexBytes(const std::array<std::uint8_t, N>& value) {
   return result;
 }
 
-keylane::cluster::control::LeaseGranted GrantFor(
+lavik::cluster::control::LeaseGranted GrantFor(
     const MetaObservationIdentity& identity,
     const MetaObservedOwnerProjection& projection) {
   return {
@@ -237,7 +237,7 @@ FakeCommittedFacts MakeFreshFacts() {
 
 void ExpectDomainReject(const absl::Status& status) {
   ASSERT_FALSE(status.ok());
-  EXPECT_EQ(keylane::meta::MetaFailureClassOf(status),
+  EXPECT_EQ(lavik::meta::MetaFailureClassOf(status),
             MetaFailureClass::kDomainReject);
 }
 
@@ -496,9 +496,9 @@ TEST(MetaObservationStore,
                                     std::nullopt, std::nullopt, original, 1,
                                     std::nullopt, facts, 1010, 10'000)
                   .health_status_.ok());
-  const keylane::cluster::control::LeaseDenied pending{
-      .reason = keylane::cluster::control::LeaseDenialReason::
-          kAuthorityHandoffPending,
+  const lavik::cluster::control::LeaseDenied pending{
+      .reason =
+          lavik::cluster::control::LeaseDenialReason::kAuthorityHandoffPending,
   };
   ASSERT_TRUE(store.RecordOwnerLeaseDecisionAttempt(identity, 1, pending).ok());
 
@@ -516,25 +516,27 @@ TEST(MetaObservationStore,
 
   // A different denial never proves that the handoff guard's 2D deadline
   // elapsed; only an otherwise-valid Grant passes through that guard.
-  ASSERT_TRUE(store
-                  .RecordOwnerLeaseDecisionAttempt(
-                      identity, 2,
-                      keylane::cluster::control::LeaseDenied{
-                          .reason = keylane::cluster::control::
-                              LeaseDenialReason::kNodeNotReady,
-                      })
-                  .ok());
+  ASSERT_TRUE(
+      store
+          .RecordOwnerLeaseDecisionAttempt(
+              identity, 2,
+              lavik::cluster::control::LeaseDenied{
+                  .reason =
+                      lavik::cluster::control::LeaseDenialReason::kNodeNotReady,
+              })
+          .ok());
   observed = store.OwnerObservationFor("n1");
   ASSERT_TRUE(observed->authority_handoff_pending_sequence_.has_value());
 
-  ASSERT_TRUE(store
-                  .RecordOwnerLeaseDecisionWritten(
-                      identity, 2,
-                      keylane::cluster::control::LeaseDenied{
-                          .reason = keylane::cluster::control::
-                              LeaseDenialReason::kNodeNotReady,
-                      })
-                  .ok());
+  ASSERT_TRUE(
+      store
+          .RecordOwnerLeaseDecisionWritten(
+              identity, 2,
+              lavik::cluster::control::LeaseDenied{
+                  .reason =
+                      lavik::cluster::control::LeaseDenialReason::kNodeNotReady,
+              })
+          .ok());
   observed = store.OwnerObservationFor("n1");
   ASSERT_TRUE(observed.has_value());
   EXPECT_FALSE(observed->authority_handoff_pending_sequence_.has_value());
@@ -1235,13 +1237,6 @@ TEST(MetaObservationStore, CandidateSetIsBoundedPerGroup) {
   EXPECT_EQ(store.size(), 2);
 }
 
-
-
-
-
-
-
-
 TEST(MetaObservationStore, LatestForNodePicksNewestAcrossKinds) {
   MetaObservationStore store;
   FakeCommittedFacts facts = MakeFreshFacts();
@@ -1268,15 +1263,15 @@ TEST(MetaObservationStore, LatestForNodePicksNewestAcrossKinds) {
 
 TEST(MetaObservationStore, DefaultResourceLimitsTrackWireAndDomainCaps) {
   const MetaObservationStore::Limits limits;
-  EXPECT_EQ(limits.max_sessions_total_, keylane::meta::kMaxMetaNodes);
-  EXPECT_EQ(limits.max_candidates_per_group_, keylane::meta::kMaxMetaNodes);
+  EXPECT_EQ(limits.max_sessions_total_, lavik::meta::kMaxMetaNodes);
+  EXPECT_EQ(limits.max_candidates_per_group_, lavik::meta::kMaxMetaNodes);
   EXPECT_EQ(limits.max_retained_bytes_total_,
-            static_cast<std::uint64_t>(keylane::meta::kMaxMetaNodes) *
-                (keylane::cluster::control::kMaxFrameBytes +
-                 keylane::cluster::control::kMaxIdentifierBytes));
+            static_cast<std::uint64_t>(lavik::meta::kMaxMetaNodes) *
+                (lavik::cluster::control::kMaxFrameBytes +
+                 lavik::cluster::control::kMaxIdentifierBytes));
   EXPECT_EQ(limits.max_retained_bytes_per_node_,
-            keylane::cluster::control::kMaxFrameBytes +
-                keylane::cluster::control::kMaxIdentifierBytes);
+            lavik::cluster::control::kMaxFrameBytes +
+                lavik::cluster::control::kMaxIdentifierBytes);
 }
 
 TEST(MetaObservationStore, RevalidateAllPurgesCommitStaleObservations) {
@@ -1382,7 +1377,6 @@ TEST(MetaObservationStore, SweepExpiredDropsEntriesOlderThanTtl) {
   ASSERT_TRUE(latest.has_value());
   EXPECT_TRUE(std::holds_alternative<MetaNodeHealthObs>(latest->payload_));
 }
-
 
 TEST(MetaObservationStore, PeriodicSweepAmortizesHeartbeatScans) {
   MetaObservationStore::Limits limits;
@@ -1523,7 +1517,7 @@ TEST(MetaObservationStore, OversizedPayloadFieldRejects) {
 
   MetaObservation observation = HealthObs(Ident("n1", 0x0a, 1));
   std::get<MetaNodeHealthObs>(observation.payload_)
-      .health_.assign(keylane::meta::kMaxMetaPayloadBytes + 1, 'x');
+      .health_.assign(lavik::meta::kMaxMetaPayloadBytes + 1, 'x');
   ExpectDomainReject(store.Ingest(observation, facts, 1000));
   EXPECT_TRUE(RingHas(store, MetaObsAuditKind::kRejected, "field-too-large"));
   EXPECT_EQ(store.size(), 0);

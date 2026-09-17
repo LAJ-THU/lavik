@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/rdb.h"
+#include "lavik/rdb.h"
 
 #include <unistd.h>
 
@@ -27,7 +27,7 @@
 #include "gtest/gtest.h"
 #include "support/test_data_path.h"
 
-namespace keylane::rdb {
+namespace lavik::rdb {
 namespace {
 
 std::uint64_t Reflect64(std::uint64_t value) {
@@ -101,8 +101,8 @@ TEST(RdbTest, StreamEncoderSupportsRedisSevenCompatibilityHeader) {
   EXPECT_EQ(streamed, RdbFile({}, 10));
 }
 
-TEST(RdbTest, KeylaneStreamV1RequiresMacroNodeCounts) {
-  std::string encoded = "KXS1";
+TEST(RdbTest, LavikStreamV1RequiresMacroNodeCounts) {
+  std::string encoded = "LXS1";
   PutLe64(&encoded, 1);  // last ID milliseconds
   PutLe64(&encoded, 0);  // last ID sequence
   PutLe64(&encoded, 0);  // max-deleted ID milliseconds
@@ -130,7 +130,7 @@ TEST(RdbTest, KeylaneStreamV1RequiresMacroNodeCounts) {
   ASSERT_TRUE(restored.ok()) << restored.status();
   EXPECT_EQ(restored->value_type_, storage::ValueType::kStream);
   EXPECT_EQ(restored->logical_size_, 1);
-  EXPECT_TRUE(restored->encoded_.starts_with("KXS1"));
+  EXPECT_TRUE(restored->encoded_.starts_with("LXS1"));
   EXPECT_EQ(restored->encoded_, raw.encoded_);
 
   auto unsupported = raw;
@@ -144,7 +144,7 @@ TEST(RdbTest, KeylaneStreamV1RequiresMacroNodeCounts) {
 class TempFile {
  public:
   explicit TempFile(std::string_view contents) {
-    std::string path = keylane::test::TestDataPath("keylane-rdb-test-XXXXXX");
+    std::string path = lavik::test::TestDataPath("lavik-rdb-test-XXXXXX");
     const int fd = ::mkstemp(path.data());
     EXPECT_GE(fd, 0);
     path_ = path;
@@ -622,4 +622,4 @@ TEST(RdbTest, RejectsChecksumAndMalformedObjects) {
 }
 
 }  // namespace
-}  // namespace keylane::rdb
+}  // namespace lavik::rdb

@@ -16,21 +16,26 @@ limitations under the License.
 
 # Meta control plane operations
 
+Lavik clusters require Lavik binaries and certificates with `lavik://` URI
+SANs on every member. Recreate data and Meta directories from earlier Keylane
+development builds; mixed identifiers and rolling upgrades from those builds
+are unsupported.
+
 ## Process and storage prerequisites
 
 Build the separate Meta executable and its operator client with:
 
 ```sh
-cmake --build <build-dir> --target keylane-meta keylane-ctl
+cmake --build <build-dir> --target lavik-meta lavik-ctl
 ```
 
-A cluster normally has three `keylane-meta` processes. Every process needs:
+A cluster normally has three `lavik-meta` processes. Every process needs:
 
 - A positive, cluster-unique `--id` that never changes for that member.
 - A numeric IPv4 or IPv6 `--addr` for its local Raft listener. At genesis it
   must equal the manifest's advertised Raft endpoint; a restart may bind
   behind an explicit transport proxy without changing the durable endpoint.
-  For IPv6, use the form accepted by `keylane-meta --help`.
+  For IPv6, use the form accepted by `lavik-meta --help`.
 - A distinct numeric `--data-control-addr` for the process-lifetime listener
   used by Data nodes. The durable advertised route comes from membership and
   may instead name a proxy; that route must remain stable across restart.
@@ -42,7 +47,7 @@ A cluster normally has three `keylane-meta` processes. Every process needs:
 - A private `--data-dir`. Never share a directory between members or reuse it
   with another id.
 - The required TCP Admin listener plus an optional Unix socket. With no
-  explicit `--ctl-socket`, `keylane-meta` also uses
+  explicit `--ctl-socket`, `lavik-meta` also uses
   `<data-dir>/meta-admin.sock`.
 
 Create the data directory as the service account with mode 0700. The control
@@ -96,13 +101,13 @@ startup.
 
 ## Send administrative commands
 
-Direct `keylane-ctl` commands send one LF-terminated request to the
+Direct `lavik-ctl` commands send one LF-terminated request to the
 selected member and print its one-line reply. `status` reports that member's
 local state. Run the client as an allowed uid when using the local Unix socket:
 
 ```sh
-keylane-ctl \
-  --socket /var/lib/keylane/meta-1/meta-admin.sock status
+lavik-ctl \
+  --socket /var/lib/lavik/meta-1/meta-admin.sock status
 ```
 
 Direct commands exit 0 for an `OK` reply, 2 for an `ERR` reply, and 1 for local,
@@ -112,20 +117,20 @@ deadline. Query every live member when locating the leader; the leader's reply
 contains `leader=1`, while mutation requests sent to a follower return
 `ERR not-leader`.
 
-For cluster-wide readiness, use `keylane-ctl cluster-status`. It queries
+For cluster-wide readiness, use `lavik-ctl cluster-status`. It queries
 the seed for the current leader and requests one leader-bracketed status cut;
 it does not probe followers or claim their reachability or replication progress:
 
 ```sh
-keylane-ctl cluster-status \
-  --socket /var/lib/keylane/meta-1/meta-admin.sock
+lavik-ctl cluster-status \
+  --socket /var/lib/lavik/meta-1/meta-admin.sock
 
-keylane-ctl cluster-status --addr 10.0.0.11:7200 \
+lavik-ctl cluster-status --addr 10.0.0.11:7200 \
   --allow-plaintext-admin --json
 ```
 
 Connection options may also precede `cluster-status`, for example
-`keylane-ctl --socket /var/lib/keylane/meta-1/meta-admin.sock cluster-status`.
+`lavik-ctl --socket /var/lib/lavik/meta-1/meta-admin.sock cluster-status`.
 The first human-readable line is `READY`, `NOT READY`, or `RETRYABLE`.
 Corresponding exits are 0, 2, and 3; invalid options, unsafe transport choices,
 TLS/identity failures, incompatible wire data, and corrupt status exit 1.
@@ -147,7 +152,7 @@ redirects, capture, and response I/O.
 
 ## Create the first multi-Group cluster
 
-`keylane-ctl cluster-create` is the v1 topology-creation path for a fresh
+`lavik-ctl cluster-create` is the v1 topology-creation path for a fresh
 manifest-bootstrapped Meta cluster and one or more preconfigured Data
 processes. It is not an import, expansion, or retry-existing command. One Meta
 Raft cluster permanently owns at most one logical Data cluster. Only lifecycle
@@ -161,12 +166,12 @@ Meta set in the same manifest shown below, then start every Meta process from
 that file before starting Data:
 
 ```sh
-keylane-meta --id 1 --addr 127.0.0.1:7101 \
+lavik-meta --id 1 --addr 127.0.0.1:7101 \
   --data-control-addr 127.0.0.1:7301 \
   --ctl-addr 127.0.0.1:7201 \
-  --data-dir /var/lib/keylane/meta-1 \
-  --initial-cluster-manifest /etc/keylane/cluster.toml \
-  --ctl-socket /var/lib/keylane/meta-1/meta-admin.sock
+  --data-dir /var/lib/lavik/meta-1 \
+  --initial-cluster-manifest /etc/lavik/cluster.toml \
+  --ctl-socket /var/lib/lavik/meta-1/meta-admin.sock
 ```
 
 Start every Data process in fail-closed Meta-managed mode with its final node
@@ -174,11 +179,11 @@ id, unique client port and storage path. For example, repeat this pattern for
 the ids and ports named by the manifest:
 
 ```sh
-keylane --cluster-enabled \
+lavik --cluster-enabled \
   --cluster-node-id 1111111111111111111111111111111111111111 \
   --cluster-meta-seed 127.0.0.1:7301 \
   --cluster-announce-ip 127.0.0.1 --port 6371 \
-  --data-file /var/lib/keylane/data-primary-1/keylane.data
+  --data-file /var/lib/lavik/data-primary-1/lavik.data
 ```
 
 Data reports LOADING while its unregistered control connection retries. Run
@@ -293,7 +298,7 @@ updated Meta and CLI together.
 
 Repeat `[[meta_members]]` for every first-wave voter. IDs and each endpoint
 class must be unique; entries are canonicalized by ID, all members are voters,
-and the principal is fixed as `keylane://meta/<id>`. At admission the manifest
+and the principal is fixed as `lavik://meta/<id>`. At admission the manifest
 set must exactly equal NuRaft's committed descriptors, the identity store, and
 the Admin/Data-control directories. Cluster Create never calls `add_srv`.
 Its durable root first waits at a fixed Raft barrier until every remote Meta
@@ -306,8 +311,8 @@ does not stall unrelated control-plane mutations.
 Run:
 
 ```sh
-keylane-ctl cluster-create --manifest cluster.toml \
-  --socket /var/lib/keylane/meta-1/meta-admin.sock
+lavik-ctl cluster-create --manifest cluster.toml \
+  --socket /var/lib/lavik/meta-1/meta-admin.sock
 ```
 
 Review the normalized plan and data-erasure warning, then enter exactly
@@ -386,8 +391,8 @@ cluster is `created` and the Group exists, submits one durable operation, and
 returns without waiting for cutover:
 
 ```sh
-keylane-ctl failover group-1 \
-  --socket /var/lib/keylane/meta-1/meta-admin.sock \
+lavik-ctl failover group-1 \
+  --socket /var/lib/lavik/meta-1/meta-admin.sock \
   --failover-timeout-ms 120000
 ```
 
@@ -402,7 +407,7 @@ Exit 0 means only that the operation was committed. The CLI prints its commit
 index and operation id; follow the latter on the current leader:
 
 ```sh
-keylane-ctl --socket /var/lib/keylane/meta-1/meta-admin.sock \
+lavik-ctl --socket /var/lib/lavik/meta-1/meta-admin.sock \
   getop <operation-id>
 ```
 
@@ -503,17 +508,17 @@ For plaintext remote administration, configure a listener and connect without
 TLS arguments:
 
 ```sh
-keylane-meta --id 1 --addr 10.0.0.11:7100 \
+lavik-meta --id 1 --addr 10.0.0.11:7100 \
   --data-control-addr 10.0.0.11:7300 \
-  --data-dir /var/lib/keylane/meta-1 \
-  --initial-cluster-manifest /etc/keylane/cluster.toml \
+  --data-dir /var/lib/lavik/meta-1 \
+  --initial-cluster-manifest /etc/lavik/cluster.toml \
   --ctl-addr 10.0.0.11:7200
 
-keylane-ctl --addr 10.0.0.11:7200 status
+lavik-ctl --addr 10.0.0.11:7200 status
 ```
 
 All plaintext peers share the audit actor
-`keylane://operator/plaintext`; source IP addresses are not treated as
+`lavik://operator/plaintext`; source IP addresses are not treated as
 authenticated identities. Use the mTLS configuration below when distinct,
 cryptographically authenticated operators or data nodes need the remote
 surface.
@@ -526,8 +531,8 @@ addresses and durable directories should be managed by the service manager
 instead of background shell jobs:
 
 ```sh
-META_BIN=./build-clang/keylane-meta
-META_ROOT=/tmp/keylane-meta-demo
+META_BIN=./build-clang/lavik-meta
+META_ROOT=/tmp/lavik-meta-demo
 install -d -m 0700 "$META_ROOT" \
   "$META_ROOT/node1" "$META_ROOT/node2" "$META_ROOT/node3"
 INITIAL_MANIFEST="$META_ROOT/cluster.toml"
@@ -589,9 +594,9 @@ Query the processes until exactly one reports `leader=1`. No `addsrv` command
 is part of this initial startup:
 
 ```sh
-keylane-ctl --socket "$META_ROOT/node1/meta-admin.sock" status
-keylane-ctl --socket "$META_ROOT/node2/meta-admin.sock" status
-keylane-ctl --socket "$META_ROOT/node3/meta-admin.sock" status
+lavik-ctl --socket "$META_ROOT/node1/meta-admin.sock" status
+lavik-ctl --socket "$META_ROOT/node2/meta-admin.sock" status
+lavik-ctl --socket "$META_ROOT/node3/meta-admin.sock" status
 ```
 
 On every later restart, use the same process arguments but remove
@@ -632,7 +637,7 @@ routing are already trusted.
 
 mTLS uses one CA trusted by the whole Meta cluster and a distinct certificate
 and private key for every member. Member `N` must have exactly one URI SAN in
-total, the canonical `keylane://meta/N` principal, plus IP or DNS SANs covering
+total, the canonical `lavik://meta/N` principal, plus IP or DNS SANs covering
 both its Raft and Data-control advertised hosts (one SAN suffices when they
 share a host).
 The certificate must be usable for both TLS server and TLS client
@@ -642,12 +647,12 @@ Use an organization-managed CA in production. The following OpenSSL commands
 show the required certificate shape for a disposable development cluster:
 
 ```sh
-TLS_ROOT=/tmp/keylane-meta-tls
+TLS_ROOT=/tmp/lavik-meta-tls
 install -d -m 0700 "$TLS_ROOT"
 umask 077
 
 openssl req -x509 -newkey rsa:3072 -nodes -sha256 -days 30 \
-  -subj '/CN=Keylane Meta Development CA' \
+  -subj '/CN=Lavik Meta Development CA' \
   -addext 'basicConstraints=critical,CA:TRUE' \
   -addext 'keyUsage=critical,keyCertSign,cRLSign' \
   -keyout "$TLS_ROOT/ca.key" -out "$TLS_ROOT/ca.crt"
@@ -656,8 +661,8 @@ issue_meta_cert() {
   member_id=$1
   member_ip=$2
   openssl req -newkey rsa:2048 -nodes -sha256 \
-    -subj "/CN=keylane-meta-$member_id" \
-    -addext "subjectAltName=IP:$member_ip,URI:keylane://meta/$member_id" \
+    -subj "/CN=lavik-meta-$member_id" \
+    -addext "subjectAltName=IP:$member_ip,URI:lavik://meta/$member_id" \
     -addext 'extendedKeyUsage=serverAuth,clientAuth' \
     -addext 'keyUsage=critical,digitalSignature,keyEncipherment' \
     -keyout "$TLS_ROOT/meta-$member_id.key" \
@@ -679,17 +684,17 @@ the matching member leaf/key to each host. Start each process with its own leaf
 and the shared CA, for example member 1:
 
 ```sh
-keylane-meta \
-  --id 1 --addr 10.0.0.11:7100 --data-dir /var/lib/keylane/meta-1 \
+lavik-meta \
+  --id 1 --addr 10.0.0.11:7100 --data-dir /var/lib/lavik/meta-1 \
   --data-control-addr 10.0.0.11:7300 \
   --ctl-addr 10.0.0.11:7200 \
-  --initial-cluster-manifest /etc/keylane/cluster.toml \
-  --tls-ca /etc/keylane/meta/ca.crt \
-  --tls-cert /etc/keylane/meta/meta-1.crt \
-  --tls-key /etc/keylane/meta/meta-1.key \
-  --ctl-tls-ca /etc/keylane/meta/ca.crt \
-  --ctl-tls-cert /etc/keylane/meta/meta-1.crt \
-  --ctl-tls-key /etc/keylane/meta/meta-1.key
+  --initial-cluster-manifest /etc/lavik/cluster.toml \
+  --tls-ca /etc/lavik/meta/ca.crt \
+  --tls-cert /etc/lavik/meta/meta-1.crt \
+  --tls-key /etc/lavik/meta/meta-1.key \
+  --ctl-tls-ca /etc/lavik/meta/ca.crt \
+  --ctl-tls-cert /etc/lavik/meta/meta-1.crt \
+  --ctl-tls-key /etc/lavik/meta/meta-1.key
 ```
 
 Start every initial member with the equivalent member-specific certificate
@@ -719,9 +724,9 @@ tagged `tcp://` or `tls://`; a dual-listener node may supply one of each, using
 the same numeric host:
 
 ```sh
-keylane-ctl --socket /var/lib/keylane/meta-1/meta-admin.sock \
+lavik-ctl --socket /var/lib/lavik/meta-1/meta-admin.sock \
   registernode 0123456789abcdef0123456789abcdef01234567 \
-  keylane://node/0123456789abcdef0123456789abcdef01234567 \
+  lavik://node/0123456789abcdef0123456789abcdef01234567 \
   primary tcp://10.0.1.11:6379
 ```
 
@@ -755,11 +760,11 @@ advance consecutively. `getpolicy` returns the current version and its exact
 raw document. The only accepted families and update forms are:
 
 ```sh
-keylane-ctl --socket /var/lib/keylane/meta-1/meta-admin.sock \
-  putpolicy keylane.automatic-uncontrolled-failover-v1 2 \
+lavik-ctl --socket /var/lib/lavik/meta-1/meta-admin.sock \
+  putpolicy lavik.automatic-uncontrolled-failover-v1 2 \
   '{"kind":"automatic-uncontrolled-failover-v1","enabled":true,"suspect_after_ms":5000}'
-keylane-ctl --socket /var/lib/keylane/meta-1/meta-admin.sock \
-  putpolicy keylane.authority-lease-v1 2 \
+lavik-ctl --socket /var/lib/lavik/meta-1/meta-admin.sock \
+  putpolicy lavik.authority-lease-v1 2 \
   '{"kind":"authority-lease-v1","duration_ms":5000}'
 ```
 
@@ -806,12 +811,12 @@ node remains fenced/LOADING. Never interpret `activateauthority` returning
 For a plaintext development deployment, start the registered node with:
 
 ```sh
-keylane --cluster-enabled \
+lavik --cluster-enabled \
   --cluster-node-id 0123456789abcdef0123456789abcdef01234567 \
   --cluster-meta-seed 10.0.0.11:7300 \
   --cluster-meta-seed 10.0.0.12:7300 \
   --cluster-meta-seed 10.0.0.13:7300 \
-  --data-file /var/lib/keylane/data-1/keylane.data
+  --data-file /var/lib/lavik/data-1/lavik.data
 ```
 
 The client first tries its volatile accepted-leader hint, then the latest
@@ -847,20 +852,20 @@ first reducing that state.
 To enable mTLS, the Data client reuses the existing replication TLS settings;
 there are no separate Meta-control certificate flags. Its certificate must
 have exactly one URI SAN in total, the canonical
-`keylane://node/<node-id>` principal, an IP SAN for the Data endpoint, and both
+`lavik://node/<node-id>` principal, an IP SAN for the Data endpoint, and both
 client/server usages. The URI must equal the active Meta identity binding for
 that node. For example:
 
 ```sh
-keylane --cluster-enabled \
+lavik --cluster-enabled \
   --cluster-node-id 0123456789abcdef0123456789abcdef01234567 \
   --cluster-meta-seed 10.0.0.11:7300 \
   --cluster-meta-seed 10.0.0.12:7300 \
   --tls-port 6380 --tls-auth-clients yes --tls-replication \
-  --tls-ca-cert-file /etc/keylane/data/ca.crt \
-  --tls-cert-file /etc/keylane/data/node-01234567.crt \
-  --tls-key-file /etc/keylane/data/node-01234567.key \
-  --data-file /var/lib/keylane/data-1/keylane.data
+  --tls-ca-cert-file /etc/lavik/data/ca.crt \
+  --tls-cert-file /etc/lavik/data/node-01234567.crt \
+  --tls-key-file /etc/lavik/data/node-01234567.key \
+  --data-file /var/lib/lavik/data-1/lavik.data
 ```
 
 All Data and Meta certificates used for this connection must chain to the
@@ -878,15 +883,15 @@ direct commands.
 
 Every client certificate must carry exactly one canonical operator URI SAN.
 The following development example uses the CA created above to issue
-`keylane://operator/admin`; production deployments should use their managed
+`lavik://operator/admin`; production deployments should use their managed
 certificate issuer and normal lifetime/rotation policy:
 
 ```sh
 umask 077
 
 openssl req -newkey rsa:2048 -nodes -sha256 \
-  -subj '/CN=keylane-meta-operator-admin' \
-  -addext 'subjectAltName=URI:keylane://operator/admin' \
+  -subj '/CN=lavik-meta-operator-admin' \
+  -addext 'subjectAltName=URI:lavik://operator/admin' \
   -addext 'extendedKeyUsage=clientAuth' \
   -addext 'keyUsage=critical,digitalSignature' \
   -keyout "$TLS_ROOT/operator-admin.key" \
@@ -902,16 +907,16 @@ openssl x509 -req -sha256 -days 30 \
 Use that operator identity with the control client:
 
 ```sh
-keylane-ctl --addr 10.0.0.11:7200 \
-  --tls-ca /etc/keylane/meta/ca.crt \
-  --tls-cert /etc/keylane/meta/operator-admin.crt \
-  --tls-key /etc/keylane/meta/operator-admin.key \
+lavik-ctl --addr 10.0.0.11:7200 \
+  --tls-ca /etc/lavik/meta/ca.crt \
+  --tls-cert /etc/lavik/meta/operator-admin.crt \
+  --tls-key /etc/lavik/meta/operator-admin.key \
   status
 
-keylane-ctl cluster-status --addr 10.0.0.11:7200 \
-  --tls-ca /etc/keylane/meta/ca.crt \
-  --tls-cert /etc/keylane/meta/operator-admin.crt \
-  --tls-key /etc/keylane/meta/operator-admin.key \
+lavik-ctl cluster-status --addr 10.0.0.11:7200 \
+  --tls-ca /etc/lavik/meta/ca.crt \
+  --tls-cert /etc/lavik/meta/operator-admin.crt \
+  --tls-key /etc/lavik/meta/operator-admin.key \
   --json
 ```
 
@@ -926,20 +931,20 @@ change may be active at a time. To add a peer:
 1. Allocate a never-before-used positive id, private data directory, Raft
    endpoint, distinct Data-control endpoint, and concrete Admin endpoint. With
    mTLS, issue its matching certificate first.
-2. Start the new `keylane-meta` process without
+2. Start the new `lavik-meta` process without
    `--initial-cluster-manifest`; its pristine directory becomes a durable,
    election-disabled waiting joiner.
 3. On the current leader, run
    `addsrv <id> <raft-endpoint> <data-control-endpoint> <ctl-endpoint>`. A
    fifth principal argument is accepted but may only be the matching canonical
-   `keylane://meta/<id>`; omitting it selects that value automatically.
+   `lavik://meta/<id>`; omitting it selects that value automatically.
 4. Poll the joiner's `status` and verify replicated progress before adding
    another peer or relying on it for quorum.
 
 For example:
 
 ```sh
-keylane-ctl --socket /var/lib/keylane/meta-1/meta-admin.sock \
+lavik-ctl --socket /var/lib/lavik/meta-1/meta-admin.sock \
   addsrv 4 10.0.0.14:7100 10.0.0.14:7300 10.0.0.14:7200
 ```
 
@@ -954,10 +959,10 @@ rather than creating a different identity.
 To remove a peer, select a follower and run this on the leader:
 
 ```sh
-keylane-ctl --socket /var/lib/keylane/meta-1/meta-admin.sock removesrv 4
+lavik-ctl --socket /var/lib/lavik/meta-1/meta-admin.sock removesrv 4
 ```
 
-On success, Keylane first observes the committed configuration without the peer, then commits and
+On success, Lavik first observes the committed configuration without the peer, then commits and
 audits retirement of that member's identity before replying `OK`. Stop the
 removed process after the command succeeds. The retired id and principal are
 terminal and cannot be reactivated; replacing that machine requires a new id,
@@ -1005,7 +1010,7 @@ cluster; startup intentionally refuses to guess at a conversion.
 
 ## Binary replacement and format compatibility
 
-Before the first stable release, all Keylane-owned durable and control formats
+Before the first stable release, all Lavik-owned durable and control formats
 use v1, including the Raft command envelope, topology store,
 segmented-WAL container, membership descriptors and intents, cluster-create
 intents, and cluster-status binary/JSON payloads. There is no decoder for
@@ -1041,7 +1046,7 @@ window and request `exportaudit <through-index>`. Decode and verify the
 versioned record blob and its drop watermarks in the external archival
 system, store it durably under an archive-defined deployment namespace, and
 deduplicate by Raft log index, comparing full records on duplicate exports.
-The export has no cryptographic chain or tamper-evidence guarantee. Keylane
+The export has no cryptographic chain or tamper-evidence guarantee. Lavik
 does not persist a separate cluster identity. Only after that acknowledgement
 should an operator issue `pruneaudit <through-index>`. The prune is replicated
 and advances the prune floor; there is no in-process record of the external
@@ -1088,14 +1093,14 @@ Create, Meta membership, and failover are workflow-owned and reject
 escape hatch, own safe terminalization.
 
 ```sh
-keylane-ctl --socket /var/lib/keylane/meta-1/meta-admin.sock \
+lavik-ctl --socket /var/lib/lavik/meta-1/meta-admin.sock \
   abortop 00000001000000000000000000000001
-keylane-ctl --socket /var/lib/keylane/meta-1/meta-admin.sock \
+lavik-ctl --socket /var/lib/lavik/meta-1/meta-admin.sock \
   archiveoperations 12345
-keylane-ctl --socket /var/lib/keylane/meta-1/meta-admin.sock \
+lavik-ctl --socket /var/lib/lavik/meta-1/meta-admin.sock \
   exportoperations
 # Verify and durably store the exported blob before removing its retry tombstone.
-keylane-ctl --socket /var/lib/keylane/meta-1/meta-admin.sock \
+lavik-ctl --socket /var/lib/lavik/meta-1/meta-admin.sock \
   pruneoperations 12345
 ```
 

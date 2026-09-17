@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/cluster/control_protocol.h"
+#include "lavik/cluster/control_protocol.h"
 
 #include <algorithm>
 #include <array>
@@ -31,7 +31,7 @@
 
 namespace {
 
-namespace control = keylane::cluster::control;
+namespace control = lavik::cluster::control;
 
 using control::FrameDecoder;
 using control::FrameEncoder;
@@ -154,7 +154,7 @@ TEST(ControlProtocolFrameTest, EncodesNetworkOrderAndChecksCrcAndSequence) {
 
   // Header literals independently pin the v1 network-byte-order layout.
   const std::array<unsigned char, 24> expected_prefix = {
-      0x4b, 0x4c, 0x43, 0x50,                           // KLCP
+      0x4c, 0x56, 0x43, 0x50,                           // LVCP
       0x00, 0x01,                                       // protocol version
       0x00, 0x01,                                       // ClientHello
       0x00, 0x00,                                       // flags
@@ -725,7 +725,7 @@ TEST(ControlProtocolCodecTest,
   auto decoded = control::DecodeRebuildRequest(*encoded);
   ASSERT_TRUE(decoded.ok()) << decoded.status();
   EXPECT_EQ(decoded->source_flow_count, 3);
-  EXPECT_EQ(*encoded, std::string("KLRR\0\1\0\0\0\3", 10));
+  EXPECT_EQ(*encoded, std::string("LVRR\0\1\0\0\0\3", 10));
   for (std::uint32_t count : {0U, 1025U}) {
     EXPECT_FALSE(control::EncodeRebuildRequest({count}).ok());
     std::string malformed = encoded->substr(0, 6);
@@ -741,8 +741,6 @@ TEST(ControlProtocolCodecTest,
   (*encoded)[0] = 'X';
   EXPECT_FALSE(control::DecodeRebuildRequest(*encoded).ok());
 }
-
-
 
 TEST(ControlProtocolLeaseTest, GrantMatchesOnceAndUsesOriginalSendTime) {
   control::LeaseChallengeTracker tracker;

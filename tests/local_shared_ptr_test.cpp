@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/local_shared_ptr.h"
+#include "lavik/local_shared_ptr.h"
 
 #include <cstdint>
 #include <stdexcept>
@@ -22,7 +22,7 @@
 
 #include "gtest/gtest.h"
 
-namespace keylane {
+namespace lavik {
 namespace {
 
 static_assert(sizeof(LocalSharedPtr<int>) == sizeof(void*));
@@ -236,4 +236,4 @@ TEST(LocalSharedPtrDeathTest, RejectsForeignAccess) {
 #endif
 
 }  // namespace
-}  // namespace keylane
+}  // namespace lavik

@@ -22,28 +22,28 @@
 
 #include "absl/status/statusor.h"
 #include "gtest/gtest.h"
-#include "keylane/meta/cluster_status.h"
+#include "lavik/meta/cluster_status.h"
 
 namespace {
 
-using keylane::meta::ClusterAutomaticFailoverState;
-using keylane::meta::ClusterBlockerWireV1;
-using keylane::meta::ClusterDataNodeRole;
-using keylane::meta::ClusterHeadWireV1;
-using keylane::meta::ClusterMetaMemberWireV1;
-using keylane::meta::ClusterMetaRole;
-using keylane::meta::ClusterOperator;
-using keylane::meta::ClusterStateWireV1;
-using keylane::meta::ClusterStatusOptions;
-using keylane::meta::ClusterStatusResult;
-using keylane::meta::ClusterStatusWireV1;
-using keylane::meta::DecodeClusterHeadReply;
-using keylane::meta::DecodeClusterStatusReply;
-using keylane::meta::EncodeClusterHeadReply;
-using keylane::meta::EncodeClusterStatusReply;
-using keylane::meta::MetaAdminTarget;
-using keylane::meta::RenderClusterStatusJson;
-using keylane::meta::RenderClusterStatusText;
+using lavik::meta::ClusterAutomaticFailoverState;
+using lavik::meta::ClusterBlockerWireV1;
+using lavik::meta::ClusterDataNodeRole;
+using lavik::meta::ClusterHeadWireV1;
+using lavik::meta::ClusterMetaMemberWireV1;
+using lavik::meta::ClusterMetaRole;
+using lavik::meta::ClusterOperator;
+using lavik::meta::ClusterStateWireV1;
+using lavik::meta::ClusterStatusOptions;
+using lavik::meta::ClusterStatusResult;
+using lavik::meta::ClusterStatusWireV1;
+using lavik::meta::DecodeClusterHeadReply;
+using lavik::meta::DecodeClusterStatusReply;
+using lavik::meta::EncodeClusterHeadReply;
+using lavik::meta::EncodeClusterStatusReply;
+using lavik::meta::MetaAdminTarget;
+using lavik::meta::RenderClusterStatusJson;
+using lavik::meta::RenderClusterStatusText;
 
 ClusterStatusWireV1 ReadyStatus(std::vector<ClusterMetaMemberWireV1> members,
                                 std::uint32_t responder_id = 1) {
@@ -71,7 +71,7 @@ ClusterStatusWireV1 ReadyStatus(std::vector<ClusterMetaMemberWireV1> members,
       .projection_current_ = true,
       .health_fresh_ = true,
       .population_current_ = true,
-      .lease_status_ = keylane::meta::ClusterLeaseStatus::kRecentlyGranted,
+      .lease_status_ = lavik::meta::ClusterLeaseStatus::kRecentlyGranted,
   });
   status.groups_.push_back(
       {.group_id_ = "group-1",
@@ -265,7 +265,7 @@ TEST(MetaClusterStatusWireTest, ReportsCreatingAndFailedLifecycle) {
   ASSERT_TRUE(decoded.ok()) << decoded.status();
   EXPECT_EQ(*decoded, status);
 
-  keylane::meta::ClusterStatusOutcome outcome{
+  lavik::meta::ClusterStatusOutcome outcome{
       .result_ = ClusterStatusResult::kNotReady, .status_ = status};
   auto json = RenderClusterStatusJson(outcome);
   ASSERT_TRUE(json.ok()) << json.status();
@@ -662,7 +662,7 @@ TEST(MetaClusterStatusRenderTest, JsonUsesStableArraysAndStringU64) {
       {.code_ = "z", .scope_ = "node:b", .detail_ = "later"},
       {.code_ = "a", .scope_ = "cluster", .detail_ = "first"},
   };
-  keylane::meta::ClusterStatusOutcome outcome{
+  lavik::meta::ClusterStatusOutcome outcome{
       .result_ = ClusterStatusResult::kNotReady, .status_ = status};
   auto json = RenderClusterStatusJson(outcome);
   ASSERT_TRUE(json.ok()) << json.status();
@@ -683,7 +683,7 @@ TEST(MetaClusterStatusRenderTest,
   group.suspect_elapsed_ms_ = 375;
   group.effective_threshold_ms_ = 1'000;
   group.blocked_reason_ = "leadership_warmup";
-  keylane::meta::ClusterStatusOutcome outcome{
+  lavik::meta::ClusterStatusOutcome outcome{
       .result_ = ClusterStatusResult::kReady, .status_ = status};
 
   auto json = RenderClusterStatusJson(outcome);
@@ -716,7 +716,7 @@ TEST(MetaClusterStatusRenderTest, RejectsInconsistentLifecycleInput) {
   status.cluster_state_ = ClusterStateWireV1::kCreated;
   status.lifecycle_revision_ = 2;
   status.root_operation_id_ = "00112233445566778899aabbccddeeff";
-  keylane::meta::ClusterStatusOutcome outcome{
+  lavik::meta::ClusterStatusOutcome outcome{
       .result_ = ClusterStatusResult::kNotReady, .status_ = status};
 
   EXPECT_FALSE(RenderClusterStatusJson(outcome).ok());

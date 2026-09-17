@@ -43,7 +43,7 @@ namespace {
 
 using namespace std::chrono_literals;
 
-std::string g_keylane_binary;
+std::string g_lavik_binary;
 
 class FileCleanup {
  public:
@@ -309,7 +309,7 @@ class ServerProcess {
       ASSERT_GE(waited, 0);
       std::this_thread::sleep_for(10ms);
     }
-    FAIL() << "Keylane did not stop";
+    FAIL() << "Lavik did not stop";
   }
 
  private:
@@ -372,9 +372,9 @@ std::uint64_t MetricValue(std::string_view body, std::string_view name) {
 }
 
 TEST(MetricsE2eTest, ConcurrentInfoAndScrapesSurviveWorkerAllocationReuse) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPath(
-      "keylane-metrics-reuse-e2e-" + std::to_string(::getpid()));
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPath(
+      "lavik-metrics-reuse-e2e-" + std::to_string(::getpid()));
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
   FileCleanup data_cleanup(data_path);
@@ -388,7 +388,7 @@ TEST(MetricsE2eTest, ConcurrentInfoAndScrapesSurviveWorkerAllocationReuse) {
   auto metrics_port = FindFreePort();
   while (metrics_port == redis_port) metrics_port = FindFreePort();
   constexpr unsigned kWorkers = 4, kWriters = 4, kWrites = 64, kRounds = 16;
-  ServerProcess server(g_keylane_binary, redis_port, metrics_port, data_path,
+  ServerProcess server(g_lavik_binary, redis_port, metrics_port, data_path,
                        log_path, kWorkers);
   RespClient control(redis_port);
   ASSERT_EQ(control.Command({"PING"}), "+PONG");
@@ -459,14 +459,14 @@ TEST(MetricsE2eTest, ConcurrentInfoAndScrapesSurviveWorkerAllocationReuse) {
     for (unsigned round = 0; round < kRounds; ++round) {
       const auto response = HttpGet(metrics_port, "/metrics");
       require(response.starts_with("HTTP/1.1 200 OK\r\n"), "scrape failed");
-      require(MetricValue(response, "keylane_server_ready") == 1,
+      require(MetricValue(response, "lavik_server_ready") == 1,
               "server stopped being ready");
-      const auto commands = MetricValue(response, "keylane_commands_total");
+      const auto commands = MetricValue(response, "lavik_commands_total");
       require(commands >= previous_commands, "command counter went backwards");
       previous_commands = commands;
       for (unsigned worker = 0; worker < kWorkers; ++worker)
         require(
-            response.find("keylane_worker_memory_limit_bytes{worker=\"" +
+            response.find("lavik_worker_memory_limit_bytes{worker=\"" +
                           std::to_string(worker) + "\"}") != std::string::npos,
             "scrape omitted worker");
     }
@@ -487,19 +487,19 @@ TEST(MetricsE2eTest, ConcurrentInfoAndScrapesSurviveWorkerAllocationReuse) {
   const auto final_metrics = HttpGet(metrics_port, "/metrics");
   for (const auto* command : {"set", "get", "hset", "hget"})
     EXPECT_EQ(
-        MetricValue(final_metrics, "keylane_command_calls_total{command=\"" +
+        MetricValue(final_metrics, "lavik_command_calls_total{command=\"" +
                                        std::string(command) + "\"}"),
         kWriters * kWrites)
         << command;
-  EXPECT_GE(MetricValue(final_metrics, "keylane_commands_total"),
+  EXPECT_GE(MetricValue(final_metrics, "lavik_commands_total"),
             kWriters * kWrites * 4 + 2 * kRounds * 6);
   server.Stop();
 }
 
 TEST(MetricsE2eTest, ConfigResetstatClearsCommandCountersOnly) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPath(
-      "keylane-resetstat-e2e-" + std::to_string(::getpid()));
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPath(
+      "lavik-resetstat-e2e-" + std::to_string(::getpid()));
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
   FileCleanup data_cleanup(data_path);
@@ -513,7 +513,7 @@ TEST(MetricsE2eTest, ConfigResetstatClearsCommandCountersOnly) {
   const std::uint16_t redis_port = FindFreePort();
   std::uint16_t metrics_port = FindFreePort();
   while (metrics_port == redis_port) metrics_port = FindFreePort();
-  ServerProcess server(g_keylane_binary, redis_port, metrics_port, data_path,
+  ServerProcess server(g_lavik_binary, redis_port, metrics_port, data_path,
                        log_path);
   RespClient first(redis_port);
   RespClient second(redis_port);
@@ -545,9 +545,9 @@ TEST(MetricsE2eTest, ConfigResetstatClearsCommandCountersOnly) {
 }
 
 TEST(MetricsE2eTest, SlowLogRecordsBoundsQueriesAndDisables) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPath(
-      "keylane-slowlog-e2e-" + std::to_string(::getpid()));
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPath(
+      "lavik-slowlog-e2e-" + std::to_string(::getpid()));
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
   FileCleanup data_cleanup(data_path);
@@ -561,7 +561,7 @@ TEST(MetricsE2eTest, SlowLogRecordsBoundsQueriesAndDisables) {
   const std::uint16_t redis_port = FindFreePort();
   std::uint16_t metrics_port = FindFreePort();
   while (metrics_port == redis_port) metrics_port = FindFreePort();
-  ServerProcess server(g_keylane_binary, redis_port, metrics_port, data_path,
+  ServerProcess server(g_lavik_binary, redis_port, metrics_port, data_path,
                        log_path);
   RespClient client(redis_port);
 
@@ -596,9 +596,9 @@ TEST(MetricsE2eTest, SlowLogRecordsBoundsQueriesAndDisables) {
 }
 
 TEST(MetricsE2eTest, ExposesPrometheusCommandStorageAndDefragMetrics) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPath(
-      "keylane-metrics-e2e-" + std::to_string(::getpid()));
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPath(
+      "lavik-metrics-e2e-" + std::to_string(::getpid()));
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
   FileCleanup data_cleanup(data_path);
@@ -617,7 +617,7 @@ TEST(MetricsE2eTest, ExposesPrometheusCommandStorageAndDefragMetrics) {
   while (metrics_port == redis_port) {
     metrics_port = FindFreePort();
   }
-  ServerProcess server(g_keylane_binary, redis_port, metrics_port, data_path,
+  ServerProcess server(g_lavik_binary, redis_port, metrics_port, data_path,
                        log_path);
   RespClient client(redis_port);
   EXPECT_EQ(client.Command({"PING"}), "+PONG");
@@ -659,133 +659,126 @@ TEST(MetricsE2eTest, ExposesPrometheusCommandStorageAndDefragMetrics) {
   ASSERT_NE(body_offset, std::string::npos);
   const std::string_view body(response.data() + body_offset + 4,
                               response.size() - body_offset - 4);
-  EXPECT_GE(MetricValue(body, "keylane_commands_total"), 3);
-  EXPECT_EQ(MetricValue(body, "keylane_server_ready"), 1);
-  const std::uint64_t connections = MetricValue(body, "keylane_connections");
+  EXPECT_GE(MetricValue(body, "lavik_commands_total"), 3);
+  EXPECT_EQ(MetricValue(body, "lavik_server_ready"), 1);
+  const std::uint64_t connections = MetricValue(body, "lavik_connections");
   const std::uint64_t connected_clients =
-      MetricValue(body, "keylane_connected_clients");
+      MetricValue(body, "lavik_connected_clients");
   EXPECT_GE(connections, 2);
   EXPECT_EQ(connected_clients, 1);
   EXPECT_LE(connected_clients, connections);
-  EXPECT_EQ(MetricValue(body, "keylane_blocked_clients"), 0);
-  EXPECT_EQ(MetricValue(body, "keylane_replication_control_connections"), 0);
-  EXPECT_EQ(MetricValue(body, "keylane_replication_flow_connections"), 0);
-  EXPECT_EQ(MetricValue(body, "keylane_cluster_control_connected"), 0);
-  EXPECT_EQ(MetricValue(body, "keylane_cluster_control_reconnects_total"), 0);
-  EXPECT_EQ(MetricValue(body, "keylane_cluster_control_protocol_errors_total"),
+  EXPECT_EQ(MetricValue(body, "lavik_blocked_clients"), 0);
+  EXPECT_EQ(MetricValue(body, "lavik_replication_control_connections"), 0);
+  EXPECT_EQ(MetricValue(body, "lavik_replication_flow_connections"), 0);
+  EXPECT_EQ(MetricValue(body, "lavik_cluster_control_connected"), 0);
+  EXPECT_EQ(MetricValue(body, "lavik_cluster_control_reconnects_total"), 0);
+  EXPECT_EQ(MetricValue(body, "lavik_cluster_control_protocol_errors_total"),
             0);
   EXPECT_EQ(
-      MetricValue(body, "keylane_cluster_control_full_states_applied_total"),
-      0);
+      MetricValue(body, "lavik_cluster_control_full_states_applied_total"), 0);
   EXPECT_EQ(MetricValue(body,
-                        "keylane_cluster_control_lease_decisions_total{"
+                        "lavik_cluster_control_lease_decisions_total{"
                         "decision=\"granted\"}"),
             0);
   EXPECT_EQ(
       MetricValue(
           body,
-          "keylane_cluster_control_lease_decisions_total{decision=\"denied\"}"),
+          "lavik_cluster_control_lease_decisions_total{decision=\"denied\"}"),
       0);
-  EXPECT_EQ(
-      MetricValue(body, "keylane_cluster_control_lease_expirations_total"), 0);
+  EXPECT_EQ(MetricValue(body, "lavik_cluster_control_lease_expirations_total"),
+            0);
   // The lazy shared backlog is enabled on the first downstream handshake.
-  EXPECT_EQ(MetricValue(body, "keylane_replication_backlog_capacity_bytes"), 0);
-  EXPECT_EQ(MetricValue(body, "keylane_replication_backlog_pinned_cursors"), 0);
+  EXPECT_EQ(MetricValue(body, "lavik_replication_backlog_capacity_bytes"), 0);
+  EXPECT_EQ(MetricValue(body, "lavik_replication_backlog_pinned_cursors"), 0);
   EXPECT_EQ(
-      MetricValue(body, "keylane_replication_backlog_backpressure_waits_total"),
+      MetricValue(body, "lavik_replication_backlog_backpressure_waits_total"),
       0);
-  EXPECT_EQ(MetricValue(body, "keylane_replication_backlog_backpressured"), 0);
-  EXPECT_GT(
-      MetricValue(body, "keylane_replication_publish_queue_capacity_bytes"), 0);
-  EXPECT_EQ(MetricValue(body, "keylane_fullsync_publish_queue_bytes"), 0);
-  EXPECT_EQ(MetricValue(body, "keylane_fullsync_publish_queue_admitted_bytes"),
+  EXPECT_EQ(MetricValue(body, "lavik_replication_backlog_backpressured"), 0);
+  EXPECT_GT(MetricValue(body, "lavik_replication_publish_queue_capacity_bytes"),
             0);
-  EXPECT_EQ(MetricValue(body, "keylane_fullsync_publish_queue_capacity_bytes"),
+  EXPECT_EQ(MetricValue(body, "lavik_fullsync_publish_queue_bytes"), 0);
+  EXPECT_EQ(MetricValue(body, "lavik_fullsync_publish_queue_admitted_bytes"),
             0);
-  EXPECT_EQ(MetricValue(body, "keylane_fullsync_sessions"), 0);
-  EXPECT_EQ(
-      MetricValue(body,
-                  "keylane_fullsync_publish_queue_backpressure_waits_total"),
-      0);
-  EXPECT_GT(MetricValue(body, "keylane_memory_current_bytes"), 0);
-  EXPECT_GT(MetricValue(body, "keylane_memory_rss_bytes"), 0);
-  EXPECT_EQ(MetricValue(body, "keylane_memory_max_bytes"), 1073741824);
-  EXPECT_EQ(MetricValue(body, "keylane_memory_rejected_commands_total"), 0);
+  EXPECT_EQ(MetricValue(body, "lavik_fullsync_publish_queue_capacity_bytes"),
+            0);
+  EXPECT_EQ(MetricValue(body, "lavik_fullsync_sessions"), 0);
+  EXPECT_EQ(MetricValue(
+                body, "lavik_fullsync_publish_queue_backpressure_waits_total"),
+            0);
+  EXPECT_GT(MetricValue(body, "lavik_memory_current_bytes"), 0);
+  EXPECT_GT(MetricValue(body, "lavik_memory_rss_bytes"), 0);
+  EXPECT_EQ(MetricValue(body, "lavik_memory_max_bytes"), 1073741824);
+  EXPECT_EQ(MetricValue(body, "lavik_memory_rejected_commands_total"), 0);
   constexpr std::uint64_t kWorkerRetainedLimit =
       (1073741824ULL - 1073741824ULL / 10) / 2;
   for (unsigned worker = 0; worker < 2; ++worker) {
     const std::string label = "{worker=\"" + std::to_string(worker) + "\"}";
-    EXPECT_EQ(MetricValue(body, "keylane_worker_memory_limit_bytes" + label),
+    EXPECT_EQ(MetricValue(body, "lavik_worker_memory_limit_bytes" + label),
               kWorkerRetainedLimit);
-    EXPECT_NE(body.find("keylane_worker_retained_memory_bytes" + label + " "),
-              std::string_view::npos);
-    EXPECT_NE(body.find("keylane_worker_memory_admission_pending_bytes" +
-                        label + " "),
-              std::string_view::npos);
-    EXPECT_NE(body.find("keylane_worker_fullsync_reserved_memory_bytes" +
-                        label + " "),
+    EXPECT_NE(body.find("lavik_worker_retained_memory_bytes" + label + " "),
               std::string_view::npos);
     EXPECT_NE(
-        body.find("keylane_worker_client_buffered_request_bytes" + label + " "),
+        body.find("lavik_worker_memory_admission_pending_bytes" + label + " "),
+        std::string_view::npos);
+    EXPECT_NE(
+        body.find("lavik_worker_fullsync_reserved_memory_bytes" + label + " "),
+        std::string_view::npos);
+    EXPECT_NE(
+        body.find("lavik_worker_client_buffered_request_bytes" + label + " "),
         std::string_view::npos);
   }
+  EXPECT_GT(MetricValue(
+                body, "lavik_storage_io_operations_total{operation=\"write\"}"),
+            0);
   EXPECT_GT(
       MetricValue(body,
-                  "keylane_storage_io_operations_total{operation=\"write\"}"),
+                  "lavik_storage_io_operations_total{operation=\"fdatasync\"}"),
       0);
   EXPECT_GT(
-      MetricValue(
-          body, "keylane_storage_io_operations_total{operation=\"fdatasync\"}"),
+      MetricValue(body, "lavik_storage_io_bytes_total{operation=\"write\"}"),
       0);
-  EXPECT_GT(
-      MetricValue(body, "keylane_storage_io_bytes_total{operation=\"write\"}"),
-      0);
-  EXPECT_GT(
-      MetricValue(body,
-                  "keylane_storage_io_bytes_total{operation=\"fdatasync\"}"),
-      0);
-  EXPECT_NE(
-      body.find("keylane_storage_io_operations_total{operation=\"read\"} "),
-      std::string_view::npos);
-  EXPECT_NE(body.find("keylane_storage_io_bytes_total{operation=\"read\"} "),
+  EXPECT_GT(MetricValue(
+                body, "lavik_storage_io_bytes_total{operation=\"fdatasync\"}"),
+            0);
+  EXPECT_NE(body.find("lavik_storage_io_operations_total{operation=\"read\"} "),
             std::string_view::npos);
-  EXPECT_GT(MetricValue(body, "keylane_storage_capacity_bytes"), 0);
-  EXPECT_GT(MetricValue(body, "keylane_storage_available_bytes"), 0);
-  EXPECT_GT(MetricValue(body, "keylane_filesystem_available_bytes"), 0);
-  EXPECT_NE(body.find("keylane_command_calls_total{command=\"ping\"} 1"),
+  EXPECT_NE(body.find("lavik_storage_io_bytes_total{operation=\"read\"} "),
             std::string_view::npos);
-  EXPECT_NE(body.find("keylane_command_calls_total{command=\"set\"} 3"),
+  EXPECT_GT(MetricValue(body, "lavik_storage_capacity_bytes"), 0);
+  EXPECT_GT(MetricValue(body, "lavik_storage_available_bytes"), 0);
+  EXPECT_GT(MetricValue(body, "lavik_filesystem_available_bytes"), 0);
+  EXPECT_NE(body.find("lavik_command_calls_total{command=\"ping\"} 1"),
             std::string_view::npos);
-  EXPECT_NE(body.find("keylane_command_calls_total{command=\"get\"} 1"),
+  EXPECT_NE(body.find("lavik_command_calls_total{command=\"set\"} 3"),
             std::string_view::npos);
-  EXPECT_NE(body.find("keylane_command_calls_total{command=\"del\"} 1"),
+  EXPECT_NE(body.find("lavik_command_calls_total{command=\"get\"} 1"),
             std::string_view::npos);
-  EXPECT_NE(body.find("keylane_command_calls_total{command=\"unlink\"} 1"),
+  EXPECT_NE(body.find("lavik_command_calls_total{command=\"del\"} 1"),
             std::string_view::npos);
-  EXPECT_NE(body.find("keylane_command_calls_total{command=\"append\"} 1"),
+  EXPECT_NE(body.find("lavik_command_calls_total{command=\"unlink\"} 1"),
             std::string_view::npos);
-  EXPECT_NE(body.find("keylane_command_calls_total{command=\"decr\"} 1"),
+  EXPECT_NE(body.find("lavik_command_calls_total{command=\"append\"} 1"),
             std::string_view::npos);
-  EXPECT_NE(body.find("keylane_command_calls_total{command=\"msetnx\"} 1"),
+  EXPECT_NE(body.find("lavik_command_calls_total{command=\"decr\"} 1"),
             std::string_view::npos);
-  EXPECT_NE(body.find("keylane_command_calls_total{command=\"lcs\"} 1"),
+  EXPECT_NE(body.find("lavik_command_calls_total{command=\"msetnx\"} 1"),
+            std::string_view::npos);
+  EXPECT_NE(body.find("lavik_command_calls_total{command=\"lcs\"} 1"),
             std::string_view::npos);
   for (const char* command : {"touch", "randomkey", "copy", "expireat",
                               "expiretime", "pexpireat", "pexpiretime"}) {
-    EXPECT_NE(body.find("keylane_command_calls_total{command=\"" +
+    EXPECT_NE(body.find("lavik_command_calls_total{command=\"" +
                         std::string(command) + "\"} 1"),
               std::string_view::npos);
   }
-  EXPECT_NE(
-      body.find("keylane_command_duration_seconds_bucket{command=\"get\""),
-      std::string_view::npos);
-  EXPECT_NE(body.find("keylane_command_duration_seconds_bucket{command=\"get\","
+  EXPECT_NE(body.find("lavik_command_duration_seconds_bucket{command=\"get\""),
+            std::string_view::npos);
+  EXPECT_NE(body.find("lavik_command_duration_seconds_bucket{command=\"get\","
                       "le=\"0.003\"}"),
             std::string_view::npos);
-  EXPECT_NE(body.find("keylane_storage_defrag_runs_total{result=\"success\"}"),
+  EXPECT_NE(body.find("lavik_storage_defrag_runs_total{result=\"success\"}"),
             std::string_view::npos);
-  EXPECT_NE(body.find("keylane_storage_defrag_active "),
-            std::string_view::npos);
+  EXPECT_NE(body.find("lavik_storage_defrag_active "), std::string_view::npos);
   EXPECT_NE(body.find("path=\"" + data_path + "\""), std::string_view::npos);
 
   const std::string not_found = HttpGet(metrics_port, "/unknown");
@@ -799,7 +792,7 @@ TEST(MetricsE2eTest, ExposesPrometheusCommandStorageAndDefragMetrics) {
 
 int main(int argc, char** argv) {
   if (argc >= 2) {
-    g_keylane_binary = argv[1];
+    g_lavik_binary = argv[1];
     for (int index = 1; index + 1 < argc; ++index) {
       argv[index] = argv[index + 1];
     }

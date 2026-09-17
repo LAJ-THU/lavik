@@ -15,28 +15,28 @@
 
 set -euo pipefail
 
-keylane_bin=$1
+lavik_bin=$1
 redis_server=$2
 redis_cli=$3
-case_template=${KEYLANE_TEST_DATA_DIR:-/tmp}/keylane-redis-cluster-e2e-XXXXXX
+case_template=${LAVIK_TEST_DATA_DIR:-/tmp}/lavik-redis-cluster-e2e-XXXXXX
 case_dir=$(mktemp -d "${case_template}")
 redis_pids=()
-keylane_pid=
+lavik_pid=
 
 cleanup() {
   status=$?
   if ((status != 0)); then
-    echo "Redis Cluster PSYNC test failed; Keylane log follows:" >&2
-    tail -100 "$case_dir/keylane.log" >&2 2>/dev/null || true
+    echo "Redis Cluster PSYNC test failed; Lavik log follows:" >&2
+    tail -100 "$case_dir/lavik.log" >&2 2>/dev/null || true
     for redis_log in "$case_dir"/*/redis.log; do
       [[ -e $redis_log ]] || continue
       echo "Redis log $redis_log follows:" >&2
       tail -100 "$redis_log" >&2 2>/dev/null || true
     done
   fi
-  if [[ -n $keylane_pid ]]; then
-    kill "$keylane_pid" 2>/dev/null || true
-    wait "$keylane_pid" 2>/dev/null || true
+  if [[ -n $lavik_pid ]]; then
+    kill "$lavik_pid" 2>/dev/null || true
+    wait "$lavik_pid" 2>/dev/null || true
   fi
   if ((${#redis_pids[@]})); then
     kill "${redis_pids[@]}" 2>/dev/null || true
@@ -75,7 +75,7 @@ print(*ports, sep="\n")
 PY
 )
 master_ports=("${ports[0]}" "${ports[1]}" "${ports[2]}")
-keylane_port=${ports[3]}
+lavik_port=${ports[3]}
 
 for port in "${master_ports[@]}"; do
   node_dir=$case_dir/$port
@@ -116,51 +116,51 @@ for port in "${master_ports[@]}"; do
   [[ $("$redis_cli" -p "$port" function load replace "$fullsync_function") == redis_import_fullsync ]]
 done
 
-fallocate -l 128M "$case_dir/keylane.data"
-"$keylane_bin" --logtostderr --port "$keylane_port" --threads 3 \
+fallocate -l 128M "$case_dir/lavik.data"
+"$lavik_bin" --logtostderr --port "$lavik_port" --threads 3 \
   --recv-buffers-per-worker 0 --max-memory 8589934592 --flush-max-ms 20 \
-  --data-file "$case_dir/keylane.data" >"$case_dir/keylane.log" 2>&1 &
-keylane_pid=$!
+  --data-file "$case_dir/lavik.data" >"$case_dir/lavik.log" 2>&1 &
+lavik_pid=$!
 for _ in {1..1200}; do
-  "$redis_cli" -p "$keylane_port" ping >/dev/null 2>&1 && break
-  if ! kill -0 "$keylane_pid" 2>/dev/null; then
-    wait "$keylane_pid" || keylane_status=$?
-    keylane_pid=
-    echo "Keylane exited before accepting connections (status ${keylane_status:-0})" >&2
+  "$redis_cli" -p "$lavik_port" ping >/dev/null 2>&1 && break
+  if ! kill -0 "$lavik_pid" 2>/dev/null; then
+    wait "$lavik_pid" || lavik_status=$?
+    lavik_pid=
+    echo "Lavik exited before accepting connections (status ${lavik_status:-0})" >&2
     exit 1
   fi
   sleep 0.05
 done
-[[ $("$redis_cli" -p "$keylane_port" ping) == PONG ]]
+[[ $("$redis_cli" -p "$lavik_port" ping) == PONG ]]
 
-"$redis_cli" -p "$keylane_port" replicaof 127.0.0.1 \
+"$redis_cli" -p "$lavik_port" replicaof 127.0.0.1 \
   "${master_ports[0]}" >/dev/null
-overlap=$("$redis_cli" -p "$keylane_port" addreplicaof 127.0.0.1 \
+overlap=$("$redis_cli" -p "$lavik_port" addreplicaof 127.0.0.1 \
   "${master_ports[0]}" 2>&1)
 grep -q 'slot overlap' <<<"$overlap"
-"$redis_cli" -p "$keylane_port" addreplicaof 127.0.0.1 \
+"$redis_cli" -p "$lavik_port" addreplicaof 127.0.0.1 \
   "${master_ports[1]}" >/dev/null
-"$redis_cli" -p "$keylane_port" addreplicaof 127.0.0.1 \
+"$redis_cli" -p "$lavik_port" addreplicaof 127.0.0.1 \
   "${master_ports[2]}" >/dev/null
 
 for _ in {1..400}; do
-  "$redis_cli" -p "$keylane_port" info replication 2>/dev/null | \
+  "$redis_cli" -p "$lavik_port" info replication 2>/dev/null | \
     grep -q 'master_link_status:up' && break
   sleep 0.05
 done
-info=$("$redis_cli" -p "$keylane_port" info replication | tr -d '\r')
-grep -q '^keylane_redis_sources:3$' <<<"$info"
+info=$("$redis_cli" -p "$lavik_port" info replication | tr -d '\r')
+grep -q '^lavik_redis_sources:3$' <<<"$info"
 grep -q '^master_link_status:up$' <<<"$info"
 
-[[ $("$redis_cli" -p "$keylane_port" get '{a}baseline') == one ]]
-[[ $("$redis_cli" -p "$keylane_port" get '{b}baseline') == two ]]
-[[ $("$redis_cli" -p "$keylane_port" get '{c}baseline') == three ]]
-[[ $("$redis_cli" -p "$keylane_port" fcall_ro redis_import_fullsync_value 0 baseline) == baseline ]]
+[[ $("$redis_cli" -p "$lavik_port" get '{a}baseline') == one ]]
+[[ $("$redis_cli" -p "$lavik_port" get '{b}baseline') == two ]]
+[[ $("$redis_cli" -p "$lavik_port" get '{c}baseline') == three ]]
+[[ $("$redis_cli" -p "$lavik_port" fcall_ro redis_import_fullsync_value 0 baseline) == baseline ]]
 
 for port in "${master_ports[@]}"; do
   master_info=$("$redis_cli" -p "$port" info replication | tr -d '\r')
   grep -q '^connected_slaves:1$' <<<"$master_info"
-  grep -q "slave0:.*port=$keylane_port" <<<"$master_info"
+  grep -q "slave0:.*port=$lavik_port" <<<"$master_info"
 done
 
 "$redis_cli" -c -p "${master_ports[0]}" set '{a}online' A >/dev/null
@@ -173,17 +173,17 @@ done
 for pair in '{a}online A' '{b}online B' '{c}online C'; do
   read -r key value <<<"$pair"
   for _ in {1..200}; do
-    [[ $("$redis_cli" -p "$keylane_port" get "$key" 2>/dev/null || true) == \
+    [[ $("$redis_cli" -p "$lavik_port" get "$key" 2>/dev/null || true) == \
        "$value" ]] && break
     sleep 0.05
   done
-  [[ $("$redis_cli" -p "$keylane_port" get "$key") == "$value" ]]
+  [[ $("$redis_cli" -p "$lavik_port" get "$key") == "$value" ]]
 done
 for _ in {1..200}; do
-  [[ $("$redis_cli" -p "$keylane_port" fcall_ro redis_import_incremental_value 0 incremental 2>/dev/null || true) == incremental ]] && break
+  [[ $("$redis_cli" -p "$lavik_port" fcall_ro redis_import_incremental_value 0 incremental 2>/dev/null || true) == incremental ]] && break
   sleep 0.05
 done
-[[ $("$redis_cli" -p "$keylane_port" fcall_ro redis_import_incremental_value 0 incremental) == incremental ]]
+[[ $("$redis_cli" -p "$lavik_port" fcall_ro redis_import_incremental_value 0 incremental) == incremental ]]
 
 for port in "${master_ports[@]}"; do
   "$redis_cli" -p "$port" client kill type slave >/dev/null
@@ -194,15 +194,15 @@ done
 for pair in '{a}resumed RA' '{b}resumed RB' '{c}resumed RC'; do
   read -r key value <<<"$pair"
   for _ in {1..400}; do
-    [[ $("$redis_cli" -p "$keylane_port" get "$key" 2>/dev/null || true) == \
+    [[ $("$redis_cli" -p "$lavik_port" get "$key" 2>/dev/null || true) == \
        "$value" ]] && break
     sleep 0.05
   done
-  [[ $("$redis_cli" -p "$keylane_port" get "$key") == "$value" ]]
+  [[ $("$redis_cli" -p "$lavik_port" get "$key") == "$value" ]]
 done
 for _ in {1..200}; do
   partial_count=$(grep -c 'Redis partial resynchronization continued' \
-    "$case_dir/keylane.log" || true)
+    "$case_dir/lavik.log" || true)
   ((partial_count >= 3)) && break
   sleep 0.05
 done

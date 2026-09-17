@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/fault_injection.h"
+#include "lavik/fault_injection.h"
 
 #include <sys/wait.h>
 #include <unistd.h>
@@ -31,10 +31,10 @@
 
 namespace {
 
-static_assert(KEYLANE_FAULTS_ENABLED == KEYLANE_FAULT_TEST_EXPECTED_ENABLED);
-constexpr bool kEnabled = KEYLANE_FAULT_TEST_EXPECTED_ENABLED;
-constexpr char kKeyVariable[] = "KEYLANE_FAULT_HELPER_TEST_KEY";
-constexpr char kOrdinalVariable[] = "KEYLANE_FAULT_HELPER_TEST_ORDINAL";
+static_assert(LAVIK_FAULTS_ENABLED == LAVIK_FAULT_TEST_EXPECTED_ENABLED);
+constexpr bool kEnabled = LAVIK_FAULT_TEST_EXPECTED_ENABLED;
+constexpr char kKeyVariable[] = "LAVIK_FAULT_HELPER_TEST_KEY";
+constexpr char kOrdinalVariable[] = "LAVIK_FAULT_HELPER_TEST_ORDINAL";
 
 // Tests mutate the environment only on this single test thread. Each target
 // is a separate process, so its independently compiled fault policy cannot
@@ -77,32 +77,32 @@ int ChildExit(Body body) {
 
 TEST(FaultInjectionTest, ExactDynamicKeysIncludeEmptyAndBinaryBoundaries) {
   ScopedEnvironment key(kKeyVariable);
-  EXPECT_FALSE(KEYLANE_FAULT_MATCHES(kKeyVariable, ""));
+  EXPECT_FALSE(LAVIK_FAULT_MATCHES(kKeyVariable, ""));
   key.Set("alpha");
-  EXPECT_EQ(KEYLANE_FAULT_MATCHES(kKeyVariable, "alpha"), kEnabled);
-  EXPECT_FALSE(KEYLANE_FAULT_MATCHES(kKeyVariable, "alph"));
-  EXPECT_FALSE(KEYLANE_FAULT_MATCHES(kKeyVariable, "alpha-more"));
-  EXPECT_FALSE(KEYLANE_FAULT_MATCHES(kKeyVariable, "ALPHA"));
-  EXPECT_FALSE(KEYLANE_FAULT_MATCHES(kKeyVariable,
-                                     std::string_view("alpha\0suffix", 12)));
+  EXPECT_EQ(LAVIK_FAULT_MATCHES(kKeyVariable, "alpha"), kEnabled);
+  EXPECT_FALSE(LAVIK_FAULT_MATCHES(kKeyVariable, "alph"));
+  EXPECT_FALSE(LAVIK_FAULT_MATCHES(kKeyVariable, "alpha-more"));
+  EXPECT_FALSE(LAVIK_FAULT_MATCHES(kKeyVariable, "ALPHA"));
   EXPECT_FALSE(
-      KEYLANE_FAULT_MATCHES(kKeyVariable, std::string_view("alpha\0", 6)));
+      LAVIK_FAULT_MATCHES(kKeyVariable, std::string_view("alpha\0suffix", 12)));
+  EXPECT_FALSE(
+      LAVIK_FAULT_MATCHES(kKeyVariable, std::string_view("alpha\0", 6)));
   key.Set("");
-  EXPECT_EQ(KEYLANE_FAULT_MATCHES(kKeyVariable, ""), kEnabled);
-  EXPECT_FALSE(KEYLANE_FAULT_MATCHES(kKeyVariable, "alpha"));
-  EXPECT_FALSE(KEYLANE_FAULT_MATCHES(kKeyVariable, std::string_view("\0", 1)));
+  EXPECT_EQ(LAVIK_FAULT_MATCHES(kKeyVariable, ""), kEnabled);
+  EXPECT_FALSE(LAVIK_FAULT_MATCHES(kKeyVariable, "alpha"));
+  EXPECT_FALSE(LAVIK_FAULT_MATCHES(kKeyVariable, std::string_view("\0", 1)));
   key.Set("rearmed");
-  EXPECT_EQ(KEYLANE_FAULT_MATCHES(kKeyVariable, "rearmed"), kEnabled);
+  EXPECT_EQ(LAVIK_FAULT_MATCHES(kKeyVariable, "rearmed"), kEnabled);
 }
 
 TEST(FaultInjectionTest, InjectIsASingleStatementAndAcceptsCommaBodies) {
   int count = 0;
   if (true)
-    KEYLANE_FAULT_INJECT(int first = 2, second = 3; count += first + second;);
+    LAVIK_FAULT_INJECT(int first = 2, second = 3; count += first + second;);
   else
     count = -1;
   EXPECT_EQ(count, kEnabled ? 5 : 0);
-  KEYLANE_FAULT_INJECT(++count; ++count;);
+  LAVIK_FAULT_INJECT(++count; ++count;);
   EXPECT_EQ(count, kEnabled ? 7 : 0);
 }
 
@@ -111,28 +111,28 @@ TEST(FaultInjectionTest, MatchAndThrowArgumentsAreErasedInRelease) {
   key.Set("armed");
   int variable_calls = 0;
   int key_calls = 0;
-  EXPECT_EQ(KEYLANE_FAULT_MATCHES((++variable_calls, kKeyVariable),
-                                  (++key_calls, "armed")),
+  EXPECT_EQ(LAVIK_FAULT_MATCHES((++variable_calls, kKeyVariable),
+                                (++key_calls, "armed")),
             kEnabled);
   EXPECT_EQ(variable_calls, kEnabled ? 1 : 0);
   EXPECT_EQ(key_calls, kEnabled ? 1 : 0);
 
   bool thrown = false;
   try {
-    KEYLANE_FAULT_BAD_ALLOC((++variable_calls, kKeyVariable),
-                            (++key_calls, "armed"));
+    LAVIK_FAULT_BAD_ALLOC((++variable_calls, kKeyVariable),
+                          (++key_calls, "armed"));
   } catch (const std::bad_alloc&) {
     thrown = true;
   }
   EXPECT_EQ(thrown, kEnabled);
   EXPECT_EQ(variable_calls, kEnabled ? 2 : 0);
   EXPECT_EQ(key_calls, kEnabled ? 2 : 0);
-  EXPECT_NO_THROW(KEYLANE_FAULT_BAD_ALLOC(kKeyVariable, "not-armed"));
+  EXPECT_NO_THROW(LAVIK_FAULT_BAD_ALLOC(kKeyVariable, "not-armed"));
   key.Set("");
   if constexpr (kEnabled) {
-    EXPECT_THROW(KEYLANE_FAULT_BAD_ALLOC(kKeyVariable, ""), std::bad_alloc);
+    EXPECT_THROW(LAVIK_FAULT_BAD_ALLOC(kKeyVariable, ""), std::bad_alloc);
   } else {
-    EXPECT_NO_THROW(KEYLANE_FAULT_BAD_ALLOC(kKeyVariable, ""));
+    EXPECT_NO_THROW(LAVIK_FAULT_BAD_ALLOC(kKeyVariable, ""));
   }
 }
 
@@ -141,34 +141,33 @@ TEST(FaultInjectionTest, NthMatchIsStrictOneBasedAndCallerLocal) {
   ScopedEnvironment ordinal(kOrdinalVariable);
   key.Set("armed");
   EXPECT_FALSE(
-      KEYLANE_FAULT_MATCHES_NTH(kKeyVariable, "armed", kOrdinalVariable, 1));
+      LAVIK_FAULT_MATCHES_NTH(kKeyVariable, "armed", kOrdinalVariable, 1));
   for (const char* invalid :
        {"", "0", "-1", "+1", " 1", "1 ", "1x", "18446744073709551616"}) {
     SCOPED_TRACE(invalid);
     ordinal.Set(invalid);
     EXPECT_FALSE(
-        KEYLANE_FAULT_MATCHES_NTH(kKeyVariable, "armed", kOrdinalVariable, 1));
+        LAVIK_FAULT_MATCHES_NTH(kKeyVariable, "armed", kOrdinalVariable, 1));
   }
   ordinal.Set("2");
   EXPECT_FALSE(
-      KEYLANE_FAULT_MATCHES_NTH(kKeyVariable, "armed", kOrdinalVariable, 0));
+      LAVIK_FAULT_MATCHES_NTH(kKeyVariable, "armed", kOrdinalVariable, 0));
   EXPECT_FALSE(
-      KEYLANE_FAULT_MATCHES_NTH(kKeyVariable, "armed", kOrdinalVariable, 1));
+      LAVIK_FAULT_MATCHES_NTH(kKeyVariable, "armed", kOrdinalVariable, 1));
   EXPECT_FALSE(
-      KEYLANE_FAULT_MATCHES_NTH(kKeyVariable, "other", kOrdinalVariable, 2));
+      LAVIK_FAULT_MATCHES_NTH(kKeyVariable, "other", kOrdinalVariable, 2));
   for (int command = 0; command < 3; ++command) {
     // Matching does not consume a shared hit counter between commands.
     EXPECT_EQ(
-        KEYLANE_FAULT_MATCHES_NTH(kKeyVariable, "armed", kOrdinalVariable, 2),
+        LAVIK_FAULT_MATCHES_NTH(kKeyVariable, "armed", kOrdinalVariable, 2),
         kEnabled);
   }
   ordinal.Set("18446744073709551615");
-  EXPECT_EQ(
-      KEYLANE_FAULT_MATCHES_NTH(kKeyVariable, "armed", kOrdinalVariable,
-                                std::numeric_limits<std::uint64_t>::max()),
-      kEnabled);
+  EXPECT_EQ(LAVIK_FAULT_MATCHES_NTH(kKeyVariable, "armed", kOrdinalVariable,
+                                    std::numeric_limits<std::uint64_t>::max()),
+            kEnabled);
   int evaluations[4]{};
-  (void)KEYLANE_FAULT_MATCHES_NTH(
+  (void)LAVIK_FAULT_MATCHES_NTH(
       (++evaluations[0], kKeyVariable), (++evaluations[1], "armed"),
       (++evaluations[2], kOrdinalVariable), (++evaluations[3], 2));
   for (const int evaluated : evaluations)
@@ -176,16 +175,16 @@ TEST(FaultInjectionTest, NthMatchIsStrictOneBasedAndCallerLocal) {
 }
 
 TEST(FaultInjectionTest, ReleaseErasesEvenUnavailableArgumentNames) {
-#if !KEYLANE_FAULT_TEST_EXPECTED_ENABLED
+#if !LAVIK_FAULT_TEST_EXPECTED_ENABLED
   // An inline no-op function would still parse/evaluate these arguments. The
   // production macros must remove the entire fault-only expression instead.
-  KEYLANE_FAULT_INJECT(UnavailableFaultType value = MissingFaultFactory(););
-  EXPECT_FALSE(KEYLANE_FAULT_MATCHES(missing_variable, missing_key));
-  EXPECT_FALSE(KEYLANE_FAULT_MATCHES_NTH(missing_variable, missing_key,
-                                         missing_ordinal_variable,
-                                         missing_ordinal));
-  KEYLANE_FAULT_BAD_ALLOC(missing_variable, missing_key);
-  KEYLANE_MAYBE_CRASH_AT(missing_crash_point);
+  LAVIK_FAULT_INJECT(UnavailableFaultType value = MissingFaultFactory(););
+  EXPECT_FALSE(LAVIK_FAULT_MATCHES(missing_variable, missing_key));
+  EXPECT_FALSE(LAVIK_FAULT_MATCHES_NTH(missing_variable, missing_key,
+                                       missing_ordinal_variable,
+                                       missing_ordinal));
+  LAVIK_FAULT_BAD_ALLOC(missing_variable, missing_key);
+  LAVIK_MAYBE_CRASH_AT(missing_crash_point);
 #else
   SUCCEED();
 #endif
@@ -193,16 +192,16 @@ TEST(FaultInjectionTest, ReleaseErasesEvenUnavailableArgumentNames) {
 
 TEST(FaultInjectionTest, MatchedCrashExits86AndNonmatchesReturn) {
   EXPECT_EQ(ChildExit([] {
-              if (::setenv("KEYLANE_CRASH_POINT", "selected", 1) != 0)
+              if (::setenv("LAVIK_CRASH_POINT", "selected", 1) != 0)
                 std::_Exit(31);
-              KEYLANE_MAYBE_CRASH_AT("other");
-              KEYLANE_MAYBE_CRASH_AT("selected");
+              LAVIK_MAYBE_CRASH_AT("other");
+              LAVIK_MAYBE_CRASH_AT("selected");
             }),
             kEnabled ? 86 : 0);
   EXPECT_EQ(ChildExit([] {
-              if (::setenv("KEYLANE_CRASH_POINT", "selected", 1) != 0)
+              if (::setenv("LAVIK_CRASH_POINT", "selected", 1) != 0)
                 std::_Exit(31);
-              KEYLANE_MAYBE_CRASH_AT("selected-suffix");
+              LAVIK_MAYBE_CRASH_AT("selected-suffix");
             }),
             0);
 }
@@ -212,13 +211,13 @@ TEST(FaultInjectionTest, CrashCachesInitiallyUnsetSelectorAndErasesArguments) {
   // selector. Cache null before rearming, avoiding any assumption about the
   // lifetime of an old getenv pointer after replacing that variable.
   EXPECT_EQ(ChildExit([] {
-              if (::unsetenv("KEYLANE_CRASH_POINT") != 0) std::_Exit(31);
+              if (::unsetenv("LAVIK_CRASH_POINT") != 0) std::_Exit(31);
               int evaluations = 0;
-              KEYLANE_MAYBE_CRASH_AT((++evaluations, "selected"));
+              LAVIK_MAYBE_CRASH_AT((++evaluations, "selected"));
               if (evaluations != (kEnabled ? 1 : 0)) std::_Exit(32);
-              if (::setenv("KEYLANE_CRASH_POINT", "selected", 1) != 0)
+              if (::setenv("LAVIK_CRASH_POINT", "selected", 1) != 0)
                 std::_Exit(31);
-              KEYLANE_MAYBE_CRASH_AT("selected");
+              LAVIK_MAYBE_CRASH_AT("selected");
             }),
             0);
 }

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/data_control_server.h"
+#include "lavik/meta/data_control_server.h"
 
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -54,14 +54,14 @@
 #include "bycorf/net/tls.h"
 #include "bycorf/runtime/sync.h"
 #include "bycorf/runtime/worker.h"
-#include "keylane/cluster/control_transport.h"
-#include "keylane/cluster/lease_clock.h"
-#include "keylane/meta/cluster_create.h"
-#include "keylane/meta/control_projector.h"
-#include "keylane/meta/hash.h"
-#include "keylane/meta/identity_verifier.h"
-#include "keylane/meta/observation_store.h"
-#include "keylane/numeric_endpoint.h"
+#include "lavik/cluster/control_transport.h"
+#include "lavik/cluster/lease_clock.h"
+#include "lavik/meta/cluster_create.h"
+#include "lavik/meta/control_projector.h"
+#include "lavik/meta/hash.h"
+#include "lavik/meta/identity_verifier.h"
+#include "lavik/meta/observation_store.h"
+#include "lavik/numeric_endpoint.h"
 #include "spdlog/spdlog.h"
 
 // NuRaft's headers are not -Wpedantic-clean.
@@ -72,10 +72,10 @@
 #include "libnuraft/raft_server.hxx"
 #pragma GCC diagnostic pop
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
-namespace control = keylane::cluster::control;
+namespace control = lavik::cluster::control;
 using namespace std::chrono_literals;
 
 constexpr auto kHandshakeTimeout = 10s;
@@ -138,7 +138,7 @@ absl::StatusOr<std::array<std::uint8_t, N>> ParseIdentity(
 
 absl::StatusOr<control::WireMetaEndpoint> ParseMetaEndpoint(
     const MetaMemberRecord& member) {
-  auto endpoint = keylane::ParseNumericEndpoint(member.data_control_endpoint_);
+  auto endpoint = lavik::ParseNumericEndpoint(member.data_control_endpoint_);
   if (!endpoint.has_value()) {
     return absl::InvalidArgumentError(
         "committed Meta endpoint must be numeric IPv4:port or [IPv6]:port");
@@ -2951,7 +2951,7 @@ absl::Status MetaDataControlServer::ValidateOptions(
         "data-control bind host must be a numeric IP address");
   }
   if (!options.local_ctl_endpoint_.empty()) {
-    auto ctl = keylane::ParseNumericEndpoint(options.local_ctl_endpoint_);
+    auto ctl = lavik::ParseNumericEndpoint(options.local_ctl_endpoint_);
     in_addr ctl_address4{};
     in6_addr ctl_address6{};
     if (!ctl.has_value() ||
@@ -3671,4 +3671,4 @@ bycorf::Task<absl::Status> MetaDataControlServer::SessionLoop(
   co_return session_status;
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/cluster/control_transport.h"
+#include "lavik/cluster/control_transport.h"
 
 #include <algorithm>
 #include <array>
@@ -36,7 +36,7 @@
 #include "bycorf/io/storage.h"
 #include "bycorf/runtime/worker.h"
 
-namespace keylane::cluster::control {
+namespace lavik::cluster::control {
 namespace {
 
 std::span<const std::byte> Bytes(std::string_view value) {
@@ -784,4 +784,4 @@ bool ControlSessionWriter::failed() const noexcept {
   return impl_->terminal_error_.has_value();
 }
 
-}  // namespace keylane::cluster::control
+}  // namespace lavik::cluster::control

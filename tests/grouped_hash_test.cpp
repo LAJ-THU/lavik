@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/storage/detail/grouped_hash.h"
+#include "lavik/storage/detail/grouped_hash.h"
 
 #include <algorithm>
 #include <array>
@@ -26,7 +26,7 @@
 
 #include "gtest/gtest.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 // Legacy fixture sequences model both order domains equally. Tests for replay
@@ -95,7 +95,7 @@ TEST(GroupedHashTest, PrefixBoundsIncludeZeroAndFullWidth) {
 
 TEST(GroupedHashTest, CompactPayloadHasAnExplicitLittleEndianHeader) {
   constexpr std::array<unsigned char, 42> fixture{
-      'K', 'H', 'V', 'A', 'L', 'U', 'E', '1', 1, 0, 0,  0, 32,  0,
+      'L', 'H', 'V', 'A', 'L', 'U', 'E', '1', 1, 0, 0,  0, 32,  0,
       0,   0,   1,   0,   0,   0,   0,   0,   0, 0, 42, 0, 0,   0,
       0,   0,   0,   0,   1,   0,   0,   0,   1, 0, 0,  0, 'f', 'v'};
   const std::string bytes(fixture.begin(), fixture.end());
@@ -116,7 +116,8 @@ TEST(GroupedHashTest, CompactPayloadHasAnExplicitLittleEndianHeader) {
 
 TEST(GroupedHashTest, CompactEncodingMatchesAppendReferenceAtUnalignedLengths) {
   HashValue value;
-  for (const std::size_t length : {0, 1, 7, 15, 16, 127, 128, 255, 256, 65537}) {
+  for (const std::size_t length :
+       {0, 1, 7, 15, 16, 127, 128, 255, 256, 65537}) {
     auto& entry = value.entries_.emplace_back();
     entry.field_.resize(length);
     entry.value_.resize(length + 1);
@@ -918,4 +919,4 @@ TEST(GroupedHashTest, RandomizedPartialWritesRecoverAgainstReferenceHash) {
 }
 
 }  // namespace
-}  // namespace keylane::storage
+}  // namespace lavik::storage

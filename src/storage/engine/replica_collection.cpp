@@ -16,7 +16,7 @@
 
 #include "impl.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 absl::Status StorageEngine::Impl::SquashReplicaCollectionUndo(
     WorkerStore& store, ReplicaCollectionStage& state) {
@@ -476,4 +476,4 @@ Task<absl::Status> StorageEngine::Impl::WriteReplicaCollectionPage(
   co_return written.ok() ? SquashReplicaCollectionUndo(store, *state) : written;
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

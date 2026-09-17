@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/memory.h"
+#include "lavik/memory.h"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -37,7 +37,7 @@
 #include "mimalloc-stats.h"
 #include "mimalloc.h"
 
-namespace keylane {
+namespace lavik {
 namespace {
 
 struct alignas(64) MemoryGaugeCache {
@@ -734,4 +734,4 @@ std::string HumanReadableMemory(std::uint64_t bytes) {
                       hundredths % 100, units[unit]);
 }
 
-}  // namespace keylane
+}  // namespace lavik

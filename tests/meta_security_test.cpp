@@ -23,18 +23,18 @@
 #include <vector>
 
 #include "gtest/gtest.h"
-#include "keylane/meta/automatic_failover_detector.h"
-#include "keylane/meta/commands.h"
-#include "keylane/meta/ctl_server.h"
-#include "keylane/meta/identity_store.h"
-#include "keylane/meta/identity_verifier.h"
+#include "lavik/meta/automatic_failover_detector.h"
+#include "lavik/meta/commands.h"
+#include "lavik/meta/ctl_server.h"
+#include "lavik/meta/identity_store.h"
+#include "lavik/meta/identity_verifier.h"
 
 namespace {
 
 constexpr std::string_view kNodeId = "0123456789abcdef0123456789abcdef01234567";
 
 TEST(MetaClusterCreateStatus, DistinguishesUnobservedFromMissingSession) {
-  using keylane::meta::detail::ClusterCreateMissingSessionBlocker;
+  using lavik::meta::detail::ClusterCreateMissingSessionBlocker;
   EXPECT_EQ(ClusterCreateMissingSessionBlocker(false, false),
             "data_unobserved");
   EXPECT_EQ(ClusterCreateMissingSessionBlocker(true, false),
@@ -44,184 +44,179 @@ TEST(MetaClusterCreateStatus, DistinguishesUnobservedFromMissingSession) {
 }
 
 TEST(MetaIdentitySecurity, ParsesCanonicalRoles) {
-  auto node = keylane::meta::ParseMetaPrincipal(std::string("keylane://node/") +
-                                                std::string(kNodeId));
+  auto node = lavik::meta::ParseMetaPrincipal(std::string("lavik://node/") +
+                                              std::string(kNodeId));
   ASSERT_TRUE(node.ok()) << node.status();
-  EXPECT_EQ(node->role_, keylane::meta::MetaPrincipalRole::kDataNode);
+  EXPECT_EQ(node->role_, lavik::meta::MetaPrincipalRole::kDataNode);
   EXPECT_EQ(node->subject_id_, kNodeId);
 
-  auto member = keylane::meta::ParseMetaPrincipal("keylane://meta/17");
+  auto member = lavik::meta::ParseMetaPrincipal("lavik://meta/17");
   ASSERT_TRUE(member.ok()) << member.status();
-  EXPECT_EQ(member->role_, keylane::meta::MetaPrincipalRole::kMetaMember);
+  EXPECT_EQ(member->role_, lavik::meta::MetaPrincipalRole::kMetaMember);
   EXPECT_EQ(member->subject_id_, "17");
 
-  auto op = keylane::meta::ParseMetaPrincipal("keylane://operator/alice");
+  auto op = lavik::meta::ParseMetaPrincipal("lavik://operator/alice");
   ASSERT_TRUE(op.ok()) << op.status();
-  EXPECT_EQ(op->role_, keylane::meta::MetaPrincipalRole::kOperator);
+  EXPECT_EQ(op->role_, lavik::meta::MetaPrincipalRole::kOperator);
 }
 
 TEST(MetaIdentitySecurity, RejectsNonCanonicalPrincipals) {
-  EXPECT_FALSE(keylane::meta::ParseMetaPrincipal(
-                   "keylane://node/0123456789ABCDEF0123456789abcdef01234567")
+  EXPECT_FALSE(lavik::meta::ParseMetaPrincipal(
+                   "lavik://node/0123456789ABCDEF0123456789abcdef01234567")
                    .ok());
-  EXPECT_FALSE(keylane::meta::ParseMetaPrincipal("keylane://meta/01").ok());
-  EXPECT_FALSE(keylane::meta::ParseMetaPrincipal("keylane://operator/").ok());
-  EXPECT_FALSE(keylane::meta::ParseMetaPrincipal("spiffe://node/1").ok());
+  EXPECT_FALSE(lavik::meta::ParseMetaPrincipal("lavik://meta/01").ok());
+  EXPECT_FALSE(lavik::meta::ParseMetaPrincipal("lavik://operator/").ok());
+  EXPECT_FALSE(lavik::meta::ParseMetaPrincipal("spiffe://node/1").ok());
 }
 
-TEST(MetaIdentitySecurity, CertificateMustCarryExactlyOneKeylanePrincipal) {
-  EXPECT_FALSE(keylane::meta::AuthenticateMetaUriSans({}).ok());
-  EXPECT_FALSE(keylane::meta::AuthenticateMetaUriSans(
+TEST(MetaIdentitySecurity, CertificateMustCarryExactlyOneLavikPrincipal) {
+  EXPECT_FALSE(lavik::meta::AuthenticateMetaUriSans({}).ok());
+  EXPECT_FALSE(lavik::meta::AuthenticateMetaUriSans(
                    std::vector<std::string>{"spiffe://unrelated/service"})
                    .ok());
-  EXPECT_FALSE(
-      keylane::meta::AuthenticateMetaUriSans(
-          std::vector<std::string>{"keylane://meta/1", "keylane://meta/2"})
-          .ok());
-  auto identity =
-      keylane::meta::AuthenticateMetaUriSans(std::vector<std::string>{
-          "spiffe://unrelated/service", "keylane://meta/2"});
+  EXPECT_FALSE(lavik::meta::AuthenticateMetaUriSans(
+                   std::vector<std::string>{"lavik://meta/1", "lavik://meta/2"})
+                   .ok());
+  auto identity = lavik::meta::AuthenticateMetaUriSans(
+      std::vector<std::string>{"spiffe://unrelated/service", "lavik://meta/2"});
   ASSERT_TRUE(identity.ok()) << identity.status();
-  EXPECT_EQ(identity->principal_, "keylane://meta/2");
+  EXPECT_EQ(identity->principal_, "lavik://meta/2");
 }
 
 TEST(MetaIdentitySecurity, RaftPeerClaimMatchesPersistedMemberBinding) {
-  const keylane::meta::MetaMemberIdentity member{
-      2, "keylane://meta/2", "10.0.0.2:7300", "10.0.0.2:7200"};
-  const std::vector<std::string> sans{"keylane://meta/2"};
+  const lavik::meta::MetaMemberIdentity member{
+      2, "lavik://meta/2", "10.0.0.2:7300", "10.0.0.2:7200"};
+  const std::vector<std::string> sans{"lavik://meta/2"};
   EXPECT_TRUE(
-      keylane::meta::VerifyRaftPeerIdentity(2, sans, member.EncodeAux()).ok());
+      lavik::meta::VerifyRaftPeerIdentity(2, sans, member.EncodeAux()).ok());
   EXPECT_FALSE(
-      keylane::meta::VerifyRaftPeerIdentity(3, sans, member.EncodeAux()).ok());
+      lavik::meta::VerifyRaftPeerIdentity(3, sans, member.EncodeAux()).ok());
   EXPECT_FALSE(
-      keylane::meta::VerifyRaftPeerIdentity(
-          2, std::vector<std::string>{"keylane://meta/3"}, member.EncodeAux())
+      lavik::meta::VerifyRaftPeerIdentity(
+          2, std::vector<std::string>{"lavik://meta/3"}, member.EncodeAux())
           .ok());
   EXPECT_FALSE(
-      keylane::meta::VerifyRaftPeerIdentity(2, sans, "keylane://meta/2").ok());
+      lavik::meta::VerifyRaftPeerIdentity(2, sans, "lavik://meta/2").ok());
 }
 
 TEST(MetaIdentitySecurity, MemberDescriptorRoundTrips) {
-  const keylane::meta::MetaMemberIdentity member{
-      7, "keylane://meta/7", "10.0.0.7:7300", "10.0.0.7:7200"};
-  auto decoded =
-      keylane::meta::MetaMemberIdentity::DecodeAux(member.EncodeAux());
+  const lavik::meta::MetaMemberIdentity member{
+      7, "lavik://meta/7", "10.0.0.7:7300", "10.0.0.7:7200"};
+  auto decoded = lavik::meta::MetaMemberIdentity::DecodeAux(member.EncodeAux());
   ASSERT_TRUE(decoded.ok()) << decoded.status();
   EXPECT_EQ(*decoded, member);
-  EXPECT_TRUE(member.EncodeAux().starts_with("KMI1|"));
+  EXPECT_TRUE(member.EncodeAux().starts_with("LMI1|"));
   std::string unsupported = member.EncodeAux();
   unsupported[3] = '2';
-  EXPECT_FALSE(keylane::meta::MetaMemberIdentity::DecodeAux(unsupported).ok());
+  EXPECT_FALSE(lavik::meta::MetaMemberIdentity::DecodeAux(unsupported).ok());
   EXPECT_FALSE(
-      keylane::meta::MetaMemberIdentity::DecodeAux("KMI1|7|keylane://meta/7")
-          .ok());
+      lavik::meta::MetaMemberIdentity::DecodeAux("LMI1|7|lavik://meta/7").ok());
 }
 
 TEST(MetaIdentitySecurity, MemberDescriptorRejectsMissingOrNoncanonicalFields) {
-  for (const keylane::meta::MetaMemberIdentity& invalid : {
-           keylane::meta::MetaMemberIdentity{7, "keylane://meta/8",
-                                             "10.0.0.7:7300", "10.0.0.7:7200"},
-           keylane::meta::MetaMemberIdentity{7, "keylane://meta/7", "",
-                                             "10.0.0.7:7200"},
-           keylane::meta::MetaMemberIdentity{7, "keylane://meta/7",
-                                             "localhost:7300", "10.0.0.7:7200"},
-           keylane::meta::MetaMemberIdentity{7, "keylane://meta/7",
-                                             "10.0.0.7:7300", ""},
+  for (const lavik::meta::MetaMemberIdentity& invalid : {
+           lavik::meta::MetaMemberIdentity{7, "lavik://meta/8", "10.0.0.7:7300",
+                                           "10.0.0.7:7200"},
+           lavik::meta::MetaMemberIdentity{7, "lavik://meta/7", "",
+                                           "10.0.0.7:7200"},
+           lavik::meta::MetaMemberIdentity{7, "lavik://meta/7",
+                                           "localhost:7300", "10.0.0.7:7200"},
+           lavik::meta::MetaMemberIdentity{7, "lavik://meta/7", "10.0.0.7:7300",
+                                           ""},
        }) {
     EXPECT_FALSE(
-        keylane::meta::MetaMemberIdentity::DecodeAux(invalid.EncodeAux()).ok());
+        lavik::meta::MetaMemberIdentity::DecodeAux(invalid.EncodeAux()).ok());
   }
 }
 
 TEST(MetaIdentitySecurity, RbacKeepsDataNodeAtItsObservationBoundary) {
-  auto node = keylane::meta::ParseMetaPrincipal(std::string("keylane://node/") +
-                                                std::string(kNodeId));
+  auto node = lavik::meta::ParseMetaPrincipal(std::string("lavik://node/") +
+                                              std::string(kNodeId));
   ASSERT_TRUE(node.ok());
-  EXPECT_TRUE(keylane::meta::AuthorizeMetaAccess(
-                  *node, keylane::meta::MetaAccess::kObservationWrite, kNodeId)
+  EXPECT_TRUE(lavik::meta::AuthorizeMetaAccess(
+                  *node, lavik::meta::MetaAccess::kObservationWrite, kNodeId)
                   .ok());
-  EXPECT_FALSE(keylane::meta::AuthorizeMetaAccess(
-                   *node, keylane::meta::MetaAccess::kObservationWrite,
+  EXPECT_FALSE(lavik::meta::AuthorizeMetaAccess(
+                   *node, lavik::meta::MetaAccess::kObservationWrite,
                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
                    .ok());
-  EXPECT_FALSE(keylane::meta::AuthorizeMetaAccess(
-                   *node, keylane::meta::MetaAccess::kPrivileged)
+  EXPECT_FALSE(lavik::meta::AuthorizeMetaAccess(
+                   *node, lavik::meta::MetaAccess::kPrivileged)
                    .ok());
 
-  auto op = keylane::meta::ParseMetaPrincipal("keylane://operator/alice");
+  auto op = lavik::meta::ParseMetaPrincipal("lavik://operator/alice");
   ASSERT_TRUE(op.ok());
-  EXPECT_TRUE(keylane::meta::AuthorizeMetaAccess(
-                  *op, keylane::meta::MetaAccess::kPrivileged)
+  EXPECT_TRUE(lavik::meta::AuthorizeMetaAccess(
+                  *op, lavik::meta::MetaAccess::kPrivileged)
                   .ok());
 }
 
 TEST(MetaIdentitySecurity, UnixPeerMustBeOnTheExplicitUidAllowlist) {
   const std::vector<uid_t> allowed{1000, 1002};
   auto operator_identity =
-      keylane::meta::AuthenticateLocalOperator(/*peer_uid=*/1002, allowed);
+      lavik::meta::AuthenticateLocalOperator(/*peer_uid=*/1002, allowed);
   ASSERT_TRUE(operator_identity.ok()) << operator_identity.status();
   EXPECT_EQ(operator_identity->role_,
-            keylane::meta::MetaPrincipalRole::kOperator);
-  EXPECT_EQ(operator_identity->principal_, "keylane://operator/uid-1002");
+            lavik::meta::MetaPrincipalRole::kOperator);
+  EXPECT_EQ(operator_identity->principal_, "lavik://operator/uid-1002");
 
   auto rejected =
-      keylane::meta::AuthenticateLocalOperator(/*peer_uid=*/1001, allowed);
+      lavik::meta::AuthenticateLocalOperator(/*peer_uid=*/1001, allowed);
   ASSERT_FALSE(rejected.ok());
   EXPECT_EQ(rejected.status().code(), absl::StatusCode::kPermissionDenied);
 }
 
 TEST(MetaIdentitySecurity, TcpAdminSupportsPlaintextOrCompleteMtls) {
-  keylane::meta::MetaCtlServerOptions options;
+  lavik::meta::MetaCtlServerOptions options;
   options.transport_ =
-      keylane::meta::MetaCtlServerOptions::Transport::kTcpPlaintext;
+      lavik::meta::MetaCtlServerOptions::Transport::kTcpPlaintext;
   options.bind_host_ = "127.0.0.1";
   options.port_ = 9000;
   options.local_ctl_endpoint_ = "127.0.0.1:9000";
-  EXPECT_TRUE(keylane::meta::MetaCtlServer::ValidateOptions(options).ok());
+  EXPECT_TRUE(lavik::meta::MetaCtlServer::ValidateOptions(options).ok());
 
   options.tls_ca_cert_file_ = "ca.pem";
-  EXPECT_FALSE(keylane::meta::MetaCtlServer::ValidateOptions(options).ok());
+  EXPECT_FALSE(lavik::meta::MetaCtlServer::ValidateOptions(options).ok());
   options.tls_cert_file_ = "server.pem";
   options.tls_key_file_ = "server.key";
-  EXPECT_FALSE(keylane::meta::MetaCtlServer::ValidateOptions(options).ok());
+  EXPECT_FALSE(lavik::meta::MetaCtlServer::ValidateOptions(options).ok());
 
-  options.transport_ = keylane::meta::MetaCtlServerOptions::Transport::kTcpMtls;
-  EXPECT_TRUE(keylane::meta::MetaCtlServer::ValidateOptions(options).ok());
+  options.transport_ = lavik::meta::MetaCtlServerOptions::Transport::kTcpMtls;
+  EXPECT_TRUE(lavik::meta::MetaCtlServer::ValidateOptions(options).ok());
   options.bind_host_ = "0.0.0.0";
-  EXPECT_FALSE(keylane::meta::MetaCtlServer::ValidateOptions(options).ok());
+  EXPECT_FALSE(lavik::meta::MetaCtlServer::ValidateOptions(options).ok());
   options.bind_host_ = "::";
-  EXPECT_FALSE(keylane::meta::MetaCtlServer::ValidateOptions(options).ok());
+  EXPECT_FALSE(lavik::meta::MetaCtlServer::ValidateOptions(options).ok());
   options.bind_host_ = "127.0.0.1";
   options.local_ctl_endpoint_ = "127.0.0.1:9001";
-  EXPECT_FALSE(keylane::meta::MetaCtlServer::ValidateOptions(options).ok());
+  EXPECT_FALSE(lavik::meta::MetaCtlServer::ValidateOptions(options).ok());
 }
 
 TEST(MetaIdentitySecurity, UnixAdminRequiresPathAndExplicitUid) {
-  keylane::meta::MetaCtlServerOptions options;
-  options.unix_socket_path_ = "/run/keylane/meta.sock";
-  EXPECT_FALSE(keylane::meta::MetaCtlServer::ValidateOptions(options).ok());
+  lavik::meta::MetaCtlServerOptions options;
+  options.unix_socket_path_ = "/run/lavik/meta.sock";
+  EXPECT_FALSE(lavik::meta::MetaCtlServer::ValidateOptions(options).ok());
   options.allowed_uids_.push_back(1000);
-  EXPECT_TRUE(keylane::meta::MetaCtlServer::ValidateOptions(options).ok());
+  EXPECT_TRUE(lavik::meta::MetaCtlServer::ValidateOptions(options).ok());
 }
 
 TEST(MetaCtlPolicyAdmin, PolicyVersionRequiresCanonicalPositiveDecimal) {
   std::uint64_t version = 0;
-  EXPECT_TRUE(keylane::meta::detail::ParseAdminPolicyVersion("1", &version));
+  EXPECT_TRUE(lavik::meta::detail::ParseAdminPolicyVersion("1", &version));
   EXPECT_EQ(version, 1u);
-  EXPECT_TRUE(keylane::meta::detail::ParseAdminPolicyVersion(
+  EXPECT_TRUE(lavik::meta::detail::ParseAdminPolicyVersion(
       "18446744073709551615", &version));
   EXPECT_EQ(version, std::numeric_limits<std::uint64_t>::max());
 
-  EXPECT_FALSE(keylane::meta::detail::ParseAdminPolicyVersion("0", &version));
-  EXPECT_FALSE(keylane::meta::detail::ParseAdminPolicyVersion("01", &version));
-  EXPECT_FALSE(
-      keylane::meta::detail::ParseAdminPolicyVersion("0001", &version));
-  EXPECT_FALSE(keylane::meta::detail::ParseAdminPolicyVersion(
+  EXPECT_FALSE(lavik::meta::detail::ParseAdminPolicyVersion("0", &version));
+  EXPECT_FALSE(lavik::meta::detail::ParseAdminPolicyVersion("01", &version));
+  EXPECT_FALSE(lavik::meta::detail::ParseAdminPolicyVersion("0001", &version));
+  EXPECT_FALSE(lavik::meta::detail::ParseAdminPolicyVersion(
       "18446744073709551616", &version));
 }
 
 TEST(MetaClusterStatusServiceTest, EnforcesSingleFlightAndRetainedBudget) {
-  keylane::meta::MetaClusterStatusService service;
+  lavik::meta::MetaClusterStatusService service;
   EXPECT_TRUE(service.TryBeginCapture());
   EXPECT_FALSE(service.TryBeginCapture());
   service.EndCapture();
@@ -239,8 +234,8 @@ TEST(MetaClusterStatusServiceTest, EnforcesSingleFlightAndRetainedBudget) {
 }
 
 TEST(MetaClusterStatusRuntimeTest, HealthLossBeforeAckRemainsEncodable) {
-  namespace control = keylane::cluster::control;
-  using namespace keylane::meta;
+  namespace control = lavik::cluster::control;
+  using namespace lavik::meta;
   const std::string node_id(kNodeId);
   control::WireId128 assignment{};
   assignment[0] = 1;
@@ -328,8 +323,8 @@ TEST(MetaClusterStatusRuntimeTest, HealthLossBeforeAckRemainsEncodable) {
 }
 
 TEST(MetaClusterStatusBracketTest, RejectsEveryMixedAuthorityCut) {
-  using keylane::meta::detail::IsStableClusterStatusBracket;
-  using keylane::meta::detail::MetaClusterStatusBracket;
+  using lavik::meta::detail::IsStableClusterStatusBracket;
+  using lavik::meta::detail::MetaClusterStatusBracket;
   MetaClusterStatusBracket before{
       .is_leader_ = true,
       .leader_alive_ = true,
@@ -339,7 +334,7 @@ TEST(MetaClusterStatusBracketTest, RejectsEveryMixedAuthorityCut) {
       .active_meta_members_ =
           {
               {.server_id_ = 1,
-               .principal_ = "keylane://meta/1",
+               .principal_ = "lavik://meta/1",
                .data_control_endpoint_ = "127.0.0.1:7001",
                .ctl_endpoint_ = "127.0.0.1:7101"},
           },
@@ -374,55 +369,54 @@ TEST(MetaClusterStatusBracketTest, RejectsEveryMixedAuthorityCut) {
 
 TEST(MetaClusterStatusBracketTest,
      RejectsDetectorStateFromBeforeAnEligibilityAba) {
-  keylane::meta::MetaDataControlRuntimeSnapshot runtime{
+  lavik::meta::MetaDataControlRuntimeSnapshot runtime{
       .leadership_generation_ = 5,
       .leader_authority_eligible_ = true,
       .leader_authority_eligibility_revision_ = 3,
   };
-  keylane::meta::MetaAutomaticFailoverDiagnosticsSnapshot detector{
+  lavik::meta::MetaAutomaticFailoverDiagnosticsSnapshot detector{
       .leadership_generation_ = 5,
       .leader_authority_eligibility_revision_ = 1,
       .evaluated_applied_index_ = 17,
   };
-  EXPECT_FALSE(keylane::meta::detail::IsCurrentAutomaticFailoverDiagnostics(
+  EXPECT_FALSE(lavik::meta::detail::IsCurrentAutomaticFailoverDiagnostics(
       runtime, detector, /*committed_applied_index=*/17));
   detector.leader_authority_eligibility_revision_ = 3;
-  EXPECT_TRUE(keylane::meta::detail::IsCurrentAutomaticFailoverDiagnostics(
+  EXPECT_TRUE(lavik::meta::detail::IsCurrentAutomaticFailoverDiagnostics(
       runtime, detector, /*committed_applied_index=*/17));
   ++detector.evaluated_applied_index_;
-  EXPECT_FALSE(keylane::meta::detail::IsCurrentAutomaticFailoverDiagnostics(
+  EXPECT_FALSE(lavik::meta::detail::IsCurrentAutomaticFailoverDiagnostics(
       runtime, detector, /*committed_applied_index=*/17));
 }
 
 TEST(MetaIdentitySecurity, RegistrationRejectsPrincipalForAnotherNode) {
-  keylane::meta::MetaIdentityStore store;
-  keylane::meta::RegisterNode command;
+  lavik::meta::MetaIdentityStore store;
+  lavik::meta::RegisterNode command;
   command.node_id_ = std::string(kNodeId);
-  command.principal_ =
-      "keylane://node/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  command.principal_ = "lavik://node/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
   EXPECT_FALSE(store.Apply(command).ok());
   EXPECT_EQ(store.NodeCount(), 0);
 }
 
 TEST(MetaIdentitySecurity,
      MetaMemberBindingIsCommittedAndRetirementIsTerminal) {
-  keylane::meta::MetaIdentityStore store;
-  keylane::meta::BindMetaMember bind;
+  lavik::meta::MetaIdentityStore store;
+  lavik::meta::BindMetaMember bind;
   bind.server_id_ = 7;
-  bind.principal_ = "keylane://meta/7";
+  bind.principal_ = "lavik://meta/7";
   bind.data_control_endpoint_ = "10.0.0.7:7100";
   bind.ctl_endpoint_ = "10.0.0.7:7200";
   ASSERT_TRUE(store.Apply(bind).ok());
 
   auto member = store.FindMetaMember(7);
   ASSERT_TRUE(member.has_value());
-  EXPECT_EQ(member->principal_, "keylane://meta/7");
+  EXPECT_EQ(member->principal_, "lavik://meta/7");
   EXPECT_EQ(member->data_control_endpoint_, "10.0.0.7:7100");
   EXPECT_EQ(member->ctl_endpoint_, std::optional<std::string>("10.0.0.7:7200"));
   EXPECT_FALSE(member->retired_);
   EXPECT_TRUE(store.Apply(bind).ok());
 
-  keylane::meta::RetireMetaMember retire;
+  lavik::meta::RetireMetaMember retire;
   retire.server_id_ = 7;
   ASSERT_TRUE(store.Apply(retire).ok());
   member = store.FindMetaMember(7);
@@ -431,31 +425,31 @@ TEST(MetaIdentitySecurity,
   EXPECT_TRUE(store.Apply(retire).ok());
 
   EXPECT_FALSE(store.Apply(bind).ok());
-  keylane::meta::BindMetaMember reused = bind;
+  lavik::meta::BindMetaMember reused = bind;
   reused.server_id_ = 8;
   EXPECT_FALSE(store.Apply(reused).ok());
 }
 
 TEST(MetaIdentitySecurity, MetaMemberBindingSurvivesSnapshotRoundTrip) {
-  keylane::meta::MetaIdentityStore store;
-  keylane::meta::BindMetaMember bind;
+  lavik::meta::MetaIdentityStore store;
+  lavik::meta::BindMetaMember bind;
   bind.server_id_ = 3;
-  bind.principal_ = "keylane://meta/3";
+  bind.principal_ = "lavik://meta/3";
   bind.data_control_endpoint_ = "10.0.0.3:7100";
   bind.ctl_endpoint_ = "10.0.0.3:7200";
   ASSERT_TRUE(store.Apply(bind).ok());
 
   auto restored =
-      keylane::meta::MetaIdentityStore::Deserialize(store.Serialize());
+      lavik::meta::MetaIdentityStore::Deserialize(store.Serialize());
   ASSERT_TRUE(restored.ok()) << restored.status();
   EXPECT_EQ(restored->FindMetaMember(3), store.FindMetaMember(3));
 }
 
 TEST(MetaIdentitySecurity, SoleMemberCtlEndpointCanOnlyBeCompletedOnce) {
-  keylane::meta::MetaIdentityStore store;
-  keylane::meta::BindMetaMember bind;
+  lavik::meta::MetaIdentityStore store;
+  lavik::meta::BindMetaMember bind;
   bind.server_id_ = 1;
-  bind.principal_ = "keylane://meta/1";
+  bind.principal_ = "lavik://meta/1";
   bind.data_control_endpoint_ = "10.0.0.1:7100";
   ASSERT_TRUE(store.Apply(bind).ok());
 

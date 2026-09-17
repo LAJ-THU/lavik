@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/storage/detail/grouped_collection.h"
+#include "lavik/storage/detail/grouped_collection.h"
 
 #include <algorithm>
 #include <bit>
@@ -23,11 +23,11 @@
 #include <map>
 #include <utility>
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
-constexpr std::string_view kRootMagic = "KOCROOT1";
-constexpr std::string_view kGroupMagic = "KOCGRUP1";
+constexpr std::string_view kRootMagic = "LOCROOT1";
+constexpr std::string_view kGroupMagic = "LOCGRUP1";
 constexpr std::size_t kRootBytes = kOrderedCollectionRootBytes;
 constexpr std::size_t kEntryHeaderBytes = 12;
 
@@ -799,4 +799,4 @@ absl::StatusOr<OrderedCollectionMutationPlan> PlanOrderedCollectionSplice(
   return plan;
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

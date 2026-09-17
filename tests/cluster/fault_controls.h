@@ -30,7 +30,7 @@
 #include "absl/status/statusor.h"
 #include "tests/cluster/reference_model.h"
 
-namespace keylane::test::cluster {
+namespace lavik::test::cluster {
 
 class ManualClock {
  public:
@@ -185,4 +185,4 @@ class FaultController {
   std::vector<std::string> acknowledgments_;
 };
 
-}  // namespace keylane::test::cluster
+}  // namespace lavik::test::cluster

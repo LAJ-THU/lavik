@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/nuraft_asio_transport.h"
+#include "lavik/meta/nuraft_asio_transport.h"
 
 #include <openssl/err.h>
 #include <openssl/ssl.h>
@@ -31,16 +31,16 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
-#include "keylane/meta/encoding.h"
-#include "keylane/meta/identity_verifier.h"
-#include "keylane/meta/nuraft_state_mgr.h"
-#include "keylane/meta/state_machine.h"
+#include "lavik/meta/encoding.h"
+#include "lavik/meta/identity_verifier.h"
+#include "lavik/meta/nuraft_state_mgr.h"
+#include "lavik/meta/state_machine.h"
 #include "libnuraft/cluster_config.hxx"
 #include "libnuraft/msg_type.hxx"
 #include "libnuraft/srv_config.hxx"
 #include "spdlog/spdlog.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
 bool IsPristineJoinExchange(int type) {
@@ -240,4 +240,4 @@ absl::StatusOr<nuraft::asio_service::options> BuildMetaAsioOptions(
   return options;
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

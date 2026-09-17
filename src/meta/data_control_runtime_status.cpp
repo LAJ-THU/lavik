@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/data_control_runtime_status.h"
+#include "lavik/meta/data_control_runtime_status.h"
 
 #include <algorithm>
 #include <limits>
 #include <utility>
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
 std::vector<MetaDataControlRuntimeGroup> ProjectedGroups(
@@ -224,4 +224,4 @@ MetaDataControlLeadershipState MetaDataControlRuntimeStatus::LeadershipState()
               leader_authority_eligibility_revision_};
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

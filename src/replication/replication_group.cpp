@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/replication_group.h"
+#include "lavik/replication_group.h"
 
 #include <openssl/evp.h>
 
@@ -33,10 +33,10 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "keylane/memory.h"
-#include "keylane/population_manifest_format.h"
+#include "lavik/memory.h"
+#include "lavik/population_manifest_format.h"
 
-namespace keylane {
+namespace lavik {
 namespace {
 
 using DigestContext = std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)>;
@@ -708,4 +708,4 @@ ReplicationGroupState ReplicationGroup::state() const noexcept {
   return impl_->state();
 }
 
-}  // namespace keylane
+}  // namespace lavik

@@ -16,7 +16,7 @@
 
 #include "impl.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 absl::StatusOr<std::shared_ptr<GroupedCommitDecision>>
 StorageEngine::Impl::PrepareGroupedDecision(TxShardWrites& tx) {
@@ -103,7 +103,7 @@ StorageEngine::Impl::WriteHashGroupRecordLocked(
     if (!written.ok()) co_return written.status();
     extents = std::move(*written);
     payload = EncodeManifest(*extents);
-    KEYLANE_MAYBE_CRASH_AT("group-extents-durable-before-record");
+    LAVIK_MAYBE_CRASH_AT("group-extents-durable-before-record");
   } else {
     payload.resize(encoder->encoded_bytes());
     RecordPayloadCursor cursor(*encoder);
@@ -128,7 +128,7 @@ StorageEngine::Impl::WriteHashGroupRecordLocked(
     if (extents != nullptr) SpawnExtentReclaim(store, extents);
     co_return written;
   }
-  KEYLANE_MAYBE_CRASH_AT("group-record-staged-before-root");
+  LAVIK_MAYBE_CRASH_AT("group-record-staged-before-root");
   co_return HashGroupLocation{
       .id_ = snapshot.id_,
       .location_ = location,
@@ -137,4 +137,4 @@ StorageEngine::Impl::WriteHashGroupRecordLocked(
   };
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

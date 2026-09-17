@@ -23,13 +23,13 @@
 #include <vector>
 
 #include "gtest/gtest.h"
-#include "keylane/meta/coordinator.h"
-#include "keylane/meta/failover.h"
-#include "keylane/meta/failover_reconciler.h"
-#include "keylane/meta/hash.h"
-#include "keylane/meta/state_apply.h"
+#include "lavik/meta/coordinator.h"
+#include "lavik/meta/failover.h"
+#include "lavik/meta/failover_reconciler.h"
+#include "lavik/meta/hash.h"
+#include "lavik/meta/state_apply.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
 template <std::size_t N>
@@ -149,7 +149,7 @@ struct ProposalFixture {
   void Apply(const Command& command) {
     const MetaApplyResult result = ApplyCommitted(
         stores, next_index++, MetaCommand{command},
-        "keylane://test/failover-proposal", "2026-09-13T00:00:00Z");
+        "lavik://test/failover-proposal", "2026-09-13T00:00:00Z");
     ASSERT_EQ(result.verdict_, MetaAuditVerdict::kAccepted) << result.detail_;
   }
 
@@ -158,7 +158,7 @@ struct ProposalFixture {
     RegisterNode node;
     node.request_id_ = Bytes<16>(request_seed);
     node.node_id_ = node_id;
-    node.principal_ = "keylane://node/" + node_id;
+    node.principal_ = "lavik://node/" + node_id;
     node.endpoints_ = {"tcp://127.0.0.1:" + std::to_string(port)};
     node.role_ = role;
     Apply(node);
@@ -945,4 +945,4 @@ TEST(MetaFailoverValidationTest,
 }
 
 }  // namespace
-}  // namespace keylane::meta
+}  // namespace lavik::meta

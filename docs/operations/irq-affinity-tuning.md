@@ -16,11 +16,11 @@ limitations under the License.
 
 # Network IRQ Affinity Tuning for Tail Latency
 
-Keylane pins worker threads, but Linux network interrupts are scheduled
-independently. If a NIC completion IRQ runs on a Keylane worker CPU, it can
+Lavik pins worker threads, but Linux network interrupts are scheduled
+independently. If a NIC completion IRQ runs on a Lavik worker CPU, it can
 interrupt the worker while the worker is processing a request or polling SPDK.
 This interference can increase average latency and lower tail percentiles.
-Reserve physical cores for the NIC and bind its IRQs away from Keylane workers
+Reserve physical cores for the NIC and bind its IRQs away from Lavik workers
 when latency matters.
 
 IRQ isolation is not a universal fix for extreme tails. On the reference host,
@@ -31,30 +31,30 @@ the deployment.
 ## Reserve a scheduler housekeeping CPU
 
 Before attempting strict IRQ isolation, leave one logical CPU outside the
-Keylane worker affinity set. The spare CPU gives Linux a low-load destination
+Lavik worker affinity set. The spare CPU gives Linux a low-load destination
 for movable system work such as SSH sessions, monitoring agents, command-line
 tools, and unbound kernel workqueues. This is scheduler headroom, not explicit
 migration: it is not necessary to find and pin every system process for this
 first experiment.
 
 On the 16-vCPU Azure reference VM, the tested configuration used 15 workers on
-CPUs 0-14 and left CPU15 out of Keylane's allowed CPU set:
+CPUs 0-14 and left CPU15 out of Lavik's allowed CPU set:
 
 ```sh
-taskset -c 0-14 ./bld-spdk/keylane --threads=15 OTHER_OPTIONS
+taskset -c 0-14 ./bld-spdk/lavik --threads=15 OTHER_OPTIONS
 ```
 
 Both parts are required. `taskset` prevents the process from running on CPU15,
-and `--threads=15` prevents Keylane from creating a sixteenth worker. Keylane
+and `--threads=15` prevents Lavik from creating a sixteenth worker. Lavik
 then pins worker `i` to allowed CPU `i`. Linux CFS load balancing naturally
 prefers the otherwise idle CPU15 for movable housekeeping tasks.
 
 Verify the process and worker placement after startup:
 
 ```sh
-keylane_pid=$(pgrep -xo keylane)
-taskset -pc "$keylane_pid"
-ps -T -p "$keylane_pid" -o pid,tid,psr,stat,comm
+lavik_pid=$(pgrep -xo lavik)
+taskset -pc "$lavik_pid"
+ps -T -p "$lavik_pid" -o pid,tid,psr,stat,comm
 ```
 
 This does **not** strictly isolate CPUs 0-14. Per-CPU kernel threads can still
@@ -86,9 +86,9 @@ one-queue-per-CPU IRQ mapping recovered 400k GET/s while retaining the benefit
 of scheduler headroom on CPU15.
 
 A 300-second, fixed-100k GET/s follow-up compared scheduler headroom with
-strict worker/IRQ separation. The 12-worker configuration ran Keylane on CPUs
+strict worker/IRQ separation. The 12-worker configuration ran Lavik on CPUs
 0-11 and distributed the 16 mlx5 completion IRQs round-robin over CPUs 12-15.
-The 15-worker configuration ran Keylane on CPUs 0-14 and retained the original
+The 15-worker configuration ran Lavik on CPUs 0-14 and retained the original
 one-queue-per-CPU IRQ mapping. All other server and client settings were the
 same:
 
@@ -122,7 +122,7 @@ done
 Reserve complete physical cores. For example, if CPUs 14 and 15 are SMT
 siblings, together they are one physical core, not two.
 
-Keep Keylane and its NIC IRQ set in the same NUMA node when possible. For
+Keep Lavik and its NIC IRQ set in the same NUMA node when possible. For
 multi-socket systems, also check the NIC's NUMA node:
 
 ```sh
@@ -161,7 +161,7 @@ systemctl is-active irqbalance
 systemctl is-enabled irqbalance
 ```
 
-On a dedicated Keylane host, either configure irqbalance to exclude the
+On a dedicated Lavik host, either configure irqbalance to exclude the
 reserved CPUs or disable it before applying manual affinity. Do not leave
 irqbalance active with an unrestricted policy and assume the manual mapping is
 persistent.
@@ -212,13 +212,13 @@ for index in "${!irq_ids[@]}"; do
 done
 ```
 
-Start Keylane with a disjoint CPU set. With 12 workers on CPUs 0-11:
+Start Lavik with a disjoint CPU set. With 12 workers on CPUs 0-11:
 
 ```sh
-taskset -c 0-11 ./bld-spdk/keylane --threads=12 OTHER_OPTIONS
+taskset -c 0-11 ./bld-spdk/lavik --threads=12 OTHER_OPTIONS
 ```
 
-Keylane pins worker `i` to allowed CPU `i` by default. The number of allowed
+Lavik pins worker `i` to allowed CPU `i` by default. The number of allowed
 CPUs must be at least the worker count.
 
 ## 4. Verify the effective placement under load
@@ -279,12 +279,12 @@ is not automatically lower latency than two cores:
 
 - one core reduces IRQ migration and can free another core for other work;
 - concentrating all queues can serialize bursts and worsen extreme tails;
-- adding Keylane workers on the freed core changes more than IRQ capacity.
+- adding Lavik workers on the freed core changes more than IRQ capacity.
 
-Test in two stages. First, keep the Keylane worker count unchanged and move all
+Test in two stages. First, keep the Lavik worker count unchanged and move all
 NIC IRQs from two reserved physical cores onto the SMT siblings of one physical
 core. If tail latency remains stable and the IRQ core has ample headroom, test
-additional Keylane workers separately.
+additional Lavik workers separately.
 
 On the 2026-08-11 reference run, four logical IRQ CPUs (two physical cores)
 each used only 5.03--5.78% softirq and remained at least 92.3% idle at 100k

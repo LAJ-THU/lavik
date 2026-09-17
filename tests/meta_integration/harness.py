@@ -13,9 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Shared harness for the keylane-meta process gates.
+"""Shared harness for the lavik-meta process gates.
 
-Stdlib-only building blocks for driving multi-node keylane-meta clusters:
+Stdlib-only building blocks for driving multi-node lavik-meta clusters:
 
 - `Node`: process lifecycle (start on dynamic free ports with a mktemp
   data dir, clean SIGTERM stop, SIGKILL, SIGSTOP/SIGCONT pause/resume,
@@ -68,8 +68,8 @@ _TAG = "meta-integration"
 _ALLOCATED_PORTS = set()
 
 AUTOMATIC_UNCONTROLLED_FAILOVER_POLICY_ID = (
-    "keylane.automatic-uncontrolled-failover-v1")
-AUTHORITY_LEASE_POLICY_ID = "keylane.authority-lease-v1"
+    "lavik.automatic-uncontrolled-failover-v1")
+AUTHORITY_LEASE_POLICY_ID = "lavik.authority-lease-v1"
 
 
 def automatic_uncontrolled_failover_policy(enabled=True,
@@ -1166,13 +1166,13 @@ def dump_node_logs(nodes, lines=40):
 
 
 def make_workdir(argv, prefix):
-    """argv[1] is the keylane-meta binary; optional argv[2] pins (and keeps)
+    """argv[1] is the lavik-meta binary; optional argv[2] pins (and keeps)
     the workdir for debugging, mirroring smoke_3node.py."""
     if len(argv) > 2:
         workdir = argv[2]
         os.makedirs(workdir, exist_ok=True)
         return workdir, True
-    test_data_dir = os.environ.get("KEYLANE_TEST_DATA_DIR") or "/tmp"
+    test_data_dir = os.environ.get("LAVIK_TEST_DATA_DIR") or "/tmp"
     return tempfile.mkdtemp(prefix=prefix, dir=test_data_dir), False
 
 
@@ -1182,7 +1182,7 @@ def cleanup(workdir, keep):
 
 
 def tls_args(ca_cert, cert, key):
-    """mTLS flag triple for keylane-meta; all raft traffic then requires
+    """mTLS flag triple for lavik-meta; all raft traffic then requires
     client certs signed by ca_cert (the ctl surface remains a peer-credential
     authenticated Unix socket unless explicit ctl mTLS flags are supplied)."""
     return ["--tls-ca", ca_cert, "--tls-cert", cert, "--tls-key", key]

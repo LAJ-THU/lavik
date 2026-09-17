@@ -20,7 +20,7 @@
 #include "device_affinity.h"
 #include "impl.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 std::vector<std::uint64_t> InitialEpochValues() {
@@ -329,7 +329,7 @@ absl::Status StorageEngine::Impl::Prepare(unsigned worker_count) {
       }
     }
     for (std::size_t i = 0; i < path_info.size(); ++i) {
-      spdlog::warn("resetting all Keylane data on storage path {}",
+      spdlog::warn("resetting all Lavik data on storage path {}",
                    options_.data_files_[i]);
       absl::Status reset =
           ResetStorageMetadata(options_.data_files_[i],
@@ -1396,13 +1396,13 @@ Task<absl::Status> StorageEngine::Impl::InitializeWorker(Worker& worker) {
   };
   std::vector<RecoveryExpiredTombstone> expired_tombstones;
   std::uint64_t recovery_now_ms = UnixTimeMillis();
-  KEYLANE_FAULT_INJECT(
+  LAVIK_FAULT_INJECT(
       // Deterministically emulate a wall-clock rollback in recovery tests. This
       // must not be used as a correctness mechanism: runtime expiration first
       // publishes a durable tombstone and only then retires a collection graph,
       // so an older root can never become the winning recoverable version
       // merely because this clock moved backwards.
-      if (const char* configured = std::getenv("KEYLANE_RECOVERY_NOW_MS");
+      if (const char* configured = std::getenv("LAVIK_RECOVERY_NOW_MS");
           configured != nullptr) {
         const char* end = configured + std::strlen(configured);
         std::uint64_t overridden = 0;
@@ -1875,7 +1875,7 @@ void StorageEngine::Impl::FinalizeWorker(unsigned worker_id) noexcept {
 }
 
 bool StorageEngine::Impl::AbandonWorkerStateForProcessExit() noexcept {
-#if KEYLANE_ASAN_BUILD
+#if LAVIK_ASAN_BUILD
   // ASan enables LeakSanitizer on supported platforms. Keep the ordinary
   // return path intact so intentional production process-exit abandonment
   // cannot hide unrelated leaks from its exit-time reachability scan.
@@ -2253,4 +2253,4 @@ void StorageEngine::Impl::CompleteShutdownFlush(const absl::Status& status) {
   shutdown_flush_completed_.notify_all();
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

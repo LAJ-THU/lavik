@@ -15,9 +15,9 @@
  */
 
 #include "impl.h"
-#include "keylane/storage/detail/grouped_scratch.h"
+#include "lavik/storage/detail/grouped_scratch.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 std::uint64_t Magnitude(std::int64_t value) {
@@ -462,4 +462,4 @@ Task<absl::StatusOr<ListResult>> StorageEngine::Impl::ExecuteGroupedListLocked(
   }
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

@@ -15,9 +15,9 @@
  */
 
 #include "impl.h"
-#include "keylane/storage/detail/grouped_scratch.h"
+#include "lavik/storage/detail/grouped_scratch.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 Task<absl::StatusOr<TransferValue>>
 StorageEngine::Impl::ReadValueForTransferLocked(std::uint8_t db_id,
@@ -314,4 +314,4 @@ Task<absl::Status> StorageEngine::WriteValueForTransferLocked(
                                             replication, mutation_precondition);
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

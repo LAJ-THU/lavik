@@ -18,7 +18,7 @@ limitations under the License.
 
 ## Boundary and state model
 
-`keylane-meta` is a separate C++ process for durable cluster metadata. It
+`lavik-meta` is a separate C++ process for durable cluster metadata. It
 embeds NuRaft and uses its native Asio service for Raft peer sockets, timers,
 and TLS. One Bycorf worker owns the configured Unix and/or TCP administrative
 listeners and the process-lifetime Data-control listener; a bounded proposal
@@ -26,7 +26,7 @@ executor keeps
 synchronous NuRaft API entry and WAL I/O off that worker. NuRaft and
 proposal-executor threads return typed notifications or coroutine handles
 through Bycorf's foreign MPSC mailbox, which reuses the worker's normal wake
-sequence and eventfd. The main Keylane data-plane executable remains
+sequence and eventfd. The main Lavik data-plane executable remains
 Raft-free. Followers keep accepting Data connections long enough to return the
 committed member directory and leader hint. Only a caught-up leader installs
 the publisher that may create sessions, project desired state, evaluate lease
@@ -120,8 +120,8 @@ correctness does not depend on apply running only once.
 
 Policy families are compiled into `MetaPolicyStore`; an arbitrary id cannot
 introduce a schema at runtime. The current families are
-`keylane.automatic-uncontrolled-failover-v1` (fixed matching `kind`, `enabled`,
-and `suspect_after_ms`) and `keylane.authority-lease-v1` (fixed matching `kind`
+`lavik.automatic-uncontrolled-failover-v1` (fixed matching `kind`, `enabled`,
+and `suspect_after_ms`) and `lavik.authority-lease-v1` (fixed matching `kind`
 and `duration_ms`).
 Each accepts only its exact compact JSON object and typed ranges, rejecting
 whitespace, missing, duplicate or unknown fields, alternate escaped spellings,
@@ -833,7 +833,7 @@ the operation's stable idempotency key.
 
 The Meta/Data control wire, commands, stores, records, operation intents,
 exports, snapshots, physical segmented WAL, Admin binary payloads, and
-cluster-status JSON schema use their current v1 layouts. Before Keylane's
+cluster-status JSON schema use their current v1 layouts. Before Lavik's
 first stable release, development layouts are replaced in place for fresh
 clusters without a legacy decoder, migration, or mixed-layout negotiation.
 Equal markers do not make earlier development state interchangeable.
@@ -846,7 +846,7 @@ values.
 
 Every configured Meta identity has one canonical concrete numeric Data-control
 endpoint and one canonical concrete numeric Admin endpoint. NuRaft's
-`srv_config::aux` `KMI1` descriptor carries the server id, derived principal,
+`srv_config::aux` `LMI1` descriptor carries the server id, derived principal,
 and both endpoints; Raft keeps its endpoint in the native field. The descriptor
 and committed identity binding must agree exactly. Advertised Data-control and
 Admin addresses may route through an explicit proxy instead of equaling local
@@ -869,7 +869,7 @@ model. It still checks claimed source and destination ids against NuRaft
 configuration descriptors and committed identity-store bindings, but those
 claims are not cryptographically authenticated; deployments whose network is
 not fully trusted enable optional mutual TLS. The Raft verifier requires
-exactly one recognized canonical `keylane://meta/<server-id>` URI SAN but
+exactly one recognized canonical `lavik://meta/<server-id>` URI SAN but
 ignores unrelated URI SANs; certificates reused by Data control are subject to
 the stricter total-URI rule below. An IP or DNS SAN covers the advertised Raft
 endpoint. The NuRaft configuration
@@ -937,14 +937,14 @@ retired principals is rejected. Every member commits numeric Data-control and
 Admin endpoints in canonical `IPv4:port` or `[IPv6]:port` spelling. Data seeds
 use the former directory; operator discovery uses the latter. Neither
 directory implies that every follower is currently reachable.
-Data-node identities use canonical `keylane://node/<node-id>` principals with
+Data-node identities use canonical `lavik://node/<node-id>` principals with
 global one-to-one binding.
 
 Data control follows the Raft transport's optional mTLS mode instead of adding
 a second Meta certificate configuration. The listener reuses that member's
-Raft CA/certificate/key and its sole `keylane://meta/<server-id>` URI SAN. A
+Raft CA/certificate/key and its sole `lavik://meta/<server-id>` URI SAN. A
 Data client reuses its replication TLS CA/certificate/key and must present its
-committed sole `keylane://node/<node-id>` URI SAN. TLS is all-or-none on each
+committed sole `lavik://node/<node-id>` URI SAN. TLS is all-or-none on each
 side; plaintext deployments rely on network isolation and never silently
 downgrade a partially configured identity.
 
@@ -955,14 +955,14 @@ listener records the bound inode so shutdown never unlinks a replacement path.
 Remote administration is plaintext when no control TLS identity is configured,
 matching the Raft transport default. A plaintext listener grants operator
 authority to every reachable peer and records the fixed
-`keylane://operator/plaintext` actor, so trusted network reachability is its
+`lavik://operator/plaintext` actor, so trusted network reachability is its
 security boundary. Deployments requiring authenticated peer identity configure
 mutual TLS and use the peer's canonical URI SAN. Role-based authorization then
 separates operators, Meta members, and data-node self-reporting; actor fields on
 the wire are never trusted.
 Certificate validity is enforced by TLS, but online issuance, rotation, CRL,
 and OCSP integration are outside this module.
-The `keylane-ctl` operator client uses one Raft-free Admin transport for
+The `lavik-ctl` operator client uses one Raft-free Admin transport for
 Unix, plaintext TCP, and mTLS TCP. Direct commands address the selected member;
 `status` reports its local state. The `cluster-status` command discovers the
 leader and evaluates cluster readiness. The transport handles partial I/O
@@ -971,7 +971,7 @@ override; cluster discovery verifies each numeric Admin IP against the
 certificate IP SAN and never falls back between TLS and plaintext. A Unix
 seed can use configured TLS credentials for subsequent remote leader access.
 
-`keylane-ctl cluster-status` normally performs exactly two reads:
+`lavik-ctl cluster-status` normally performs exactly two reads:
 `clusterhead 1` against the supplied seed to learn the current committed Admin
 directory, then `clusterstatus 1` against the indicated leader. Redirect,
 leader-change, busy, and incomplete-catch-up results retry discovery only
@@ -982,7 +982,7 @@ result therefore states only leader-observed Meta availability and committed
 membership consistency; a quorum-serving leader can report the cluster ready
 while one follower is unreachable.
 
-`keylane-ctl failover GROUP` uses the same leader discovery, verifies a Created
+`lavik-ctl failover GROUP` uses the same leader discovery, verifies a Created
 cluster and committed Group, generates an operation id and absolute transition
 deadline, and submits one `failover 1` request. Its success point is the
 operation commit, not Data cutover. A caller retrying this mutation must retain
@@ -1065,7 +1065,7 @@ Data sessions are READY. Empty and partially configured clusters are stable
 `NOT READY` results. Every rendered result, including retryable and fatal CLI
 errors, includes a status explanation and an operator next action.
 
-`keylane-ctl cluster-create` reuses the same private leader discovery and
+`lavik-ctl cluster-create` reuses the same private leader discovery and
 status-capture seam and accepts only manifest schema v1. A manifest names the
 complete initial Meta vector—id plus canonical numeric Raft, Data-control, and
 Admin endpoints—one or more canonical Data identities with advertised
@@ -1077,7 +1077,7 @@ preserves the transport tags through the durable identity store and projection
 into separate TCP/TLS ports. TLS replication selects the advertised TLS port
 without falling back to plaintext; credentials and listener configuration
 remain process-local. Meta entries are sorted by id, all are voters, each
-endpoint class is unique, and the principal derives as `keylane://meta/<id>`.
+endpoint class is unique, and the principal derives as `lavik://meta/<id>`.
 Slots are either generated with `contiguous-even` after sorting Group ids or supplied as a
 complete, non-overlapping `0..16383` range table. All
 declared Data belongs to exactly one Group and every Group owns at least one
@@ -1216,7 +1216,7 @@ Every privileged committed command creates a deterministic audit record keyed
 by Raft log index. Records include the injected actor, proposal time, command
 summary, and verdict. Exports carry complete records and drop watermarks.
 An external archive uses its own deployment namespace and deduplicates by log
-index, checking complete record equality on duplicate exports; Keylane persists
+index, checking complete record equality on duplicate exports; Lavik persists
 no separate cluster identity. Pruning removes a prefix through an explicitly
 named record and advances the committed prune floor. Audit is an operational
 record, not a cryptographically tamper-evident chain.
@@ -1246,20 +1246,20 @@ audit history rather than replacing it.
 
 | Claim | Repository source |
 |---|---|
-| Public Meta boundaries, commands, store composition, and correctness contracts | `include/keylane/meta/` |
+| Public Meta boundaries, commands, store composition, and correctness contracts | `include/lavik/meta/` |
 | Deterministic apply, stores, coordinator, observations, and administrative protocol implementations | `src/meta/` |
-| Per-Group durable failover transition, eight typed commands, exact replay/CAS apply, leader-resumable planner, controlled Admin entry, and structured commit logs | `include/keylane/meta/commands.h`, `include/keylane/meta/failover.h`, `include/keylane/meta/failover_reconciler.h`, `include/keylane/meta/failover_admin.h`, `src/meta/failover.cpp`, `src/meta/failover_reconciler.cpp`, `src/meta/failover_admin.cpp`, `src/meta/state_apply.cpp`, `src/meta/state_machine.cpp`, `src/meta/ctl_server.cpp` |
-| Registered typed durable Policy families, strict raw JSON admission/history, and current-value accessors | `include/keylane/meta/policy_store.h`, `src/meta/policy_store.cpp`, `tests/meta_stores_test.cpp` |
-| Pure Owner Serviceability cut, causal lease confirmation, leader-local detector state, automatic Begin adapter, and generation-bracketed diagnostics | `include/keylane/meta/owner_serviceability.h`, `src/meta/owner_serviceability.cpp`, `include/keylane/meta/automatic_failover_detector.h`, `src/meta/automatic_failover_detector.cpp`, `include/keylane/meta/automatic_failover_reconciler.h`, `src/meta/automatic_failover_reconciler.cpp` |
-| Volatile candidate/failover observations and deterministic compatibility-domain plan selection | `include/keylane/meta/observation_store.h`, `src/meta/observation_store.cpp`, `include/keylane/meta/candidate_plan.h`, `src/meta/candidate_plan.cpp` |
-| Pure per-node projection including resolved lease duration, Data-derived heartbeat cadence, and failover/activation/follow-owner state, plus the leader-scoped Data-session publisher and causal heartbeat admission | `include/keylane/meta/control_projector.h`, `src/meta/control_projector.cpp`, `include/keylane/meta/data_control_server.h`, `src/meta/data_control_server.cpp` |
-| Manifest-bootstrapped initial Meta configuration, persistent restart/waiting-joiner classification, and Raft durability | `include/keylane/meta/nuraft_state_mgr.h`, `src/meta/nuraft_state_mgr.cpp`, `app/keylane_meta.cpp`, `tests/meta_integration/gate_initial_meta.py` |
-| Atomic Genesis lifecycle, strict Bootstrap Policy Defaults, durable creation admission, Meta catch-up barrier, and leader-owned recovery | `include/keylane/meta/cluster_create.h`, `src/meta/cluster_create.cpp`, `include/keylane/meta/topology_store.h`, `src/meta/topology_store.cpp`, `src/meta/state_apply.cpp`, `src/meta/ctl_server.cpp`, `include/keylane/meta/cluster_create_reconciler.h`, `src/meta/cluster_create_reconciler.cpp`, `app/keylane_meta.cpp` |
-| Durable post-genesis Meta membership intent, exact-config recovery, leadership handoff, and identity retirement | `include/keylane/meta/membership_reconciler.h`, `src/meta/membership_reconciler.cpp`, `src/meta/ctl_server.cpp`, `src/meta/state_apply.cpp`, `tests/meta_integration/gate_membership_recovery.py` |
-| Shared Meta/Data frame, object-transfer, failover observation, transition, and activation formats | `include/keylane/cluster/control_protocol.h`, `include/keylane/cluster/control_transport.h`, `src/cluster/control_protocol.cpp`, `src/cluster/control_transport.cpp` |
-| Raft WAL, vote/config state, native Asio hooks, and proposal executor | `include/keylane/meta/nuraft_*`, `src/meta/nuraft_*`, `src/meta/proposal_executor.cpp`, `third_party/patches/nuraft/` |
+| Per-Group durable failover transition, eight typed commands, exact replay/CAS apply, leader-resumable planner, controlled Admin entry, and structured commit logs | `include/lavik/meta/commands.h`, `include/lavik/meta/failover.h`, `include/lavik/meta/failover_reconciler.h`, `include/lavik/meta/failover_admin.h`, `src/meta/failover.cpp`, `src/meta/failover_reconciler.cpp`, `src/meta/failover_admin.cpp`, `src/meta/state_apply.cpp`, `src/meta/state_machine.cpp`, `src/meta/ctl_server.cpp` |
+| Registered typed durable Policy families, strict raw JSON admission/history, and current-value accessors | `include/lavik/meta/policy_store.h`, `src/meta/policy_store.cpp`, `tests/meta_stores_test.cpp` |
+| Pure Owner Serviceability cut, causal lease confirmation, leader-local detector state, automatic Begin adapter, and generation-bracketed diagnostics | `include/lavik/meta/owner_serviceability.h`, `src/meta/owner_serviceability.cpp`, `include/lavik/meta/automatic_failover_detector.h`, `src/meta/automatic_failover_detector.cpp`, `include/lavik/meta/automatic_failover_reconciler.h`, `src/meta/automatic_failover_reconciler.cpp` |
+| Volatile candidate/failover observations and deterministic compatibility-domain plan selection | `include/lavik/meta/observation_store.h`, `src/meta/observation_store.cpp`, `include/lavik/meta/candidate_plan.h`, `src/meta/candidate_plan.cpp` |
+| Pure per-node projection including resolved lease duration, Data-derived heartbeat cadence, and failover/activation/follow-owner state, plus the leader-scoped Data-session publisher and causal heartbeat admission | `include/lavik/meta/control_projector.h`, `src/meta/control_projector.cpp`, `include/lavik/meta/data_control_server.h`, `src/meta/data_control_server.cpp` |
+| Manifest-bootstrapped initial Meta configuration, persistent restart/waiting-joiner classification, and Raft durability | `include/lavik/meta/nuraft_state_mgr.h`, `src/meta/nuraft_state_mgr.cpp`, `app/lavik_meta.cpp`, `tests/meta_integration/gate_initial_meta.py` |
+| Atomic Genesis lifecycle, strict Bootstrap Policy Defaults, durable creation admission, Meta catch-up barrier, and leader-owned recovery | `include/lavik/meta/cluster_create.h`, `src/meta/cluster_create.cpp`, `include/lavik/meta/topology_store.h`, `src/meta/topology_store.cpp`, `src/meta/state_apply.cpp`, `src/meta/ctl_server.cpp`, `include/lavik/meta/cluster_create_reconciler.h`, `src/meta/cluster_create_reconciler.cpp`, `app/lavik_meta.cpp` |
+| Durable post-genesis Meta membership intent, exact-config recovery, leadership handoff, and identity retirement | `include/lavik/meta/membership_reconciler.h`, `src/meta/membership_reconciler.cpp`, `src/meta/ctl_server.cpp`, `src/meta/state_apply.cpp`, `tests/meta_integration/gate_membership_recovery.py` |
+| Shared Meta/Data frame, object-transfer, failover observation, transition, and activation formats | `include/lavik/cluster/control_protocol.h`, `include/lavik/cluster/control_transport.h`, `src/cluster/control_protocol.cpp`, `src/cluster/control_transport.cpp` |
+| Raft WAL, vote/config state, native Asio hooks, and proposal executor | `include/lavik/meta/nuraft_*`, `src/meta/nuraft_*`, `src/meta/proposal_executor.cpp`, `third_party/patches/nuraft/` |
 | Meta session transport retirement and Connection-storage lifetime | `src/meta/ctl_server.cpp`, `src/meta/data_control_server.cpp`, `bycorf/include/bycorf/net/connection.h`, `bycorf/src/runtime/worker.cpp` |
 | Foreign-thread typed completion ingress and worker wakeup | `bycorf/include/bycorf/runtime/foreign_executor.h`, `bycorf/src/runtime/foreign_executor.cpp`, `bycorf/include/bycorf/runtime/cross_core.h`, `bycorf/src/runtime/worker.cpp` |
-| TLS identity, RBAC, Unix peer credentials, Admin transport, cluster status, controlled failover, and initial cluster creation | `include/keylane/meta/identity_verifier.h`, `include/keylane/meta/ctl_server.h`, `include/keylane/meta/admin_client.h`, `include/keylane/meta/cluster_status.h`, `include/keylane/meta/cluster_create.h`, `include/keylane/meta/failover_admin.h`, `app/keylane_meta.cpp`, `app/keylane_ctl.cpp`, `bycorf/src/net/` |
-| Automatic-failover status wire/model plus JSON and text rendering | `include/keylane/meta/cluster_status.h`, `src/meta/cluster_status.cpp`, `tests/meta_cluster_status_test.cpp` |
+| TLS identity, RBAC, Unix peer credentials, Admin transport, cluster status, controlled failover, and initial cluster creation | `include/lavik/meta/identity_verifier.h`, `include/lavik/meta/ctl_server.h`, `include/lavik/meta/admin_client.h`, `include/lavik/meta/cluster_status.h`, `include/lavik/meta/cluster_create.h`, `include/lavik/meta/failover_admin.h`, `app/lavik_meta.cpp`, `app/lavik_ctl.cpp`, `bycorf/src/net/` |
+| Automatic-failover status wire/model plus JSON and text rendering | `include/lavik/meta/cluster_status.h`, `src/meta/cluster_status.cpp`, `tests/meta_cluster_status_test.cpp` |
 | Recovery, partition, membership, failover, and security gates | `tests/meta_*`, `tests/meta_integration/` |

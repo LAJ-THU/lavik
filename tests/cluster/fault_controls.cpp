@@ -20,7 +20,7 @@
 
 #include "absl/strings/str_cat.h"
 
-namespace keylane::test::cluster {
+namespace lavik::test::cluster {
 
 absl::Status ManualClock::AdvanceTo(std::uint64_t time) {
   if (time < now_) {
@@ -299,4 +299,4 @@ FaultDecision FaultController::Reach(std::string_view checkpoint) {
                        .occurrence_ = occurrence};
 }
 
-}  // namespace keylane::test::cluster
+}  // namespace lavik::test::cluster

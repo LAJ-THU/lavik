@@ -69,6 +69,6 @@ __pycache__/
 # OS cruft
 .DS_Store
 Thumbs.db
-build-keylane/
+build-lavik/
 dump.rdb
 /deploy/monitoring/.env

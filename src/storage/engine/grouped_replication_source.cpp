@@ -17,9 +17,9 @@
 #include <type_traits>
 
 #include "impl.h"
-#include "keylane/storage/detail/collection_compact_stream.h"
+#include "lavik/storage/detail/collection_compact_stream.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 struct StorageEngine::Impl::FullSyncCollection {
   // Charges precede their owners so buffers die before admission is returned.
@@ -313,14 +313,13 @@ Task<absl::StatusOr<std::uint64_t>> StorageEngine::Impl::PinFullSyncCollection(
   if (!prepared.ok()) co_return prepared;
   auto pinned = co_await PinRdbSnapshotValue(&stream->saved_);
   if (!pinned.ok()) co_return pinned;
-  KEYLANE_FAULT_INJECT(
-      if (KEYLANE_FAULT_MATCHES("KEYLANE_PAUSE_FULLSYNC_COLLECTION_SCAN_KEY",
-                                key)) {
-        spdlog::info("paused full-sync collection pre-scan key={}", key);
-        auto waited = co_await bycorf::SleepFor(
-            *store.worker_, std::chrono::milliseconds(5000));
-        if (!waited.ok()) co_return waited;
-      });
+  LAVIK_FAULT_INJECT(if (LAVIK_FAULT_MATCHES(
+                             "LAVIK_PAUSE_FULLSYNC_COLLECTION_SCAN_KEY", key)) {
+    spdlog::info("paused full-sync collection pre-scan key={}", key);
+    auto waited = co_await bycorf::SleepFor(*store.worker_,
+                                            std::chrono::milliseconds(5000));
+    if (!waited.ok()) co_return waited;
+  });
   stream->ResetCursor();
   std::uint64_t bytes = location.value_type() == ValueType::kHash ||
                                 location.value_type() == ValueType::kSet
@@ -379,10 +378,10 @@ StorageEngine::Impl::ReadFullSyncCollectionChunk(
     co_return absl::FailedPreconditionError(
         "invalid full-sync collection stream offset/state");
   SourceReadGuard reading(&stream->reading_);
-  KEYLANE_FAULT_INJECT(
+  LAVIK_FAULT_INJECT(
       if (offset == kReplicationTransferBytes && stream->page_.has_value() &&
-          KEYLANE_FAULT_MATCHES("KEYLANE_PAUSE_FULLSYNC_COLLECTION_CHUNK_KEY",
-                                stream->key_)) {
+          LAVIK_FAULT_MATCHES("LAVIK_PAUSE_FULLSYNC_COLLECTION_CHUNK_KEY",
+                              stream->key_)) {
         spdlog::info("paused full-sync collection chunk key={} page_bytes={}",
                      stream->key_, stream->page_->RetainedBytes());
         auto waited = co_await bycorf::SleepFor(
@@ -494,7 +493,7 @@ Task<absl::Status> StorageEngine::Impl::ReleaseFullSyncCollection(
   }
   if (stream->released_) co_return absl::OkStatus();
   stream->releasing_ = true;
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
   const auto pin_count = stream->saved_.block_pins_ == nullptr
                              ? 0
                              : stream->saved_.block_pins_->blocks_.size();
@@ -507,7 +506,7 @@ Task<absl::Status> StorageEngine::Impl::ReleaseFullSyncCollection(
   stream->piece_ = {};
   stream->encoder_.reset();
   stream->page_.reset();
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
   // Measure the actual charge handoff without suspension on the source owner.
   // A later process-wide INFO sample also includes unrelated connection and
   // IO-buffer cache growth, so its net delta cannot prove this page was freed.
@@ -517,11 +516,11 @@ Task<absl::Status> StorageEngine::Impl::ReleaseFullSyncCollection(
 #endif
   auto released = co_await ReleaseRdbSnapshotValue(&stream->saved_);
   stream->released_ = true;
-  KEYLANE_FAULT_INJECT(
-      if ((KEYLANE_FAULT_MATCHES("KEYLANE_PAUSE_FULLSYNC_COLLECTION_CHUNK_KEY",
-                                 stream->key_) ||
-           KEYLANE_FAULT_MATCHES("KEYLANE_PAUSE_FULLSYNC_COLLECTION_SCAN_KEY",
-                                 stream->key_)) &&
+  LAVIK_FAULT_INJECT(
+      if ((LAVIK_FAULT_MATCHES("LAVIK_PAUSE_FULLSYNC_COLLECTION_CHUNK_KEY",
+                               stream->key_) ||
+           LAVIK_FAULT_MATCHES("LAVIK_PAUSE_FULLSYNC_COLLECTION_SCAN_KEY",
+                               stream->key_)) &&
           released.ok() && !stream->saved_.pins_held_) {
         spdlog::info(
             "released full-sync collection key={} pins={} page_bytes={} "
@@ -532,4 +531,4 @@ Task<absl::Status> StorageEngine::Impl::ReleaseFullSyncCollection(
   co_return released;
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

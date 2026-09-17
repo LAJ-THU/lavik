@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/storage/detail/grouped_collection.h"
+#include "lavik/storage/detail/grouped_collection.h"
 
 #include <algorithm>
 #include <bit>
@@ -25,7 +25,7 @@
 
 #include "gtest/gtest.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 OrderedGroupSnapshot Page(
@@ -766,4 +766,4 @@ TEST(GroupedCollectionTest, RecoveryRejectsInvalidAndNonMonotoneScoreBounds) {
 }
 
 }  // namespace
-}  // namespace keylane::storage
+}  // namespace lavik::storage

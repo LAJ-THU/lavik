@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/admin_client.h"
+#include "lavik/meta/admin_client.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -37,15 +37,15 @@
 
 #include "absl/status/status.h"
 #include "absl/strings/cord.h"
-#include "keylane/numeric_endpoint.h"
+#include "lavik/numeric_endpoint.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
 constexpr std::size_t kMaxCommandBytes = 64 * 1024;
 constexpr std::size_t kMaxReplyBytes = 256 * 1024 * 1024;
 constexpr std::string_view kRequestNotSentPayload =
-    "type.googleapis.com/keylane.meta.admin-request-not-sent";
+    "type.googleapis.com/lavik.meta.admin-request-not-sent";
 
 class FileDescriptor {
  public:
@@ -194,7 +194,7 @@ absl::StatusOr<FileDescriptor> ConnectUnix(const std::string& path,
 }
 
 absl::StatusOr<SocketEndpoint> ParseEndpoint(std::string_view text) {
-  auto parsed = keylane::ParseNumericEndpoint(text);
+  auto parsed = lavik::ParseNumericEndpoint(text);
   if (!parsed.has_value()) {
     return absl::InvalidArgumentError(
         "address must be numeric IPv4:port or [IPv6]:port");
@@ -497,4 +497,4 @@ absl::StatusOr<std::string> MetaAdminClient::RoundTrip(
   return reply;
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/cluster/topology.h"
+#include "lavik/cluster/topology.h"
 
 #include <algorithm>
 #include <cassert>
@@ -23,9 +23,9 @@
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
-#include "keylane/storage/format.h"
+#include "lavik/storage/format.h"
 
-namespace keylane::cluster {
+namespace lavik::cluster {
 
 std::optional<NodeId> NodeId::Parse(std::string_view hex) noexcept {
   if (hex.size() != kHexSize) return std::nullopt;
@@ -612,4 +612,4 @@ std::string Endpoint(const NodeDescriptor& node, bool connection_tls) {
 
 }  // namespace router
 
-}  // namespace keylane::cluster
+}  // namespace lavik::cluster

@@ -25,10 +25,10 @@
 #include "absl/strings/str_split.h"
 #include "tests/cluster/fault_harness.h"
 
-namespace keylane::test::cluster {
+namespace lavik::test::cluster {
 namespace {
 
-constexpr std::string_view kTraceMagic = "KFT1";
+constexpr std::string_view kTraceMagic = "LFT1";
 
 bool IsUnescaped(unsigned char byte) {
   return (byte >= 'a' && byte <= 'z') || (byte >= 'A' && byte <= 'Z') ||
@@ -71,12 +71,12 @@ absl::StatusOr<std::string> Unescape(std::string_view input) {
       continue;
     }
     if (i + 2 >= input.size()) {
-      return absl::InvalidArgumentError("truncated KFT1 escape");
+      return absl::InvalidArgumentError("truncated LFT1 escape");
     }
     const auto high = ParseHex(input[i + 1]);
     const auto low = ParseHex(input[i + 2]);
     if (!high.has_value() || !low.has_value()) {
-      return absl::InvalidArgumentError("invalid KFT1 escape");
+      return absl::InvalidArgumentError("invalid LFT1 escape");
     }
     result.push_back(static_cast<char>((*high << 4) | *low));
     i += 2;
@@ -92,7 +92,7 @@ absl::StatusOr<Integer> ParseInteger(std::string_view input,
       std::from_chars(input.data(), input.data() + input.size(), value);
   if (parsed.ec != std::errc{} || parsed.ptr != input.data() + input.size()) {
     return absl::InvalidArgumentError(
-        absl::StrCat("invalid KFT1 ", field, ": ", input));
+        absl::StrCat("invalid LFT1 ", field, ": ", input));
   }
   return value;
 }
@@ -112,7 +112,7 @@ absl::StatusOr<TraceMode> ParseMode(std::string_view value) {
   if (value == "process-action-script") {
     return TraceMode::kProcessActionScript;
   }
-  return absl::InvalidArgumentError("unknown KFT1 mode");
+  return absl::InvalidArgumentError("unknown LFT1 mode");
 }
 
 std::string_view RecordKindName(TraceRecordKind kind) {
@@ -134,7 +134,7 @@ absl::StatusOr<TraceRecordKind> ParseRecordKind(std::string_view value) {
   if (value == "ack") return TraceRecordKind::kAcknowledgment;
   if (value == "observation") return TraceRecordKind::kObservation;
   if (value == "finding") return TraceRecordKind::kFinding;
-  return absl::InvalidArgumentError("unknown KFT1 record kind");
+  return absl::InvalidArgumentError("unknown LFT1 record kind");
 }
 
 class TemporaryTrace {
@@ -176,14 +176,14 @@ std::string EncodeAction(const Action& action) {
 absl::StatusOr<Action> DecodeAction(std::string_view encoded) {
   std::vector<std::string_view> fields = absl::StrSplit(encoded, ';');
   if (fields.size() < 3) {
-    return absl::InvalidArgumentError("invalid KFT1 action");
+    return absl::InvalidArgumentError("invalid LFT1 action");
   }
   auto name = Unescape(fields[0]);
   if (!name.ok()) return name.status();
   auto argument_count = ParseInteger<std::size_t>(fields[1], "argument count");
   if (!argument_count.ok()) return argument_count.status();
   if (fields.size() != *argument_count + 3) {
-    return absl::InvalidArgumentError("KFT1 action argument count mismatch");
+    return absl::InvalidArgumentError("LFT1 action argument count mismatch");
   }
   Action action{.name_ = std::move(*name), .arguments_ = {}, .payload_ = {}};
   action.arguments_.reserve(*argument_count);
@@ -219,7 +219,7 @@ absl::StatusOr<Trace> DecodeTrace(std::string_view encoded) {
   std::vector<std::string_view> lines = absl::StrSplit(encoded, '\n');
   if (!lines.empty() && lines.back().empty()) lines.pop_back();
   if (lines.size() < 6 || lines[0] != kTraceMagic) {
-    return absl::InvalidArgumentError("missing or invalid KFT1 header");
+    return absl::InvalidArgumentError("missing or invalid LFT1 header");
   }
   auto header_value =
       [&](std::size_t index,
@@ -227,7 +227,7 @@ absl::StatusOr<Trace> DecodeTrace(std::string_view encoded) {
     std::vector<std::string_view> fields = absl::StrSplit(lines[index], '\t');
     if (fields.size() != 2 || fields[0] != expected) {
       return absl::InvalidArgumentError(
-          absl::StrCat("invalid KFT1 ", expected, " header"));
+          absl::StrCat("invalid LFT1 ", expected, " header"));
     }
     return fields[1];
   };
@@ -262,7 +262,7 @@ absl::StatusOr<Trace> DecodeTrace(std::string_view encoded) {
   for (std::size_t i = 6; i < lines.size(); ++i) {
     std::vector<std::string_view> fields = absl::StrSplit(lines[i], '\t');
     if (fields.size() != 5 || fields[0] != "record") {
-      return absl::InvalidArgumentError("invalid KFT1 record");
+      return absl::InvalidArgumentError("invalid LFT1 record");
     }
     auto logical_time =
         ParseInteger<std::uint64_t>(fields[1], "record logical time");
@@ -320,4 +320,4 @@ absl::StatusOr<Trace> ReadTrace(const std::filesystem::path& path) {
   return DecodeTrace(encoded);
 }
 
-}  // namespace keylane::test::cluster
+}  // namespace lavik::test::cluster

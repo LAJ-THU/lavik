@@ -61,7 +61,7 @@ std::vector<std::string> ZSetSeed(std::string key) {
 }
 
 TEST(GroupedSortedSetWriteE2e, MemberScoresUsePrefixPagesWithoutOrderedReads) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires ordered-read failure injection";
 #endif
   PrivateDisk disk;
@@ -83,15 +83,15 @@ TEST(GroupedSortedSetWriteE2e, MemberScoresUsePrefixPagesWithoutOrderedReads) {
   struct Fault {
     std::optional<std::string> previous_;
     Fault() {
-      if (const char* value = std::getenv("KEYLANE_FAIL_ZSET_ORDERED_READ_KEY"))
+      if (const char* value = std::getenv("LAVIK_FAIL_ZSET_ORDERED_READ_KEY"))
         previous_ = value;
-      ::setenv("KEYLANE_FAIL_ZSET_ORDERED_READ_KEY", "indexed", 1);
+      ::setenv("LAVIK_FAIL_ZSET_ORDERED_READ_KEY", "indexed", 1);
     }
     ~Fault() {
       if (previous_)
-        ::setenv("KEYLANE_FAIL_ZSET_ORDERED_READ_KEY", previous_->c_str(), 1);
+        ::setenv("LAVIK_FAIL_ZSET_ORDERED_READ_KEY", previous_->c_str(), 1);
       else
-        ::unsetenv("KEYLANE_FAIL_ZSET_ORDERED_READ_KEY");
+        ::unsetenv("LAVIK_FAIL_ZSET_ORDERED_READ_KEY");
     }
   } fault;
   Server recovered(disk, 3);
@@ -112,7 +112,7 @@ TEST(GroupedSortedSetWriteE2e, MemberScoresUsePrefixPagesWithoutOrderedReads) {
 }
 
 TEST(GroupedSortedSetWriteE2e, ScoreBoundsSkipUnrelatedPagesAfterRecovery) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires selected ordered-page failure injection";
 #endif
   PrivateDisk disk;
@@ -126,23 +126,22 @@ TEST(GroupedSortedSetWriteE2e, ScoreBoundsSkipUnrelatedPagesAfterRecovery) {
   struct Fault {
     std::optional<std::string> key_, page_;
     Fault() {
-      if (const char* value = std::getenv("KEYLANE_FAIL_ZSET_ORDERED_READ_KEY"))
+      if (const char* value = std::getenv("LAVIK_FAIL_ZSET_ORDERED_READ_KEY"))
         key_ = value;
-      if (const char* value =
-              std::getenv("KEYLANE_FAIL_ZSET_ORDERED_READ_PAGE"))
+      if (const char* value = std::getenv("LAVIK_FAIL_ZSET_ORDERED_READ_PAGE"))
         page_ = value;
-      ::setenv("KEYLANE_FAIL_ZSET_ORDERED_READ_KEY", "routed", 1);
-      ::setenv("KEYLANE_FAIL_ZSET_ORDERED_READ_PAGE", "1", 1);
+      ::setenv("LAVIK_FAIL_ZSET_ORDERED_READ_KEY", "routed", 1);
+      ::setenv("LAVIK_FAIL_ZSET_ORDERED_READ_PAGE", "1", 1);
     }
     ~Fault() {
       if (key_)
-        ::setenv("KEYLANE_FAIL_ZSET_ORDERED_READ_KEY", key_->c_str(), 1);
+        ::setenv("LAVIK_FAIL_ZSET_ORDERED_READ_KEY", key_->c_str(), 1);
       else
-        ::unsetenv("KEYLANE_FAIL_ZSET_ORDERED_READ_KEY");
+        ::unsetenv("LAVIK_FAIL_ZSET_ORDERED_READ_KEY");
       if (page_)
-        ::setenv("KEYLANE_FAIL_ZSET_ORDERED_READ_PAGE", page_->c_str(), 1);
+        ::setenv("LAVIK_FAIL_ZSET_ORDERED_READ_PAGE", page_->c_str(), 1);
       else
-        ::unsetenv("KEYLANE_FAIL_ZSET_ORDERED_READ_PAGE");
+        ::unsetenv("LAVIK_FAIL_ZSET_ORDERED_READ_PAGE");
     }
   } fault;
   // Changing worker count forces recovery/physical owner reassignment too.
@@ -303,7 +302,7 @@ TEST(GroupedSortedSetWriteE2e, ScoreBoundsRecoverAfterMultiExtentParentKey) {
 }
 
 TEST(GroupedSortedSetWriteE2e, FailedMemberWriteCannotCommitOrderedHalf) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires auxiliary-write failure injection";
 #endif
   PrivateDisk disk;

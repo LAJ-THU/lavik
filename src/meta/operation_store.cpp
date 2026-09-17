@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/operation_store.h"
+#include "lavik/meta/operation_store.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -22,11 +22,11 @@
 #include <set>
 #include <tuple>
 
-#include "keylane/cluster/control_protocol.h"
-#include "keylane/meta/value_codec.h"
+#include "lavik/cluster/control_protocol.h"
+#include "lavik/meta/value_codec.h"
 #include "spdlog/spdlog.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
 // The apply caller lost the log index <-> operation correspondence (seq = the
@@ -131,7 +131,6 @@ bool DirectiveWellFormed(const MetaDirectiveSpec& directive) {
          RecipientMatchesKind(directive);
 }
 
-
 bool ValidResultStatus(MetaDirectiveResultStatus status) {
   const auto tag = static_cast<std::uint8_t>(status);
   return tag >=
@@ -174,8 +173,7 @@ bool ReceiptMatches(const MetaTerminalReceipt& receipt,
 }  // namespace
 
 absl::StatusOr<MetaSubmitResult> MetaOperationStore::SubmitOperation(
-    const keylane::meta::SubmitOperation& command,
-    std::uint64_t operation_seq) {
+    const lavik::meta::SubmitOperation& command, std::uint64_t operation_seq) {
   if (command.kind_.empty() ||
       command.kind_.size() > kMaxMetaOperationKindBytes) {
     return MetaDomainRejectError("operation kind is empty or exceeds its cap");
@@ -297,7 +295,7 @@ std::optional<MetaTerminalReceipt> MetaOperationStore::FindTerminalReceipt(
 }
 
 bool MetaOperationStore::TransitionAlreadyApplied(
-    const keylane::meta::TransitionOperationPhase& command) const {
+    const lavik::meta::TransitionOperationPhase& command) const {
   if (command.expected_revision_ == std::numeric_limits<std::uint64_t>::max()) {
     return false;
   }
@@ -330,7 +328,7 @@ bool MetaOperationStore::PopulationManifestInUse(
 }
 
 absl::Status MetaOperationStore::TransitionOperationPhase(
-    const keylane::meta::TransitionOperationPhase& command,
+    const lavik::meta::TransitionOperationPhase& command,
     std::uint64_t committed_index) {
   const auto it = live_.find(command.operation_id_);
   if (it == live_.end()) {
@@ -417,7 +415,7 @@ absl::Status MetaOperationStore::TransitionOperationPhase(
 }
 
 absl::Status MetaOperationStore::CompleteOperation(
-    const keylane::meta::CompleteOperation& command) {
+    const lavik::meta::CompleteOperation& command) {
   const auto it = live_.find(command.operation_id_);
   if (it == live_.end()) {
     if (archived_.contains(command.operation_id_)) {
@@ -454,7 +452,7 @@ absl::Status MetaOperationStore::CompleteOperation(
 }
 
 absl::Status MetaOperationStore::AbortOperation(
-    const keylane::meta::AbortOperation& command) {
+    const lavik::meta::AbortOperation& command) {
   const auto it = live_.find(command.operation_id_);
   if (it == live_.end()) {
     if (archived_.contains(command.operation_id_)) {
@@ -490,7 +488,7 @@ absl::Status MetaOperationStore::AbortOperation(
 }
 
 absl::Status MetaOperationStore::CommitDirectiveResult(
-    const keylane::meta::CommitDirectiveResult& command,
+    const lavik::meta::CommitDirectiveResult& command,
     std::uint64_t committed_index) {
   const MetaTerminalReceiptKey key{command.operation_id_, command.directive_id_,
                                    command.attempt_id_,
@@ -598,7 +596,7 @@ void MetaOperationStore::InvalidateCurrentDirectives(
 }
 
 absl::Status MetaOperationStore::ArchiveOperations(
-    const keylane::meta::ArchiveOperations& command) {
+    const lavik::meta::ArchiveOperations& command) {
   // Set semantics: duplicates inside the command collapse.
   std::vector<std::uint64_t> seqs = command.operation_seqs_;
   std::sort(seqs.begin(), seqs.end());
@@ -665,7 +663,7 @@ absl::Status MetaOperationStore::PruneArchive(
 }
 
 absl::Status MetaOperationStore::PruneTerminalReceipts(
-    const keylane::meta::PruneTerminalReceipts& command) {
+    const lavik::meta::PruneTerminalReceipts& command) {
   if (command.receipts_.size() > kMaxMetaTerminalReceiptPrunesPerCommand) {
     return MetaDomainRejectError("too many terminal receipts to prune");
   }
@@ -1077,4 +1075,4 @@ absl::StatusOr<MetaOperationArchiveExport> DecodeMetaOperationArchiveExport(
   return out;
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

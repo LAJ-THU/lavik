@@ -16,7 +16,7 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-build_dir=${KEYLANE_CLUSTER_BUILD_DIR:-$repo_root/build_cluster_fault}
+build_dir=${LAVIK_CLUSTER_BUILD_DIR:-$repo_root/build_cluster_fault}
 tier=model
 duration=60
 require_hardware=0
@@ -71,43 +71,43 @@ if [[ ! $duration =~ ^[1-9][0-9]*$ ]]; then
 fi
 if [[ ! -f $build_dir/CMakeCache.txt ]]; then
   echo "missing configured build tree: $build_dir" >&2
-  echo "configure with BUILD_TESTING=ON and KEYLANE_BUILD_FAULT_SERVER=ON" >&2
+  echo "configure with BUILD_TESTING=ON and LAVIK_BUILD_FAULT_SERVER=ON" >&2
   exit 2
 fi
 if ! grep -qx 'BUILD_TESTING:BOOL=ON' "$build_dir/CMakeCache.txt" ||
-   ! grep -qx 'KEYLANE_BUILD_FAULT_SERVER:BOOL=ON' \
+   ! grep -qx 'LAVIK_BUILD_FAULT_SERVER:BOOL=ON' \
       "$build_dir/CMakeCache.txt"; then
   echo "cluster fault tiers require BUILD_TESTING=ON and" \
-       "KEYLANE_BUILD_FAULT_SERVER=ON" >&2
+       "LAVIK_BUILD_FAULT_SERVER=ON" >&2
   exit 2
 fi
 
-jobs=${KEYLANE_CLUSTER_BUILD_JOBS:-$(nproc)}
+jobs=${LAVIK_CLUSTER_BUILD_JOBS:-$(nproc)}
 case "$tier" in
   model)
-    cmake --build "$build_dir" --target keylane_cluster_model_tests \
-      keylane_cluster_fault -j"$jobs"
+    cmake --build "$build_dir" --target lavik_cluster_model_tests \
+      lavik_cluster_fault -j"$jobs"
     label=cluster-model
     timeout_seconds=60
     ;;
   integration)
-    targets=(keylane keylane_fault_server keylane_process_support_tests)
-    if ctest --test-dir "$build_dir" -N | grep -q keylane_sentinel_e2e; then
-      targets+=(keylane_sentinel_e2e_test)
+    targets=(lavik lavik_fault_server lavik_process_support_tests)
+    if ctest --test-dir "$build_dir" -N | grep -q lavik_sentinel_e2e; then
+      targets+=(lavik_sentinel_e2e_test)
     fi
     cmake --build "$build_dir" --target "${targets[@]}" -j"$jobs"
     label=cluster-integration
     timeout_seconds=900
     ;;
   soak)
-    cmake --build "$build_dir" --target keylane_cluster_fault -j"$jobs"
+    cmake --build "$build_dir" --target lavik_cluster_fault -j"$jobs"
     exec timeout "$((duration + 30))" \
-      "$build_dir/keylane_cluster_fault" --soak-seconds "$duration" \
-      --seed "${KEYLANE_CLUSTER_SEED:-1}" --trace-out \
+      "$build_dir/lavik_cluster_fault" --soak-seconds "$duration" \
+      --seed "${LAVIK_CLUSTER_SEED:-1}" --trace-out \
       "$build_dir/cluster-fault-artifacts"
     ;;
   hardware)
-    cmake --build "$build_dir" --target keylane_fault_server -j"$jobs"
+    cmake --build "$build_dir" --target lavik_fault_server -j"$jobs"
     label=cluster-hardware
     timeout_seconds=120
     ;;

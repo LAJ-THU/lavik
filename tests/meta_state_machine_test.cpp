@@ -55,14 +55,14 @@
 #include <vector>
 
 #include "gtest/gtest.h"
-#include "keylane/meta/cluster_create.h"
-#include "keylane/meta/commands.h"
-#include "keylane/meta/encoding.h"
-#include "keylane/meta/hash.h"
-#include "keylane/meta/nuraft_log_store.h"
-#include "keylane/meta/nuraft_state_mgr.h"
-#include "keylane/meta/state_apply.h"
-#include "keylane/meta/state_machine.h"
+#include "lavik/meta/cluster_create.h"
+#include "lavik/meta/commands.h"
+#include "lavik/meta/encoding.h"
+#include "lavik/meta/hash.h"
+#include "lavik/meta/nuraft_log_store.h"
+#include "lavik/meta/nuraft_state_mgr.h"
+#include "lavik/meta/state_apply.h"
+#include "lavik/meta/state_machine.h"
 #include "libnuraft/nuraft.hxx"
 #include "libnuraft/raft_server_handler.hxx"
 #include "spdlog/sinks/ostream_sink.h"
@@ -71,16 +71,16 @@
 
 namespace {
 
-using keylane::meta::CreateGroup;
-using keylane::meta::MetaAuditVerdict;
-using keylane::meta::MetaCommand;
-using keylane::meta::MetaRequestId;
-using keylane::meta::MetaStateMachine;
-using keylane::meta::MetaStores;
-using keylane::meta::NuraftLogStore;
-using keylane::meta::NuraftStateMgr;
-using keylane::meta::RegisterNode;
-using keylane::meta::SubmitOperation;
+using lavik::meta::CreateGroup;
+using lavik::meta::MetaAuditVerdict;
+using lavik::meta::MetaCommand;
+using lavik::meta::MetaRequestId;
+using lavik::meta::MetaStateMachine;
+using lavik::meta::MetaStores;
+using lavik::meta::NuraftLogStore;
+using lavik::meta::NuraftStateMgr;
+using lavik::meta::RegisterNode;
+using lavik::meta::SubmitOperation;
 
 std::filesystem::path MakeTestDir(const char* suite, const char* name) {
   const ::testing::TestInfo* info =
@@ -89,9 +89,9 @@ std::filesystem::path MakeTestDir(const char* suite, const char* name) {
       std::string(info->test_suite_name()) + "_" + info->name();
   std::replace(test_name.begin(), test_name.end(), '/', '_');
   std::filesystem::path dir =
-      keylane::test::TestDataDirectory() /
-      ("keylane_meta_test_" + std::string(suite) + "_" + name + "_" +
-       test_name + "_" + std::to_string(::getpid()));
+      lavik::test::TestDataDirectory() /
+      ("lavik_meta_test_" + std::string(suite) + "_" + name + "_" + test_name +
+       "_" + std::to_string(::getpid()));
   std::filesystem::remove_all(dir);
   return dir;
 }
@@ -164,12 +164,12 @@ std::string MakeNodeId(std::uint8_t seed) {
 }
 
 std::string MakePrincipal(std::uint8_t seed) {
-  return "keylane://node/" + MakeNodeId(seed);
+  return "lavik://node/" + MakeNodeId(seed);
 }
 
 // Stands in for the trusted entry: every built command carries the
 // injected ActorContext that the raft-log codec must carry through to apply.
-constexpr std::string_view kEntryPrincipal = "keylane://operator/test-entry";
+constexpr std::string_view kEntryPrincipal = "lavik://operator/test-entry";
 constexpr std::string_view kEntryReadableTime = "2026-09-04T01:02:03Z";
 
 RegisterNode MakeRegister(std::uint8_t seed) {
@@ -181,7 +181,7 @@ RegisterNode MakeRegister(std::uint8_t seed) {
   cmd.principal_ = MakePrincipal(seed);
   cmd.endpoints_ = {"10.0.0.1:7000", "10.0.0.1:17000"};
 
-  cmd.role_ = keylane::meta::MetaNodeRole::kReplica;
+  cmd.role_ = lavik::meta::MetaNodeRole::kReplica;
   return cmd;
 }
 
@@ -412,7 +412,7 @@ TEST_F(MetaStateMachineTest, RestartWithoutSnapshotReplaysFromScratch) {
 
 TEST_F(MetaStateMachineTest,
        ClusterCreateCompletionWithoutBothPoliciesRejectsOnLiveAndWalReplay) {
-  keylane::meta::ClusterCreateManifestV1 manifest;
+  lavik::meta::ClusterCreateManifestV1 manifest;
   manifest.schema_version_ = 1;
   manifest.meta_members_ = {{1, "tcp://127.0.0.1:7101", "tcp://127.0.0.1:7301",
                              "tcp://127.0.0.1:7201"}};
@@ -425,23 +425,23 @@ TEST_F(MetaStateMachineTest,
   root.actor_.principal_ = std::string(kEntryPrincipal);
   root.actor_.readable_time_ = std::string(kEntryReadableTime);
   root.operation_id_ = MakeRequestId(0x02);
-  root.kind_ = std::string(keylane::meta::kMetaClusterCreateOperationKind);
+  root.kind_ = std::string(lavik::meta::kMetaClusterCreateOperationKind);
   const auto intent =
-      keylane::meta::EncodeClusterCreateRequest(manifest, root.operation_id_);
+      lavik::meta::EncodeClusterCreateRequest(manifest, root.operation_id_);
   ASSERT_TRUE(intent.ok()) << intent.status();
   root.intent_ = *intent;
-  root.intent_hash_ = keylane::meta::MetaSha256(root.intent_);
+  root.intent_hash_ = lavik::meta::MetaSha256(root.intent_);
 
-  keylane::meta::PutPolicy automatic;
+  lavik::meta::PutPolicy automatic;
   automatic.request_id_ = MakeRequestId(0x03);
   automatic.actor_ = root.actor_;
   automatic.policy_id_ =
-      std::string(keylane::meta::kAutomaticUncontrolledFailoverPolicyId);
+      std::string(lavik::meta::kAutomaticUncontrolledFailoverPolicyId);
   automatic.version_ = 1;
   automatic.content_ =
       R"({"kind":"automatic-uncontrolled-failover-v1","enabled":true,"suspect_after_ms":5000})";
 
-  keylane::meta::CompleteOperation complete;
+  lavik::meta::CompleteOperation complete;
   complete.request_id_ = MakeRequestId(0x04);
   complete.actor_ = root.actor_;
   complete.operation_id_ = root.operation_id_;
@@ -461,11 +461,11 @@ TEST_F(MetaStateMachineTest,
     ASSERT_NE(machine.commit(3, *complete_bytes), nullptr);
     const MetaStores stores = machine.StoresSnapshot();
     EXPECT_EQ(stores.topology_.ClusterLifecycle().state_,
-              keylane::meta::MetaClusterLifecycle::kCreating);
+              lavik::meta::MetaClusterLifecycle::kCreating);
     ASSERT_TRUE(
         stores.operation_.FindOperation(root.operation_id_).has_value());
     EXPECT_EQ(stores.operation_.FindOperation(root.operation_id_)->lifecycle_,
-              keylane::meta::MetaOperationLifecycle::kSubmitted);
+              lavik::meta::MetaOperationLifecycle::kSubmitted);
     const auto audit = stores.audit_.Find(3);
     ASSERT_TRUE(audit.has_value());
     EXPECT_EQ(audit->verdict_, MetaAuditVerdict::kRejected);
@@ -528,9 +528,9 @@ TEST_F(MetaStateMachineTest,
 
   const std::string owner = MakeNodeId(0x11);
   const std::string group_id = "g1\ntransition=forged value";
-  const keylane::meta::MetaAssignmentId owner_assignment = MakeRequestId(0x31);
+  const lavik::meta::MetaAssignmentId owner_assignment = MakeRequestId(0x31);
 
-  keylane::meta::ClusterCreateManifestV1 manifest;
+  lavik::meta::ClusterCreateManifestV1 manifest;
   manifest.schema_version_ = 1;
   manifest.meta_members_ = {{1, "tcp://127.0.0.1:7101", "tcp://127.0.0.1:7301",
                              "tcp://127.0.0.1:7201"}};
@@ -543,33 +543,33 @@ TEST_F(MetaStateMachineTest,
   root.actor_.principal_ = std::string(kEntryPrincipal);
   root.actor_.readable_time_ = std::string(kEntryReadableTime);
   root.operation_id_ = MakeRequestId(0x02);
-  root.kind_ = std::string(keylane::meta::kMetaClusterCreateOperationKind);
+  root.kind_ = std::string(lavik::meta::kMetaClusterCreateOperationKind);
   const auto intent =
-      keylane::meta::EncodeClusterCreateRequest(manifest, root.operation_id_);
+      lavik::meta::EncodeClusterCreateRequest(manifest, root.operation_id_);
   ASSERT_TRUE(intent.ok()) << intent.status();
   root.intent_ = *intent;
-  root.intent_hash_ = keylane::meta::MetaSha256(root.intent_);
+  root.intent_hash_ = lavik::meta::MetaSha256(root.intent_);
   Commit(*machine, 1, root);
 
-  keylane::meta::PutPolicy automatic;
+  lavik::meta::PutPolicy automatic;
   automatic.request_id_ = MakeRequestId(0x06);
   automatic.actor_ = root.actor_;
   automatic.policy_id_ =
-      std::string(keylane::meta::kAutomaticUncontrolledFailoverPolicyId);
+      std::string(lavik::meta::kAutomaticUncontrolledFailoverPolicyId);
   automatic.version_ = 1;
   automatic.content_ =
       R"({"kind":"automatic-uncontrolled-failover-v1","enabled":true,"suspect_after_ms":5000})";
   Commit(*machine, 2, automatic);
 
-  keylane::meta::PutPolicy policy;
+  lavik::meta::PutPolicy policy;
   policy.request_id_ = MakeRequestId(0x0a);
   policy.actor_ = root.actor_;
-  policy.policy_id_ = std::string(keylane::meta::kAuthorityLeasePolicyId);
+  policy.policy_id_ = std::string(lavik::meta::kAuthorityLeasePolicyId);
   policy.version_ = 1;
   policy.content_ = R"({"kind":"authority-lease-v1","duration_ms":5000})";
   Commit(*machine, 3, policy);
 
-  keylane::meta::CompleteOperation complete;
+  lavik::meta::CompleteOperation complete;
   complete.request_id_ = MakeRequestId(0x03);
   complete.actor_ = root.actor_;
   complete.operation_id_ = root.operation_id_;
@@ -578,25 +578,25 @@ TEST_F(MetaStateMachineTest,
   Commit(*machine, 4, complete);
 
   RegisterNode node = MakeRegister(0x11);
-  node.role_ = keylane::meta::MetaNodeRole::kPrimary;
+  node.role_ = lavik::meta::MetaNodeRole::kPrimary;
   Commit(*machine, 5, node);
 
   CreateGroup group = MakeCreateGroup(group_id, 1);
   group.actor_ = root.actor_;
   Commit(*machine, 6, group);
 
-  keylane::meta::AssignNodeToGroup assign;
+  lavik::meta::AssignNodeToGroup assign;
   assign.request_id_ = MakeRequestId(0x05);
   assign.actor_ = root.actor_;
   assign.group_id_ = group_id;
   assign.node_id_ = owner;
   assign.assignment_id_ = owner_assignment;
-  assign.role_ = keylane::meta::MetaNodeRole::kPrimary;
+  assign.role_ = lavik::meta::MetaNodeRole::kPrimary;
   assign.expected_revision_ = 1;
   assign.new_topology_epoch_ = 2;
   Commit(*machine, 7, assign);
 
-  keylane::meta::BeginGroupTerm begin_term;
+  lavik::meta::BeginGroupTerm begin_term;
   begin_term.request_id_ = MakeRequestId(0x07);
   begin_term.actor_ = root.actor_;
   begin_term.group_id_ = group_id;
@@ -604,7 +604,7 @@ TEST_F(MetaStateMachineTest,
   begin_term.new_term_ = 1;
   Commit(*machine, 8, begin_term);
 
-  keylane::meta::ActivateAuthority activate;
+  lavik::meta::ActivateAuthority activate;
   activate.request_id_ = MakeRequestId(0x08);
   activate.actor_ = root.actor_;
   activate.group_id_ = group_id;
@@ -613,7 +613,7 @@ TEST_F(MetaStateMachineTest,
   activate.new_topology_epoch_ = 3;
   Commit(*machine, 9, activate);
 
-  keylane::meta::BeginUncontrolledFailover begin;
+  lavik::meta::BeginUncontrolledFailover begin;
   begin.request_id_ = MakeRequestId(0x09);
   begin.actor_ = root.actor_;
   begin.group_id_ = group_id;
@@ -630,11 +630,11 @@ TEST_F(MetaStateMachineTest,
 
   const MetaStores committed = machine->StoresSnapshot();
   ASSERT_EQ(committed.topology_.ClusterLifecycle().state_,
-            keylane::meta::MetaClusterLifecycle::kCreated);
+            lavik::meta::MetaClusterLifecycle::kCreated);
   const auto committed_group = committed.topology_.FindGroup(group_id);
   ASSERT_TRUE(committed_group.has_value());
   ASSERT_TRUE(committed_group->failover_transition_.has_value());
-  const keylane::meta::MetaFailoverTransition committed_transition =
+  const lavik::meta::MetaFailoverTransition committed_transition =
       *committed_group->failover_transition_;
   EXPECT_EQ(committed_transition.transition_id_, begin.transition_id_);
   EXPECT_EQ(committed_transition.revision_, 10u);
@@ -678,18 +678,18 @@ TEST_F(MetaStateMachineTest,
   EXPECT_EQ(replayed.audit_.size(), 10u);
   EXPECT_EQ(machine->last_commit_index(), 10u);
 
-  keylane::meta::MetaBootIncarnation boot{};
+  lavik::meta::MetaBootIncarnation boot{};
   boot.fill(0x61);
-  keylane::meta::MetaReplicationHistoryId history{};
+  lavik::meta::MetaReplicationHistoryId history{};
   history.fill(0x62);
-  keylane::meta::MetaFailoverCandidateAction selected_action;
+  lavik::meta::MetaFailoverCandidateAction selected_action;
   selected_action.action_id_ = MakeRequestId(0x51);
   selected_action.candidate_ = {owner, owner_assignment, boot};
   selected_action.domain_ = {
       1, owner, owner_assignment, boot, history, 1,
   };
 
-  keylane::meta::SetUncontrolledCandidate select;
+  lavik::meta::SetUncontrolledCandidate select;
   select.request_id_ = MakeRequestId(0x52);
   select.group_id_ = group_id;
   select.expected_transition_ = {begin.transition_id_, 10};
@@ -713,10 +713,10 @@ TEST_F(MetaStateMachineTest,
   Commit(*machine, 11, select);
   EXPECT_EQ(logs.Take().find("failover event="), std::string::npos);
 
-  keylane::meta::MetaFailoverCandidateAction fallback_action = selected_action;
+  lavik::meta::MetaFailoverCandidateAction fallback_action = selected_action;
   fallback_action.action_id_ = MakeRequestId(0x53);
   fallback_action.domain_.source_history_id_.fill(0x63);
-  keylane::meta::SetUncontrolledCandidate fallback = select;
+  lavik::meta::SetUncontrolledCandidate fallback = select;
   fallback.request_id_ = MakeRequestId(0x54);
   fallback.expected_transition_.revision_ = 11;
   fallback.candidate_action_ = fallback_action;
@@ -769,7 +769,7 @@ TEST_F(MetaStateMachineTest, ReplayAfterSnapshotDoesNotGrowAudit) {
   ASSERT_NE(c4, nullptr);
   ASSERT_NE(c5, nullptr);
 
-  keylane::meta::MetaAuditRecord record4_before;
+  lavik::meta::MetaAuditRecord record4_before;
   std::string audit_before;
   {
     auto opened = Open();
@@ -1039,11 +1039,11 @@ class MetaServerIntegrationTest : public ::testing::Test {
   // Opens the persistent state without launching the Raft core, so tests can
   // observe the recovered on-disk state before any replay kicks in.
   void OpenStorage() {
-    const keylane::meta::NuraftMemberConfig local{
-        1, "127.0.0.1:9601", "keylane://meta/1", "127.0.0.1:9701",
+    const lavik::meta::NuraftMemberConfig local{
+        1, "127.0.0.1:9601", "lavik://meta/1", "127.0.0.1:9701",
         "127.0.0.1:9801"};
-    keylane::meta::NuraftStateMgrOpenOptions options{.data_dir_ = dir_,
-                                                     .local_member_ = local};
+    lavik::meta::NuraftStateMgrOpenOptions options{.data_dir_ = dir_,
+                                                   .local_member_ = local};
     if (!std::filesystem::exists(std::filesystem::path(dir_) /
                                  "cluster_config.dat")) {
       options.initial_cluster_ = std::vector{local};

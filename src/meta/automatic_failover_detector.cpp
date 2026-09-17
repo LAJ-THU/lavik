@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/automatic_failover_detector.h"
+#include "lavik/meta/automatic_failover_detector.h"
 
 #include <algorithm>
 #include <limits>
@@ -22,7 +22,7 @@
 
 #include "absl/status/status.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
 std::uint64_t SaturatingAdd(std::uint64_t lhs, std::uint64_t rhs) noexcept {
@@ -342,4 +342,4 @@ std::string_view MetaAutomaticFailoverBlockerName(
   return "unknown";
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

@@ -35,19 +35,19 @@
 #include "bycorf/runtime/runtime.h"
 #include "bycorf/runtime/worker.h"
 #include "gtest/gtest.h"
-#include "keylane/meta/candidate_plan.h"
-#include "keylane/meta/cluster_create.h"
-#include "keylane/meta/failover.h"
-#include "keylane/meta/failover_reconciler.h"
-#include "keylane/meta/hash.h"
-#include "keylane/meta/nuraft_log_store.h"
-#include "keylane/meta/state_apply.h"
-#include "keylane/meta/state_machine.h"
+#include "lavik/meta/candidate_plan.h"
+#include "lavik/meta/cluster_create.h"
+#include "lavik/meta/failover.h"
+#include "lavik/meta/failover_reconciler.h"
+#include "lavik/meta/hash.h"
+#include "lavik/meta/nuraft_log_store.h"
+#include "lavik/meta/state_apply.h"
+#include "lavik/meta/state_machine.h"
 #include "support/test_data_path.h"
 
 namespace {
 
-namespace meta = keylane::meta;
+namespace meta = lavik::meta;
 
 template <std::size_t N>
 std::array<std::uint8_t, N> Bytes(std::uint8_t value) {
@@ -168,9 +168,9 @@ struct Fixture {
   template <typename Command>
   void Accept(const Command& command) {
     meta::MetaCommand wrapped{command};
-    const auto result = meta::ApplyCommitted(
-        stores, next_index++, wrapped, "keylane://test/failover-reconciler",
-        "2026-09-15T00:00:00Z");
+    const auto result = meta::ApplyCommitted(stores, next_index++, wrapped,
+                                             "lavik://test/failover-reconciler",
+                                             "2026-09-15T00:00:00Z");
     ASSERT_EQ(result.verdict_, meta::MetaAuditVerdict::kAccepted)
         << result.detail_;
     committed_commands.push_back(std::move(wrapped));
@@ -181,7 +181,7 @@ struct Fixture {
     meta::RegisterNode node;
     node.request_id_ = Bytes<16>(request);
     node.node_id_ = node_id;
-    node.principal_ = "keylane://node/" + node_id;
+    node.principal_ = "lavik://node/" + node_id;
     node.endpoints_ = {"tcp://127.0.0.1:" + std::to_string(port)};
     node.role_ = role;
     Accept(node);
@@ -1854,8 +1854,8 @@ TEST(MetaFailoverReconcilerLifecycleTest,
   fixture.SubmitControlled();
 
   const std::filesystem::path test_dir =
-      keylane::test::TestDataDirectory() /
-      ("keylane_failover_reconciler_lifecycle_" + std::to_string(::getpid()));
+      lavik::test::TestDataDirectory() /
+      ("lavik_failover_reconciler_lifecycle_" + std::to_string(::getpid()));
   std::error_code cleanup_error;
   std::filesystem::remove_all(test_dir, cleanup_error);
   auto machine_or = meta::MetaStateMachine::Open(test_dir.string());
@@ -2042,8 +2042,8 @@ TEST(MetaFailoverReconcilerLifecycleTest,
   fixture.SubmitControlled();
 
   const std::filesystem::path test_dir =
-      keylane::test::TestDataDirectory() /
-      ("keylane_failover_reconciler_cutover_lifecycle_" +
+      lavik::test::TestDataDirectory() /
+      ("lavik_failover_reconciler_cutover_lifecycle_" +
        std::to_string(::getpid()));
   std::error_code cleanup_error;
   std::filesystem::remove_all(test_dir, cleanup_error);

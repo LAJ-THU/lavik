@@ -22,12 +22,12 @@
 
 #include "impl.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 constexpr std::uint64_t kSystemStateManifestMagic =
-    0x314d5453534c4bULL;                                            // KLSSTM1
-constexpr std::uint64_t kPromotionBaseMagic = 0x31455341424c4bULL;  // KLBASE1
+    0x314d545353564cULL;                                            // LVSSTM1
+constexpr std::uint64_t kPromotionBaseMagic = 0x3145534142564cULL;  // LVBASE1
 constexpr std::size_t kSystemStateManifestHeaderBytes = 96;
 constexpr std::size_t kMaxPromotionBaseBytes = 1024 * 1024;
 
@@ -476,11 +476,11 @@ Task<absl::Status> StorageEngine::Impl::WriteSystemStateRootOnDeviceLocal(
     co_return absl::FailedPreconditionError(
         "system-state root write ran on the wrong worker");
   }
-  KEYLANE_FAULT_INJECT(
+  LAVIK_FAULT_INJECT(
       // Deterministically exercise the multi-device ambiguous-commit branch.
       // Format: <device-index>:<root-generation>, consumed at most once.
       if (const char* configured =
-              std::getenv("KEYLANE_FAIL_SYSTEM_STATE_ROOT_ONCE");
+              std::getenv("LAVIK_FAIL_SYSTEM_STATE_ROOT_ONCE");
           configured != nullptr) {
         const std::string_view value(configured);
         const std::size_t separator = value.find(':');
@@ -558,7 +558,7 @@ Task<absl::Status> StorageEngine::Impl::CommitSystemState(
     new_catalog = std::move(*written);
     next.catalog_extents_ = new_catalog;
     next.catalog_bytes_ = catalog_dump.size();
-    KEYLANE_MAYBE_CRASH_AT("function-catalog-body-durable");
+    LAVIK_MAYBE_CRASH_AT("function-catalog-body-durable");
   }
   auto manifest_body = EncodeSystemStateManifest(next);
   if (!manifest_body.ok()) {
@@ -615,12 +615,12 @@ Task<absl::Status> StorageEngine::Impl::CommitSystemState(
       LatchRuntimeFailure();
       co_return *system_state_failure_;
     }
-    KEYLANE_MAYBE_CRASH_AT("system-state-device-root-durable");
+    LAVIK_MAYBE_CRASH_AT("system-state-device-root-durable");
   }
 
   system_state_ = std::move(next);
   if (replace_catalog) {
-    KEYLANE_MAYBE_CRASH_AT("function-catalog-root-durable");
+    LAVIK_MAYBE_CRASH_AT("function-catalog-root-durable");
   }
   if (replace_catalog) recovered_catalog_dump_ = std::string(catalog_dump);
   if (old_manifest != nullptr) SpawnExtentReclaim(store, old_manifest);
@@ -822,4 +822,4 @@ Task<absl::Status> StorageEngine::Impl::CompleteReplicaFullSync(
   co_return absl::OkStatus();
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

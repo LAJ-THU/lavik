@@ -38,21 +38,21 @@
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "gtest/gtest.h"
-#include "keylane/meta/encoding.h"
-#include "keylane/meta/identity_store.h"
-#include "keylane/meta/policy_store.h"
-#include "keylane/meta/population_manifest_store.h"
-#include "keylane/meta/topology_store.h"
+#include "lavik/meta/encoding.h"
+#include "lavik/meta/identity_store.h"
+#include "lavik/meta/policy_store.h"
+#include "lavik/meta/population_manifest_store.h"
+#include "lavik/meta/topology_store.h"
 
 namespace {
 
-using keylane::meta::MetaFailureClass;
-using keylane::meta::MetaFailureClassOf;
-using keylane::meta::MetaIdentityStore;
-using keylane::meta::MetaNodeRecord;
-using keylane::meta::MetaNodeRole;
-using keylane::meta::MetaRequestId;
-using keylane::meta::RegisterNode;
+using lavik::meta::MetaFailureClass;
+using lavik::meta::MetaFailureClassOf;
+using lavik::meta::MetaIdentityStore;
+using lavik::meta::MetaNodeRecord;
+using lavik::meta::MetaNodeRole;
+using lavik::meta::MetaRequestId;
+using lavik::meta::RegisterNode;
 
 MetaRequestId MakeRequestId(std::uint8_t seed) {
   MetaRequestId id{};
@@ -72,7 +72,7 @@ std::string MakeNodeId(std::uint8_t seed) {
 }
 
 std::string MakePrincipal(std::uint8_t seed) {
-  return "keylane://node/" + MakeNodeId(seed);
+  return "lavik://node/" + MakeNodeId(seed);
 }
 
 RegisterNode MakeRegister(std::uint8_t seed) {
@@ -185,24 +185,22 @@ TEST(MetaIdentityStore, RegisterNodeRejectsInvalidFields) {
   }
   {
     RegisterNode cmd = MakeRegister(0x15);
-    cmd.node_id_ = std::string(keylane::meta::kMetaNodeIdBytes + 1, 'a');
+    cmd.node_id_ = std::string(lavik::meta::kMetaNodeIdBytes + 1, 'a');
     ExpectDomainReject(store.Apply(cmd));
   }
   {
     RegisterNode cmd = MakeRegister(0x15);
-    cmd.endpoints_.resize(keylane::meta::kMaxMetaEndpointsPerNode + 1, "e");
+    cmd.endpoints_.resize(lavik::meta::kMaxMetaEndpointsPerNode + 1, "e");
     ExpectDomainReject(store.Apply(cmd));
   }
   {
     RegisterNode cmd = MakeRegister(0x15);
-    cmd.endpoints_ = {
-        std::string(keylane::meta::kMaxMetaEndpointBytes + 1, 'e')};
+    cmd.endpoints_ = {std::string(lavik::meta::kMaxMetaEndpointBytes + 1, 'e')};
     ExpectDomainReject(store.Apply(cmd));
   }
   {
     RegisterNode cmd = MakeRegister(0x15);
-    cmd.principal_ =
-        std::string(keylane::meta::kMaxMetaPrincipalBytes + 1, 'p');
+    cmd.principal_ = std::string(lavik::meta::kMaxMetaPrincipalBytes + 1, 'p');
     ExpectDomainReject(store.Apply(cmd));
   }
   EXPECT_EQ(store.NodeCount(), 0u);
@@ -211,16 +209,16 @@ TEST(MetaIdentityStore, RegisterNodeRejectsInvalidFields) {
 TEST(MetaIdentityStore, RegisterNodeEnforcesNodeCap) {
   MetaIdentityStore store;
   char hex4[5];
-  for (std::uint32_t i = 0; i < keylane::meta::kMaxMetaNodes; ++i) {
+  for (std::uint32_t i = 0; i < lavik::meta::kMaxMetaNodes; ++i) {
     RegisterNode cmd = MakeRegister(0x20);
     // Distinct node_id (within the 40-char cap) and principal per
     // registration: replace the tail with the hex counter.
     std::snprintf(hex4, sizeof(hex4), "%04x", i);
     cmd.node_id_ = MakeNodeId(0x20).substr(0, 36) + hex4;
-    cmd.principal_ = "keylane://node/" + cmd.node_id_;
+    cmd.principal_ = "lavik://node/" + cmd.node_id_;
     ASSERT_TRUE(store.Apply(cmd).ok()) << i;
   }
-  EXPECT_EQ(store.NodeCount(), keylane::meta::kMaxMetaNodes);
+  EXPECT_EQ(store.NodeCount(), lavik::meta::kMaxMetaNodes);
   // The cap counts records, not active ones: one more is rejected.
   ExpectDomainReject(store.Apply(MakeRegister(0x21)));
 }
@@ -231,8 +229,8 @@ TEST(MetaIdentityStore, RegisterNodeEnforcesNodeCap) {
 // replay is an idempotent accept; retired nodes reject updates.
 // ---------------------------------------------------------------------------
 
-using keylane::meta::RetireNode;
-using keylane::meta::UpdateNode;
+using lavik::meta::RetireNode;
+using lavik::meta::UpdateNode;
 
 UpdateNode MakeUpdate(std::uint8_t seed, std::uint64_t expected_revision) {
   UpdateNode cmd;
@@ -381,7 +379,7 @@ TEST(MetaIdentityStore, SerializationRoundTrip) {
   ASSERT_GE(bytes.size(), 2u);
   const auto* p = reinterpret_cast<const unsigned char*>(bytes.data());
   EXPECT_EQ(static_cast<std::uint16_t>(p[0] | (p[1] << 8)),
-            keylane::meta::kMetaIdentityStoreFormatVersion);
+            lavik::meta::kMetaIdentityStoreFormatVersion);
 
   const auto loaded = MetaIdentityStore::Deserialize(bytes);
   ASSERT_TRUE(loaded.ok()) << loaded.status();
@@ -441,7 +439,7 @@ TEST(MetaIdentityStore, DeserializeRejectsCorruption) {
 TEST(MetaIdentityStore, DeserializeRejectsInvariantViolations) {
   // Hand-built byte sequences that decode cleanly but violate store
   // invariants must fail-stop identically on every node.
-  using keylane::meta::MetaWriter;
+  using lavik::meta::MetaWriter;
   const std::string node_a = MakeNodeId(0x71);
   const std::string node_b = MakeNodeId(0x72);
   const std::string principal = MakePrincipal(0x71);
@@ -457,7 +455,7 @@ TEST(MetaIdentityStore, DeserializeRejectsInvariantViolations) {
   };
   auto make_blob = [&](auto write_body) {
     MetaWriter w;
-    w.WriteU16(keylane::meta::kMetaIdentityStoreFormatVersion);
+    w.WriteU16(lavik::meta::kMetaIdentityStoreFormatVersion);
     write_body(w);
     return w.buffer();
   };
@@ -496,7 +494,7 @@ TEST(MetaIdentityStore, DeserializeRejectsInvariantViolations) {
   // Over-cap count prefix.
   ExpectStoreFailStop(
       MetaIdentityStore::Deserialize(make_blob([&](MetaWriter& w) {
-        w.WriteU32(keylane::meta::kMaxMetaNodes + 1);
+        w.WriteU32(lavik::meta::kMaxMetaNodes + 1);
       })).status());
   // Unknown role tag.
   ExpectStoreFailStop(
@@ -516,14 +514,14 @@ TEST(MetaIdentityStore, DeserializeRejectsInvariantViolations) {
 // Topology store.
 // ===========================================================================
 
-using keylane::meta::CreateGroup;
-using keylane::meta::MetaClusterLifecycle;
+using lavik::meta::CreateGroup;
+using lavik::meta::MetaClusterLifecycle;
 
-using keylane::meta::MetaFailoverMode;
-using keylane::meta::MetaFailoverTransition;
-using keylane::meta::MetaFailoverTransitionRef;
-using keylane::meta::MetaOperationId;
-using keylane::meta::MetaTopologyStore;
+using lavik::meta::MetaFailoverMode;
+using lavik::meta::MetaFailoverTransition;
+using lavik::meta::MetaFailoverTransitionRef;
+using lavik::meta::MetaOperationId;
+using lavik::meta::MetaTopologyStore;
 
 MetaOperationId MakeOperationId(std::uint8_t seed) {
   MetaOperationId id{};
@@ -607,7 +605,7 @@ TEST(MetaTopologyStore, ClusterLifecycleFailureIsBoundedAndSerialized) {
             "initial population failed");
   ExpectDomainReject(store.FailClusterCreate(
       root,
-      std::string(keylane::meta::kMaxMetaClusterFailureSummaryBytes + 1, 'x')));
+      std::string(lavik::meta::kMaxMetaClusterFailureSummaryBytes + 1, 'x')));
   ExpectDomainReject(store.FailClusterCreate(root, ""));
   ExpectDomainReject(store.FailClusterCreate(root, "unsafe\nsummary"));
 }
@@ -620,11 +618,11 @@ TEST(MetaTopologyStore, ClusterLifecycleFailureIsBoundedAndSerialized) {
 TEST(MetaTopologyStore, AuthorityAndOwnerShareTheGroupLifetime) {
   MetaTopologyStore store;
   ASSERT_TRUE(store.Apply(MakeCreateGroup("g1", 1)).ok());
-  keylane::meta::BeginGroupTerm begin;
+  lavik::meta::BeginGroupTerm begin;
   begin.group_id_ = "g1";
   begin.new_term_ = 1;
   ASSERT_TRUE(store.BeginGroupTerm(begin).ok());
-  keylane::meta::ActivateAuthority activate;
+  lavik::meta::ActivateAuthority activate;
   activate.group_id_ = "g1";
   activate.expected_term_ = 1;
   activate.new_owner_ = std::string(40, 'a');
@@ -699,22 +697,22 @@ TEST(MetaTopologyStore, CreateGroupRejectsInvalidGroupId) {
   MetaTopologyStore store;
   ExpectDomainReject(store.Apply(MakeCreateGroup("", 1)));
   ExpectDomainReject(store.Apply(MakeCreateGroup(
-      std::string(keylane::meta::kMaxMetaGroupIdBytes + 1, 'g'), 1)));
+      std::string(lavik::meta::kMaxMetaGroupIdBytes + 1, 'g'), 1)));
   EXPECT_EQ(store.GroupCount(), 0u);
   EXPECT_EQ(store.TopologyEpoch(), 0u);
 }
 
 TEST(MetaTopologyStore, CreateGroupEnforcesGroupCap) {
   MetaTopologyStore store;
-  for (std::uint32_t i = 0; i < keylane::meta::kMaxMetaGroups; ++i) {
+  for (std::uint32_t i = 0; i < lavik::meta::kMaxMetaGroups; ++i) {
     char gid[32];
     std::snprintf(gid, sizeof(gid), "group-%04x", i);
     ASSERT_TRUE(store.Apply(MakeCreateGroup(gid, i + 1)).ok()) << i;
   }
-  EXPECT_EQ(store.GroupCount(), keylane::meta::kMaxMetaGroups);
+  EXPECT_EQ(store.GroupCount(), lavik::meta::kMaxMetaGroups);
   ExpectDomainReject(store.Apply(
-      MakeCreateGroup("group-over", keylane::meta::kMaxMetaGroups + 1)));
-  EXPECT_EQ(store.TopologyEpoch(), keylane::meta::kMaxMetaGroups);
+      MakeCreateGroup("group-over", lavik::meta::kMaxMetaGroups + 1)));
+  EXPECT_EQ(store.TopologyEpoch(), lavik::meta::kMaxMetaGroups);
 }
 
 TEST(MetaTopologyStore, InstallFailoverTransitionCreatesQueryableState) {
@@ -812,9 +810,9 @@ TEST(MetaTopologyStore, ClearFailoverTransitionIsCasBoundAndIdempotent) {
 // group-record revision CAS, replay idempotency.
 // ---------------------------------------------------------------------------
 
-using keylane::meta::AssignNodeToGroup;
-using keylane::meta::MetaGroupMember;
-using keylane::meta::RemoveNodeFromGroup;
+using lavik::meta::AssignNodeToGroup;
+using lavik::meta::MetaGroupMember;
+using lavik::meta::RemoveNodeFromGroup;
 
 AssignNodeToGroup MakeAssign(const std::string& group_id, std::uint8_t seed,
                              MetaNodeRole role, std::uint64_t expected_revision,
@@ -859,7 +857,7 @@ TEST(MetaTopologyStore, AssignNodeToGroupAddsMember) {
   EXPECT_EQ(view->members_[0],
             (MetaGroupMember{MakeNodeId(0x10),
                              [] {
-                               keylane::meta::MetaAssignmentId id{};
+                               lavik::meta::MetaAssignmentId id{};
                                id.fill(0x10);
                                return id;
                              }(),
@@ -953,7 +951,7 @@ TEST(MetaTopologyStore, AssignNodeEnforcesMemberCap) {
   ASSERT_TRUE(store.Apply(MakeCreateGroup("group-a", 1)).ok());
   char hex4[5];
   std::uint64_t revision = 1;
-  for (std::uint32_t i = 0; i < keylane::meta::kMaxMetaNodes; ++i) {
+  for (std::uint32_t i = 0; i < lavik::meta::kMaxMetaNodes; ++i) {
     AssignNodeToGroup cmd;
     cmd.request_id_ = MakeRequestId(0x20);
     cmd.group_id_ = "group-a";
@@ -1031,9 +1029,9 @@ TEST(MetaTopologyStore, RemoveNodeFromGroupRejects) {
 // overlap/bounds/unknown-group rejection, replay idempotency.
 // ---------------------------------------------------------------------------
 
-using keylane::meta::SetSlotMap;
+using lavik::meta::SetSlotMap;
 
-SetSlotMap MakeSlotMap(std::vector<keylane::meta::MetaSlotAssignment> ranges,
+SetSlotMap MakeSlotMap(std::vector<lavik::meta::MetaSlotAssignment> ranges,
                        std::uint64_t new_topology_epoch) {
   SetSlotMap cmd;
   cmd.request_id_ = MakeRequestId(0x90);
@@ -1063,7 +1061,7 @@ TEST(MetaTopologyStore, SetSlotMapAssignsSlotsAndTopologyEpoch) {
   EXPECT_EQ(store.SlotOwner(299), std::optional<std::string>("group-b"));
   EXPECT_EQ(store.SlotOwner(300), std::optional<std::string>("group-b"));
   EXPECT_FALSE(store.SlotOwner(301).has_value());
-  EXPECT_FALSE(store.SlotOwner(keylane::meta::kMetaSlotCount)
+  EXPECT_FALSE(store.SlotOwner(lavik::meta::kMetaSlotCount)
                    .has_value());  // out-of-range query
 }
 
@@ -1097,7 +1095,7 @@ TEST(MetaTopologyStore, SetSlotMapRejectsOutOfBounds) {
   // Constructed in memory, bypassing the codec: the store re-validates.
   ExpectDomainReject(store.Apply(MakeSlotMap({{100, 99, "group-a"}}, 3)));
   ExpectDomainReject(store.Apply(
-      MakeSlotMap({{0, keylane::meta::kMetaSlotCount, "group-a"}}, 3)));
+      MakeSlotMap({{0, lavik::meta::kMetaSlotCount, "group-a"}}, 3)));
 }
 
 TEST(MetaTopologyStore, SetSlotMapRejectsUnknownGroups) {
@@ -1152,13 +1150,13 @@ TEST(MetaTopologyStore, GranularPrimitivesSetRecordFields) {
   MetaTopologyStore store;
   ASSERT_TRUE(store.Apply(MakeCreateGroup("group-a", 1)).ok());
 
-  ASSERT_TRUE(keylane::meta::MetaTopologyTestAccess::SetOwner(store, "group-a",
-                                                              MakeNodeId(0x30))
+  ASSERT_TRUE(lavik::meta::MetaTopologyTestAccess::SetOwner(store, "group-a",
+                                                            MakeNodeId(0x30))
                   .ok());
   ASSERT_TRUE(
-      keylane::meta::MetaTopologyTestAccess::SetGroupTerm(store, "group-a", 7)
+      lavik::meta::MetaTopologyTestAccess::SetGroupTerm(store, "group-a", 7)
           .ok());
-  keylane::meta::MetaHash256 manifest_digest{};
+  lavik::meta::MetaHash256 manifest_digest{};
   manifest_digest.fill(0x55);
   ASSERT_TRUE(
       store.SetPopulationManifest("group-a", 555, manifest_digest).ok());
@@ -1174,20 +1172,20 @@ TEST(MetaTopologyStore, GranularPrimitivesSetRecordFields) {
   EXPECT_EQ(view->revision_, 1u);
 
   // Setting the value already held is an idempotent no-op accept.
-  ASSERT_TRUE(keylane::meta::MetaTopologyTestAccess::SetOwner(store, "group-a",
-                                                              MakeNodeId(0x30))
+  ASSERT_TRUE(lavik::meta::MetaTopologyTestAccess::SetOwner(store, "group-a",
+                                                            MakeNodeId(0x30))
                   .ok());
   ASSERT_TRUE(
-      keylane::meta::MetaTopologyTestAccess::SetGroupTerm(store, "group-a", 7)
+      lavik::meta::MetaTopologyTestAccess::SetGroupTerm(store, "group-a", 7)
           .ok());
   ASSERT_TRUE(
       store.SetPopulationManifest("group-a", 555, manifest_digest).ok());
   ASSERT_TRUE(store.SetPartitionReplicationEpoch("group-a", 2).ok());
 
   // Unknown groups are rejected by every primitive.
-  ExpectDomainReject(keylane::meta::MetaTopologyTestAccess::SetOwner(
+  ExpectDomainReject(lavik::meta::MetaTopologyTestAccess::SetOwner(
       store, "group-ghost", MakeNodeId(0x30)));
-  ExpectDomainReject(keylane::meta::MetaTopologyTestAccess::SetGroupTerm(
+  ExpectDomainReject(lavik::meta::MetaTopologyTestAccess::SetGroupTerm(
       store, "group-ghost", 7));
   ExpectDomainReject(
       store.SetPopulationManifest("group-ghost", 555, manifest_digest));
@@ -1218,8 +1216,8 @@ TEST(MetaTopologyStore, RemoveOwnerDoesNotCascade) {
                   .Apply(MakeAssign("group-a", 0x30, MetaNodeRole::kPrimary,
                                     /*expected=*/1))
                   .ok());
-  ASSERT_TRUE(keylane::meta::MetaTopologyTestAccess::SetOwner(store, "group-a",
-                                                              MakeNodeId(0x30))
+  ASSERT_TRUE(lavik::meta::MetaTopologyTestAccess::SetOwner(store, "group-a",
+                                                            MakeNodeId(0x30))
                   .ok());
   ASSERT_TRUE(store.Apply(MakeRemove("group-a", 0x30, /*expected=*/2)).ok());
   // Membership is independent of the owner fact: the store exposes it, the
@@ -1250,13 +1248,13 @@ MetaTopologyStore MakePopulatedTopology() {
                   .Apply(MakeAssign("group-b", 0x12, MetaNodeRole::kPrimary,
                                     /*expected=*/1, /*topology_epoch=*/5))
                   .ok());
-  EXPECT_TRUE(keylane::meta::MetaTopologyTestAccess::SetOwner(store, "group-a",
-                                                              MakeNodeId(0x10))
+  EXPECT_TRUE(lavik::meta::MetaTopologyTestAccess::SetOwner(store, "group-a",
+                                                            MakeNodeId(0x10))
                   .ok());
   EXPECT_TRUE(
-      keylane::meta::MetaTopologyTestAccess::SetGroupTerm(store, "group-a", 7)
+      lavik::meta::MetaTopologyTestAccess::SetGroupTerm(store, "group-a", 7)
           .ok());
-  keylane::meta::MetaHash256 manifest_digest{};
+  lavik::meta::MetaHash256 manifest_digest{};
   manifest_digest.fill(0x55);
   EXPECT_TRUE(
       store.SetPopulationManifest("group-a", 555, manifest_digest).ok());
@@ -1291,7 +1289,7 @@ TEST(MetaTopologyStore, SerializationRoundTrip) {
   ASSERT_GE(bytes.size(), 2u);
   const auto* p = reinterpret_cast<const unsigned char*>(bytes.data());
   EXPECT_EQ(static_cast<std::uint16_t>(p[0] | (p[1] << 8)),
-            keylane::meta::kMetaTopologyStoreFormatVersion);
+            lavik::meta::kMetaTopologyStoreFormatVersion);
 
   const auto loaded = MetaTopologyStore::Deserialize(bytes);
   ASSERT_TRUE(loaded.ok()) << loaded.status();
@@ -1376,11 +1374,11 @@ struct TopologyBlobGroup {
 
 std::string MakeTopologyBlob(
     std::uint64_t topology_epoch, const std::vector<TopologyBlobGroup>& groups,
-    const std::vector<keylane::meta::MetaSlotAssignment>& runs) {
-  keylane::meta::MetaWriter w;
-  w.WriteU16(keylane::meta::kMetaTopologyStoreFormatVersion);
+    const std::vector<lavik::meta::MetaSlotAssignment>& runs) {
+  lavik::meta::MetaWriter w;
+  w.WriteU16(lavik::meta::kMetaTopologyStoreFormatVersion);
   w.WriteU8(static_cast<std::uint8_t>(MetaClusterLifecycle::kUninitialized));
-  keylane::meta::WriteFixedArray(w, MetaOperationId{});
+  lavik::meta::WriteFixedArray(w, MetaOperationId{});
   w.WriteU64(0);
   w.WriteString("");
   w.WriteU64(topology_epoch);
@@ -1388,28 +1386,28 @@ std::string MakeTopologyBlob(
   for (const TopologyBlobGroup& group : groups) {
     w.WriteString(group.group_id);
     w.WriteString(group.owner);
-    w.WriteU64(0);  // group_term
+    w.WriteU64(0);       // group_term
     w.WriteBool(false);  // fenced
     w.WriteBool(false);  // no activation action
-    w.WriteU64(0);  // population_manifest_revision
-    keylane::meta::WriteFixedArray(w, keylane::meta::MetaHash256{});
+    w.WriteU64(0);       // population_manifest_revision
+    lavik::meta::WriteFixedArray(w, lavik::meta::MetaHash256{});
     w.WriteU64(0);  // partition_replication_epoch
     w.WriteU64(group.revision);
     w.WriteOptional(
         group.encoded_failover_transition,
-        [](keylane::meta::MetaWriter& ww, const std::string& encoded) {
+        [](lavik::meta::MetaWriter& ww, const std::string& encoded) {
           // The bytes are deliberately supplied by the caller rather than
           // re-encoded here so corrupt transition invariants can be tested.
           ww.WriteRaw(encoded);
         });
-    w.WriteList(group.members, [](keylane::meta::MetaWriter& ww,
-                                  const MetaGroupMember& member) {
-      ww.WriteString(member.node_id_);
-      keylane::meta::WriteFixedArray(ww, member.assignment_id_);
-      ww.WriteU8(static_cast<std::uint8_t>(member.role_));
-    });
+    w.WriteList(group.members,
+                [](lavik::meta::MetaWriter& ww, const MetaGroupMember& member) {
+                  ww.WriteString(member.node_id_);
+                  lavik::meta::WriteFixedArray(ww, member.assignment_id_);
+                  ww.WriteU8(static_cast<std::uint8_t>(member.role_));
+                });
   }
-  std::map<std::string, keylane::meta::MetaAssignmentId> assignment_history;
+  std::map<std::string, lavik::meta::MetaAssignmentId> assignment_history;
   for (const TopologyBlobGroup& group : groups) {
     for (const MetaGroupMember& member : group.members) {
       assignment_history.emplace(member.node_id_, member.assignment_id_);
@@ -1418,10 +1416,10 @@ std::string MakeTopologyBlob(
   w.WriteCount(static_cast<std::uint32_t>(assignment_history.size()));
   for (const auto& [node_id, assignment_id] : assignment_history) {
     w.WriteString(node_id);
-    keylane::meta::WriteFixedArray(w, assignment_id);
+    lavik::meta::WriteFixedArray(w, assignment_id);
   }
-  w.WriteList(runs, [](keylane::meta::MetaWriter& ww,
-                       const keylane::meta::MetaSlotAssignment& run) {
+  w.WriteList(runs, [](lavik::meta::MetaWriter& ww,
+                       const lavik::meta::MetaSlotAssignment& run) {
     ww.WriteU16(run.first_slot_);
     ww.WriteU16(run.last_slot_);
     ww.WriteString(run.group_id_);
@@ -1440,9 +1438,9 @@ TEST(MetaTopologyStore, CurrentRawLayoutFixtureDecodes) {
 TEST(MetaTopologyStore, DeserializeRejectsInvalidFailoverTransition) {
   MetaFailoverTransition transition = MakeUncontrolledTransition(0x51);
   transition.revision_ = 42;
-  keylane::meta::MetaWriter transition_writer;
+  lavik::meta::MetaWriter transition_writer;
   ASSERT_TRUE(
-      keylane::meta::WriteMetaFailoverTransition(transition_writer, transition)
+      lavik::meta::WriteMetaFailoverTransition(transition_writer, transition)
           .ok());
   std::string encoded = transition_writer.TakeBuffer();
   ASSERT_GT(encoded.size(), 24u);
@@ -1457,9 +1455,9 @@ TEST(MetaTopologyStore, DeserializeRejectsInvalidFailoverTransition) {
 
 TEST(MetaTopologyStore, DeserializeRejectsInvariantViolations) {
   const std::string node_a = MakeNodeId(0x40);
-  keylane::meta::MetaAssignmentId assignment_a{};
+  lavik::meta::MetaAssignmentId assignment_a{};
   assignment_a.fill(0x40);
-  keylane::meta::MetaAssignmentId assignment_b{};
+  lavik::meta::MetaAssignmentId assignment_b{};
   assignment_b.fill(0x41);
 
   // A node appearing in two groups breaks one-node-one-group.
@@ -1510,7 +1508,7 @@ TEST(MetaTopologyStore, DeserializeRejectsInvariantViolations) {
   ExpectStoreFailStop(
       MetaTopologyStore::Deserialize(
           MakeTopologyBlob(1, {TopologyBlobGroup{"group-a"}},
-                           {{0, keylane::meta::kMetaSlotCount, "group-a"}}))
+                           {{0, lavik::meta::kMetaSlotCount, "group-a"}}))
           .status());
   // Overlapping slot runs.
   ExpectStoreFailStop(
@@ -1540,10 +1538,10 @@ TEST(MetaTopologyStore, DeserializeRejectsInvariantViolations) {
 // Policy store.
 // ===========================================================================
 
-using keylane::meta::kAuthorityLeasePolicyId;
-using keylane::meta::kAutomaticUncontrolledFailoverPolicyId;
-using keylane::meta::MetaPolicyStore;
-using keylane::meta::PutPolicy;
+using lavik::meta::kAuthorityLeasePolicyId;
+using lavik::meta::kAutomaticUncontrolledFailoverPolicyId;
+using lavik::meta::MetaPolicyStore;
+using lavik::meta::PutPolicy;
 
 PutPolicy MakePut(const std::string& policy_id, std::uint64_t version,
                   std::string content) {
@@ -1623,7 +1621,7 @@ TEST(MetaPolicyStore, RejectsUnregisteredPolicyAndInvalidCommandFields) {
   }
   {
     PutPolicy cmd =
-        MakePut(std::string(keylane::meta::kMaxMetaPolicyIdBytes + 1, 'p'), 1,
+        MakePut(std::string(lavik::meta::kMaxMetaPolicyIdBytes + 1, 'p'), 1,
                 AutomaticPolicy(true, 5000));
     ExpectDomainReject(store.Apply(cmd));
   }
@@ -1632,7 +1630,7 @@ TEST(MetaPolicyStore, RejectsUnregisteredPolicyAndInvalidCommandFields) {
     cmd.request_id_ = MakeRequestId(0xA1);
     cmd.policy_id_ = "p";
     cmd.version_ = 1;
-    cmd.content_ = std::string(keylane::meta::kMaxMetaPayloadBytes + 1, 'x');
+    cmd.content_ = std::string(lavik::meta::kMaxMetaPayloadBytes + 1, 'x');
     ExpectDomainReject(store.Apply(cmd));
   }
   EXPECT_EQ(store.PolicyCount(), 0u);
@@ -1725,14 +1723,14 @@ TEST(MetaPolicyStore, PutPolicyRequiresFirstAndConsecutiveVersions) {
 TEST(MetaPolicyStore, PutPolicyEvictsOldestVersionAfterHistoryCap) {
   MetaPolicyStore store;
   const std::string policy_id(kAutomaticUncontrolledFailoverPolicyId);
-  for (std::uint32_t v = 1; v <= keylane::meta::kMaxMetaPolicyVersionsPerPolicy;
+  for (std::uint32_t v = 1; v <= lavik::meta::kMaxMetaPolicyVersionsPerPolicy;
        ++v) {
     ASSERT_TRUE(
         store.Apply(MakePut(policy_id, v, AutomaticPolicy(true, 1000 + v)))
             .ok())
         << v;
   }
-  const std::uint64_t next = keylane::meta::kMaxMetaPolicyVersionsPerPolicy + 1;
+  const std::uint64_t next = lavik::meta::kMaxMetaPolicyVersionsPerPolicy + 1;
   ASSERT_TRUE(
       store.Apply(MakePut(policy_id, next, AutomaticPolicy(true, 1000 + next)))
           .ok());
@@ -1740,7 +1738,7 @@ TEST(MetaPolicyStore, PutPolicyEvictsOldestVersionAfterHistoryCap) {
   EXPECT_TRUE(store.FindVersion(policy_id, 2).has_value());
   EXPECT_TRUE(store.FindVersion(policy_id, next).has_value());
   EXPECT_EQ(store.Versions().size(),
-            keylane::meta::kMaxMetaPolicyVersionsPerPolicy);
+            lavik::meta::kMaxMetaPolicyVersionsPerPolicy);
 }
 
 // ---------------------------------------------------------------------------
@@ -1768,7 +1766,7 @@ TEST(MetaPolicyStore, SerializationRoundTrip) {
   ASSERT_GE(bytes.size(), 2u);
   const auto* p = reinterpret_cast<const unsigned char*>(bytes.data());
   EXPECT_EQ(static_cast<std::uint16_t>(p[0] | (p[1] << 8)),
-            keylane::meta::kMetaFormatVersion);
+            lavik::meta::kMetaFormatVersion);
 
   const auto loaded = MetaPolicyStore::Deserialize(bytes);
   ASSERT_TRUE(loaded.ok()) << loaded.status();
@@ -1830,8 +1828,8 @@ struct PolicyBlobVersion {
 std::string MakePolicyBlob(
     const std::vector<std::pair<std::string, std::vector<PolicyBlobVersion>>>&
         policies) {
-  keylane::meta::MetaWriter w;
-  w.WriteU16(keylane::meta::kMetaFormatVersion);
+  lavik::meta::MetaWriter w;
+  w.WriteU16(lavik::meta::kMetaFormatVersion);
   w.WriteCount(static_cast<std::uint32_t>(policies.size()));
   for (const auto& [policy_id, versions] : policies) {
     w.WriteString(policy_id);
@@ -1849,7 +1847,7 @@ TEST(MetaPolicyStore, DeserializeRejectsInvariantViolations) {
   {
     std::vector<PolicyBlobVersion> versions;
     for (std::uint32_t v = 1;
-         v <= keylane::meta::kMaxMetaPolicyVersionsPerPolicy + 1; ++v) {
+         v <= lavik::meta::kMaxMetaPolicyVersionsPerPolicy + 1; ++v) {
       versions.push_back(PolicyBlobVersion{v, AutomaticPolicy(true, 1000 + v)});
     }
     ExpectStoreFailStop(
@@ -1895,9 +1893,9 @@ TEST(MetaPolicyStore, DeserializeRejectsInvariantViolations) {
 
 TEST(MetaPopulationManifestStore,
      StoresCanonicalImmutableDocumentsAndRoundTrips) {
-  using keylane::meta::MetaPopulationManifestEntry;
-  using keylane::meta::MetaPopulationManifestStore;
-  using keylane::meta::PutPopulationManifest;
+  using lavik::meta::MetaPopulationManifestEntry;
+  using lavik::meta::MetaPopulationManifestStore;
+  using lavik::meta::PutPopulationManifest;
 
   PutPopulationManifest put;
   put.entries_ = {MetaPopulationManifestEntry{1, 10},
@@ -1918,9 +1916,9 @@ TEST(MetaPopulationManifestStore,
 }
 
 TEST(MetaPopulationManifestStore, RejectsNonCanonicalOrMismatchedContent) {
-  using keylane::meta::MetaPopulationManifestEntry;
-  using keylane::meta::MetaPopulationManifestStore;
-  using keylane::meta::PutPopulationManifest;
+  using lavik::meta::MetaPopulationManifestEntry;
+  using lavik::meta::MetaPopulationManifestStore;
+  using lavik::meta::PutPopulationManifest;
 
   MetaPopulationManifestStore store;
   PutPopulationManifest unsorted;
@@ -1943,7 +1941,7 @@ TEST(MetaPopulationManifestStore, RejectsNonCanonicalOrMismatchedContent) {
 
   PutPopulationManifest out_of_range;
   out_of_range.entries_ = {
-      MetaPopulationManifestEntry{keylane::meta::kMetaSlotCount, 1}};
+      MetaPopulationManifestEntry{lavik::meta::kMetaSlotCount, 1}};
   out_of_range.manifest_digest_ =
       MetaPopulationManifestStore::CanonicalDigest(out_of_range.entries_);
   ExpectDomainReject(store.Put(out_of_range));

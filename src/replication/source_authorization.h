@@ -25,9 +25,9 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "keylane/replication_group.h"
+#include "lavik/replication_group.h"
 
-namespace keylane::detail {
+namespace lavik::detail {
 
 enum class SourceAuthorizationAction : std::uint8_t {
   kAuthorized,
@@ -45,7 +45,7 @@ enum class SourceAuthorizationDisposition : std::uint8_t {
 
 // Capability ledger for cluster population exports. ReplicationGroup guards
 // every access with its master mutex, including worker-zero control updates,
-// so native KLPSYNC classification and MasterSession publication are atomic
+// so native LVPSYNC classification and MasterSession publication are atomic
 // with capability replacement or revocation. A directive revision may
 // authorize several targets concurrently, but all of them must describe one
 // source/group/manifest scope. Committed revocation clears that active set and
@@ -261,4 +261,4 @@ class SourceAuthorizationLedger {
   std::chrono::nanoseconds lease_admission_deadline_{};
 };
 
-}  // namespace keylane::detail
+}  // namespace lavik::detail

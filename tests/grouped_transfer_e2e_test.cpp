@@ -116,7 +116,7 @@ TEST(GroupedTransferE2e, FourTypesCopyRenameAcrossDatabasesAndWorkersRecover) {
 }
 
 TEST(GroupedTransferE2e, FailedExecCopyKeepsOldGraphAndCommitsLaterCommand) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires group auxiliary failure injection";
 #endif
   PrivateDisk disk;

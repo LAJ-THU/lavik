@@ -63,15 +63,15 @@
 #include <vector>
 
 #include "gtest/gtest.h"
-#include "keylane/meta/cluster_create.h"
-#include "keylane/meta/commands.h"
-#include "keylane/meta/coordinator.h"
-#include "keylane/meta/failover.h"
-#include "keylane/meta/hash.h"
-#include "keylane/meta/nuraft_log_store.h"
-#include "keylane/meta/nuraft_state_mgr.h"
-#include "keylane/meta/observation_store.h"
-#include "keylane/meta/state_machine.h"
+#include "lavik/meta/cluster_create.h"
+#include "lavik/meta/commands.h"
+#include "lavik/meta/coordinator.h"
+#include "lavik/meta/failover.h"
+#include "lavik/meta/hash.h"
+#include "lavik/meta/nuraft_log_store.h"
+#include "lavik/meta/nuraft_state_mgr.h"
+#include "lavik/meta/observation_store.h"
+#include "lavik/meta/state_machine.h"
 #include "libnuraft/nuraft.hxx"
 #include "spdlog/sinks/ostream_sink.h"
 #include "spdlog/spdlog.h"
@@ -79,45 +79,45 @@
 
 // Trusted test peer for the passkey-protected principal boundary. Tests use
 // the same privileged construction path as ctl and authenticated sessions.
-namespace keylane::meta {
+namespace lavik::meta {
 class MetaCoordinatorTestPeer {
  public:
   static AuthenticatedPrincipal Make(std::string principal) {
     return AuthenticatedPrincipal(std::move(principal), MetaPrincipalPasskey{});
   }
 };
-}  // namespace keylane::meta
+}  // namespace lavik::meta
 
 namespace {
 
-using keylane::meta::AuthenticatedPrincipal;
-using keylane::meta::BeginGroupTerm;
-using keylane::meta::CreateGroup;
-using keylane::meta::MetaApplyResult;
-using keylane::meta::MetaAuditVerdict;
-using keylane::meta::MetaCommand;
-using keylane::meta::MetaCommitCallback;
-using keylane::meta::MetaCommitEvent;
-using keylane::meta::MetaCoordinator;
-using keylane::meta::MetaCoordinatorOptions;
-using keylane::meta::MetaCoordinatorTestPeer;
-using keylane::meta::MetaLeaderContext;
-using keylane::meta::MetaLeadershipRelay;
-using keylane::meta::MetaObservationIdentity;
-using keylane::meta::MetaObservationStore;
-using keylane::meta::MetaOperationId;
-using keylane::meta::MetaReconciler;
-using keylane::meta::MetaRequestId;
-using keylane::meta::MetaStateMachine;
-using keylane::meta::MetaStoresFacts;
-using keylane::meta::MetaSubscriptionStart;
-using keylane::meta::NuraftLogStore;
-using keylane::meta::NuraftStateMgr;
-using keylane::meta::RegisterNode;
-using keylane::meta::SubmitOperation;
-using keylane::meta::TransitionOperationPhase;
+using lavik::meta::AuthenticatedPrincipal;
+using lavik::meta::BeginGroupTerm;
+using lavik::meta::CreateGroup;
+using lavik::meta::MetaApplyResult;
+using lavik::meta::MetaAuditVerdict;
+using lavik::meta::MetaCommand;
+using lavik::meta::MetaCommitCallback;
+using lavik::meta::MetaCommitEvent;
+using lavik::meta::MetaCoordinator;
+using lavik::meta::MetaCoordinatorOptions;
+using lavik::meta::MetaCoordinatorTestPeer;
+using lavik::meta::MetaLeaderContext;
+using lavik::meta::MetaLeadershipRelay;
+using lavik::meta::MetaObservationIdentity;
+using lavik::meta::MetaObservationStore;
+using lavik::meta::MetaOperationId;
+using lavik::meta::MetaReconciler;
+using lavik::meta::MetaRequestId;
+using lavik::meta::MetaStateMachine;
+using lavik::meta::MetaStoresFacts;
+using lavik::meta::MetaSubscriptionStart;
+using lavik::meta::NuraftLogStore;
+using lavik::meta::NuraftStateMgr;
+using lavik::meta::RegisterNode;
+using lavik::meta::SubmitOperation;
+using lavik::meta::TransitionOperationPhase;
 
-constexpr std::string_view kTestPrincipal = "keylane://operator/test-entry";
+constexpr std::string_view kTestPrincipal = "lavik://operator/test-entry";
 
 // ---------------------------------------------------------------------------
 // Small shared helpers (same conventions as meta_state_machine_test.cpp)
@@ -126,8 +126,8 @@ constexpr std::string_view kTestPrincipal = "keylane://operator/test-entry";
 std::filesystem::path MakeTestDir(const char* suite, const char* name) {
   const ::testing::TestInfo* info =
       ::testing::UnitTest::GetInstance()->current_test_info();
-  std::filesystem::path dir = keylane::test::TestDataDirectory() /
-                              ("keylane_meta_test_" + std::string(suite) + "_" +
+  std::filesystem::path dir = lavik::test::TestDataDirectory() /
+                              ("lavik_meta_test_" + std::string(suite) + "_" +
                                name + "_" + info->test_suite_name() + "_" +
                                info->name() + "_" + std::to_string(::getpid()));
   std::filesystem::remove_all(dir);
@@ -214,7 +214,7 @@ std::string MakeNodeId(std::uint8_t seed) {
 }
 
 std::string MakeNodePrincipal(std::uint8_t seed) {
-  return "keylane://node/" + MakeNodeId(seed);
+  return "lavik://node/" + MakeNodeId(seed);
 }
 
 // RegisterNode with the actor deliberately left EMPTY: Propose must inject it.
@@ -225,7 +225,7 @@ RegisterNode MakeRegister(std::uint8_t seed) {
   cmd.principal_ = MakeNodePrincipal(seed);
   cmd.endpoints_ = {"10.0.0.1:7000"};
 
-  cmd.role_ = keylane::meta::MetaNodeRole::kReplica;
+  cmd.role_ = lavik::meta::MetaNodeRole::kReplica;
   return cmd;
 }
 
@@ -657,7 +657,7 @@ TEST_F(MetaCoordinatorComponentTest, CommittedViewFactsAnswerFromStores) {
   submit.operation_id_ = MakeOperationId(0x64);
   submit.kind_ = "migration";
   submit.intent_ = "intent";
-  submit.intent_hash_ = keylane::meta::MetaSha256(submit.intent_);
+  submit.intent_hash_ = lavik::meta::MetaSha256(submit.intent_);
   Commit(4, submit);
 
   // The adapter the obs store's freshness queries run against.
@@ -669,7 +669,7 @@ TEST_F(MetaCoordinatorComponentTest, CommittedViewFactsAnswerFromStores) {
   EXPECT_EQ(facts.CurrentGroupTerm("g1"), 1u);
   EXPECT_EQ(facts.CurrentGroupTerm("no-such-group"), 0u);
   EXPECT_EQ(facts.CurrentPopulationManifestRevision("g1"), 0u);
-  keylane::meta::MetaReplicationHistoryId unbound_history{};
+  lavik::meta::MetaReplicationHistoryId unbound_history{};
   unbound_history.back() = 1;
 }
 
@@ -738,13 +738,12 @@ class MetaCoordinatorServerTest : public ::testing::Test {
   struct FailSafeControlledFailoverState {
     std::string owner_ = MakeNodeId(0x91);
     std::string candidate_ = MakeNodeId(0x92);
-    keylane::meta::MetaAssignmentId owner_assignment_ = MakeFixedId<16>(0xa1);
-    keylane::meta::MetaAssignmentId candidate_assignment_ =
-        MakeFixedId<16>(0xa2);
-    keylane::meta::MetaOperationId operation_id_ = MakeOperationId(0xa3);
-    keylane::meta::MetaFailoverTransitionId transition_id_ =
+    lavik::meta::MetaAssignmentId owner_assignment_ = MakeFixedId<16>(0xa1);
+    lavik::meta::MetaAssignmentId candidate_assignment_ = MakeFixedId<16>(0xa2);
+    lavik::meta::MetaOperationId operation_id_ = MakeOperationId(0xa3);
+    lavik::meta::MetaFailoverTransitionId transition_id_ =
         MakeFixedId<16>(0xa4);
-    keylane::meta::MetaFailoverCandidateAction action_;
+    lavik::meta::MetaFailoverCandidateAction action_;
     std::uint64_t deadline_unix_ms_ = 2'000'000'000'000ULL;
     std::uint64_t transition_revision_ = 0;
   };
@@ -756,11 +755,11 @@ class MetaCoordinatorServerTest : public ::testing::Test {
   }
 
   void OpenStorage() {
-    const keylane::meta::NuraftMemberConfig local{
-        1, "127.0.0.1:9601", "keylane://meta/1", "127.0.0.1:9701",
+    const lavik::meta::NuraftMemberConfig local{
+        1, "127.0.0.1:9601", "lavik://meta/1", "127.0.0.1:9701",
         "127.0.0.1:9801"};
-    keylane::meta::NuraftStateMgrOpenOptions options{.data_dir_ = dir_,
-                                                     .local_member_ = local};
+    lavik::meta::NuraftStateMgrOpenOptions options{.data_dir_ = dir_,
+                                                   .local_member_ = local};
     if (!std::filesystem::exists(std::filesystem::path(dir_) /
                                  "cluster_config.dat")) {
       options.initial_cluster_ = std::vector{local};
@@ -892,7 +891,7 @@ class MetaCoordinatorServerTest : public ::testing::Test {
 
   void SeedControlledFailover(FailSafeControlledFailoverState& state,
                               bool begin_transition) {
-    keylane::meta::ClusterCreateManifestV1 manifest;
+    lavik::meta::ClusterCreateManifestV1 manifest;
     manifest.schema_version_ = 1;
     manifest.meta_members_ = {{1, "tcp://127.0.0.1:7101",
                                "tcp://127.0.0.1:7301", "tcp://127.0.0.1:7201"}};
@@ -903,31 +902,31 @@ class MetaCoordinatorServerTest : public ::testing::Test {
     SubmitOperation root;
     root.request_id_ = MakeRequestId(0x91);
     root.operation_id_ = MakeOperationId(0x91);
-    root.kind_ = std::string(keylane::meta::kMetaClusterCreateOperationKind);
+    root.kind_ = std::string(lavik::meta::kMetaClusterCreateOperationKind);
     auto root_intent =
-        keylane::meta::EncodeClusterCreateRequest(manifest, root.operation_id_);
+        lavik::meta::EncodeClusterCreateRequest(manifest, root.operation_id_);
     ASSERT_TRUE(root_intent.ok()) << root_intent.status();
     root.intent_ = *root_intent;
-    root.intent_hash_ = keylane::meta::MetaSha256(root.intent_);
+    root.intent_hash_ = lavik::meta::MetaSha256(root.intent_);
     ProposeAccepted(root);
 
-    keylane::meta::PutPolicy automatic;
+    lavik::meta::PutPolicy automatic;
     automatic.request_id_ = MakeRequestId(0x96);
     automatic.policy_id_ =
-        std::string(keylane::meta::kAutomaticUncontrolledFailoverPolicyId);
+        std::string(lavik::meta::kAutomaticUncontrolledFailoverPolicyId);
     automatic.version_ = 1;
     automatic.content_ =
         R"({"kind":"automatic-uncontrolled-failover-v1","enabled":true,"suspect_after_ms":5000})";
     ProposeAccepted(automatic);
 
-    keylane::meta::PutPolicy policy;
+    lavik::meta::PutPolicy policy;
     policy.request_id_ = MakeRequestId(0x9b);
-    policy.policy_id_ = std::string(keylane::meta::kAuthorityLeasePolicyId);
+    policy.policy_id_ = std::string(lavik::meta::kAuthorityLeasePolicyId);
     policy.version_ = 1;
     policy.content_ = R"({"kind":"authority-lease-v1","duration_ms":5000})";
     ProposeAccepted(policy);
 
-    keylane::meta::CompleteOperation complete_root;
+    lavik::meta::CompleteOperation complete_root;
     complete_root.request_id_ = MakeRequestId(0x92);
     complete_root.operation_id_ = root.operation_id_;
     complete_root.expected_revision_ = 0;
@@ -936,14 +935,14 @@ class MetaCoordinatorServerTest : public ::testing::Test {
 
     RegisterNode owner = MakeRegister(0x91);
     owner.node_id_ = state.owner_;
-    owner.principal_ = "keylane://node/" + state.owner_;
-    owner.role_ = keylane::meta::MetaNodeRole::kPrimary;
+    owner.principal_ = "lavik://node/" + state.owner_;
+    owner.role_ = lavik::meta::MetaNodeRole::kPrimary;
     ProposeAccepted(owner);
 
     RegisterNode candidate = MakeRegister(0x92);
     candidate.node_id_ = state.candidate_;
-    candidate.principal_ = "keylane://node/" + state.candidate_;
-    candidate.role_ = keylane::meta::MetaNodeRole::kReplica;
+    candidate.principal_ = "lavik://node/" + state.candidate_;
+    candidate.role_ = lavik::meta::MetaNodeRole::kReplica;
     ProposeAccepted(candidate);
 
     CreateGroup group;
@@ -952,22 +951,22 @@ class MetaCoordinatorServerTest : public ::testing::Test {
     group.new_topology_epoch_ = 1;
     ProposeAccepted(group);
 
-    keylane::meta::AssignNodeToGroup assign_owner;
+    lavik::meta::AssignNodeToGroup assign_owner;
     assign_owner.request_id_ = MakeRequestId(0x94);
     assign_owner.group_id_ = "g1";
     assign_owner.node_id_ = state.owner_;
     assign_owner.assignment_id_ = state.owner_assignment_;
-    assign_owner.role_ = keylane::meta::MetaNodeRole::kPrimary;
+    assign_owner.role_ = lavik::meta::MetaNodeRole::kPrimary;
     assign_owner.expected_revision_ = 1;
     assign_owner.new_topology_epoch_ = 2;
     ProposeAccepted(assign_owner);
 
-    keylane::meta::AssignNodeToGroup assign_candidate;
+    lavik::meta::AssignNodeToGroup assign_candidate;
     assign_candidate.request_id_ = MakeRequestId(0x95);
     assign_candidate.group_id_ = "g1";
     assign_candidate.node_id_ = state.candidate_;
     assign_candidate.assignment_id_ = state.candidate_assignment_;
-    assign_candidate.role_ = keylane::meta::MetaNodeRole::kReplica;
+    assign_candidate.role_ = lavik::meta::MetaNodeRole::kReplica;
     assign_candidate.expected_revision_ = 2;
     assign_candidate.new_topology_epoch_ = 3;
     ProposeAccepted(assign_candidate);
@@ -979,7 +978,7 @@ class MetaCoordinatorServerTest : public ::testing::Test {
     term.new_term_ = 1;
     ProposeAccepted(term);
 
-    keylane::meta::ActivateAuthority activate;
+    lavik::meta::ActivateAuthority activate;
     activate.request_id_ = MakeRequestId(0x98);
     activate.group_id_ = "g1";
     activate.expected_term_ = 1;
@@ -987,35 +986,35 @@ class MetaCoordinatorServerTest : public ::testing::Test {
     activate.new_topology_epoch_ = 4;
     ProposeAccepted(activate);
 
-    keylane::meta::FailoverOperationIntent intent;
+    lavik::meta::FailoverOperationIntent intent;
     intent.group_id_ = "g1";
     intent.absolute_deadline_unix_ms_ = state.deadline_unix_ms_;
-    auto encoded_intent = keylane::meta::EncodeFailoverOperationIntent(intent);
+    auto encoded_intent = lavik::meta::EncodeFailoverOperationIntent(intent);
     ASSERT_TRUE(encoded_intent.ok()) << encoded_intent.status();
     SubmitOperation submit;
     submit.request_id_ = MakeRequestId(0x99);
     submit.operation_id_ = state.operation_id_;
-    submit.kind_ = std::string(keylane::meta::kFailoverOperationKind);
+    submit.kind_ = std::string(lavik::meta::kFailoverOperationKind);
     submit.intent_ = *encoded_intent;
-    submit.intent_hash_ = keylane::meta::MetaSha256(submit.intent_);
+    submit.intent_hash_ = lavik::meta::MetaSha256(submit.intent_);
     ProposeAccepted(submit);
 
     state.action_.action_id_ = MakeFixedId<16>(0xa5);
     state.action_.candidate_.node_id_ = state.candidate_;
     state.action_.candidate_.assignment_id_ = state.candidate_assignment_;
     state.action_.candidate_.boot_id_ =
-        MakeFixedId<keylane::meta::kMetaBootIncarnationBytes>(0xa6);
+        MakeFixedId<lavik::meta::kMetaBootIncarnationBytes>(0xa6);
     state.action_.domain_.source_group_term_ = 1;
     state.action_.domain_.source_node_id_ = state.owner_;
     state.action_.domain_.source_assignment_id_ = state.owner_assignment_;
     state.action_.domain_.source_boot_id_ =
-        MakeFixedId<keylane::meta::kMetaBootIncarnationBytes>(0xa7);
+        MakeFixedId<lavik::meta::kMetaBootIncarnationBytes>(0xa7);
     state.action_.domain_.source_history_id_ =
-        MakeFixedId<keylane::meta::kMetaReplicationHistoryIdBytes>(0xa8);
+        MakeFixedId<lavik::meta::kMetaReplicationHistoryIdBytes>(0xa8);
     state.action_.domain_.flow_count_ = 2;
 
     if (!begin_transition) return;
-    keylane::meta::BeginControlledFailover begin;
+    lavik::meta::BeginControlledFailover begin;
     begin.request_id_ = MakeRequestId(0x9a);
     begin.group_id_ = "g1";
     begin.transition_id_ = state.transition_id_;
@@ -1056,8 +1055,7 @@ TEST_F(MetaCoordinatorServerTest, ProposeInjectsActorAndReturnsAuditVerdict) {
   ASSERT_TRUE(accepted.ok()) << accepted.status();
   EXPECT_EQ(accepted->verdict_, MetaAuditVerdict::kAccepted);
   EXPECT_GE(accepted->log_index_, 1u);
-  EXPECT_EQ(accepted->command_tag_,
-            keylane::meta::MetaCommandTag::kRegisterNode);
+  EXPECT_EQ(accepted->command_tag_, lavik::meta::MetaCommandTag::kRegisterNode);
 
   // The coordinator injected the actor and propose-time readable clock; the
   // committed command's audit record carries both.
@@ -1121,11 +1119,11 @@ TEST_F(MetaCoordinatorServerTest, FailSafeWalGate) {
   MakeCoordinator();
   WaitLeader();
 
-  keylane::meta::PutPopulationManifest put;
+  lavik::meta::PutPopulationManifest put;
   put.request_id_ = MakeRequestId(0x30);
   put.entries_ = {{1, 1}};
   put.manifest_digest_ =
-      keylane::meta::MetaPopulationManifestStore::CanonicalDigest(put.entries_);
+      lavik::meta::MetaPopulationManifestStore::CanonicalDigest(put.entries_);
   ASSERT_TRUE(ProposeSync(put).ok());
   const std::size_t audit_before_gate =
       machine_->StoresSnapshot().audit_.size();
@@ -1151,7 +1149,7 @@ TEST_F(MetaCoordinatorServerTest, FailSafeWalGate) {
   // A prune-shaped no-op is rejected before append; fresh request ids cannot
   // use idempotency to grow the WAL after the hard gate has fired.
   const std::uint64_t before_no_op = machine_->last_commit_index();
-  keylane::meta::PrunePopulationManifest no_op;
+  lavik::meta::PrunePopulationManifest no_op;
   no_op.request_id_ = MakeRequestId(0x32);
   no_op.manifest_digest_.fill(0x44);
   auto ineffective = ProposeSync(no_op);
@@ -1159,7 +1157,7 @@ TEST_F(MetaCoordinatorServerTest, FailSafeWalGate) {
   EXPECT_EQ(ineffective.status().code(), absl::StatusCode::kResourceExhausted);
   EXPECT_EQ(machine_->last_commit_index(), before_no_op);
 
-  keylane::meta::PrunePopulationManifest prune;
+  lavik::meta::PrunePopulationManifest prune;
   prune.request_id_ = MakeRequestId(0x33);
   prune.manifest_digest_ = put.manifest_digest_;
   auto recovery = ProposeSync(prune);
@@ -1173,11 +1171,11 @@ TEST_F(MetaCoordinatorServerTest, FailSafeSnapshotFailureGate) {
   StartServer();
   MakeCoordinator();
   WaitLeader();
-  keylane::meta::PutPopulationManifest put;
+  lavik::meta::PutPopulationManifest put;
   put.request_id_ = MakeRequestId(0x31);
   put.entries_ = {{2, 1}};
   put.manifest_digest_ =
-      keylane::meta::MetaPopulationManifestStore::CanonicalDigest(put.entries_);
+      lavik::meta::MetaPopulationManifestStore::CanonicalDigest(put.entries_);
   ASSERT_TRUE(ProposeSync(put).ok());
 
   // Zero tolerated consecutive snapshot failures: the gate trips at the
@@ -1198,7 +1196,7 @@ TEST_F(MetaCoordinatorServerTest, FailSafeSnapshotFailureGate) {
       << gated.status();
 
   const std::uint64_t before_no_op = machine_->last_commit_index();
-  keylane::meta::PrunePopulationManifest no_op;
+  lavik::meta::PrunePopulationManifest no_op;
   no_op.request_id_ = MakeRequestId(0x33);
   no_op.manifest_digest_.fill(0x44);
   auto ineffective = ProposeSync(no_op);
@@ -1206,7 +1204,7 @@ TEST_F(MetaCoordinatorServerTest, FailSafeSnapshotFailureGate) {
   EXPECT_EQ(ineffective.status().code(), absl::StatusCode::kResourceExhausted);
   EXPECT_EQ(machine_->last_commit_index(), before_no_op);
 
-  keylane::meta::PrunePopulationManifest prune;
+  lavik::meta::PrunePopulationManifest prune;
   prune.request_id_ = MakeRequestId(0x34);
   prune.manifest_digest_ = put.manifest_digest_;
   auto recovery = ProposeSync(prune);
@@ -1237,7 +1235,7 @@ TEST_F(MetaCoordinatorServerTest,
   options.max_consecutive_snapshot_failures_ = 0;
   MakeCoordinator(options);
 
-  keylane::meta::AbortControlledFailover abort;
+  lavik::meta::AbortControlledFailover abort;
   abort.request_id_ = MakeRequestId(0xb1);
   abort.operation_id_ = failover.operation_id_;
   abort.expected_operation_revision_ = 0;
@@ -1251,7 +1249,7 @@ TEST_F(MetaCoordinatorServerTest,
   const auto operation = after.operation_.FindOperation(failover.operation_id_);
   ASSERT_TRUE(operation.has_value());
   EXPECT_EQ(operation->lifecycle_,
-            keylane::meta::MetaOperationLifecycle::kAborted);
+            lavik::meta::MetaOperationLifecycle::kAborted);
   EXPECT_EQ(operation->revision_, 1u);
   EXPECT_EQ(operation->terminal_result_, abort.reason_);
   EXPECT_FALSE(operation->data_loss_possible_);
@@ -1294,14 +1292,14 @@ TEST_F(MetaCoordinatorServerTest,
   options.max_consecutive_snapshot_failures_ = 0;
   MakeCoordinator(options);
 
-  const keylane::meta::MetaFailoverTransitionRef transition{
+  const lavik::meta::MetaFailoverTransitionRef transition{
       failover.transition_id_, failover.transition_revision_};
-  keylane::meta::AbortControlledFailover stale_abort;
+  lavik::meta::AbortControlledFailover stale_abort;
   stale_abort.request_id_ = MakeRequestId(0xb3);
   stale_abort.operation_id_ = failover.operation_id_;
   stale_abort.expected_operation_revision_ = 0;
   stale_abort.group_id_ = "g1";
-  stale_abort.expected_transition_ = keylane::meta::MetaFailoverTransitionRef{
+  stale_abort.expected_transition_ = lavik::meta::MetaFailoverTransitionRef{
       failover.transition_id_, failover.transition_revision_ - 1};
   stale_abort.reason_ = "stale transition must not be cleared";
   const std::uint64_t before_stale_abort = machine_->last_commit_index();
@@ -1311,7 +1309,7 @@ TEST_F(MetaCoordinatorServerTest,
             absl::StatusCode::kResourceExhausted);
   EXPECT_EQ(machine_->last_commit_index(), before_stale_abort);
 
-  keylane::meta::DegradeControlledFailover degrade;
+  lavik::meta::DegradeControlledFailover degrade;
   degrade.request_id_ = MakeRequestId(0xb4);
   degrade.operation_id_ = failover.operation_id_;
   degrade.expected_operation_revision_ = 0;
@@ -1325,7 +1323,7 @@ TEST_F(MetaCoordinatorServerTest,
   EXPECT_EQ(degraded.status().code(), absl::StatusCode::kResourceExhausted);
   EXPECT_EQ(machine_->last_commit_index(), before_degrade);
 
-  keylane::meta::CommitControlledFailover commit;
+  lavik::meta::CommitControlledFailover commit;
   commit.request_id_ = MakeRequestId(0xb5);
   commit.operation_id_ = failover.operation_id_;
   commit.expected_operation_revision_ = 0;
@@ -1348,7 +1346,7 @@ TEST_F(MetaCoordinatorServerTest,
   EXPECT_EQ(committed.status().code(), absl::StatusCode::kResourceExhausted);
   EXPECT_EQ(machine_->last_commit_index(), before_commit);
 
-  keylane::meta::AbortControlledFailover abort;
+  lavik::meta::AbortControlledFailover abort;
   abort.request_id_ = MakeRequestId(0xb6);
   abort.operation_id_ = failover.operation_id_;
   abort.expected_operation_revision_ = 0;
@@ -1368,7 +1366,7 @@ TEST_F(MetaCoordinatorServerTest,
   const auto operation = after.operation_.FindOperation(failover.operation_id_);
   ASSERT_TRUE(operation.has_value());
   EXPECT_EQ(operation->lifecycle_,
-            keylane::meta::MetaOperationLifecycle::kAborted);
+            lavik::meta::MetaOperationLifecycle::kAborted);
   EXPECT_EQ(operation->revision_, 1u);
   EXPECT_EQ(operation->terminal_result_, abort.reason_);
   EXPECT_FALSE(operation->data_loss_possible_);
@@ -1409,7 +1407,7 @@ TEST_F(MetaCoordinatorServerTest,
   complete_target.kind_ = "migration";
   complete_target.intent_ = "complete-then-archive";
   complete_target.intent_hash_ =
-      keylane::meta::MetaSha256(complete_target.intent_);
+      lavik::meta::MetaSha256(complete_target.intent_);
   auto submitted_complete = ProposeSync(complete_target);
   ASSERT_TRUE(submitted_complete.ok()) << submitted_complete.status();
 
@@ -1417,7 +1415,7 @@ TEST_F(MetaCoordinatorServerTest,
   abort_target.request_id_ = MakeRequestId(0x36);
   abort_target.operation_id_ = MakeOperationId(0x36);
   abort_target.intent_ = "abort-then-archive";
-  abort_target.intent_hash_ = keylane::meta::MetaSha256(abort_target.intent_);
+  abort_target.intent_hash_ = lavik::meta::MetaSha256(abort_target.intent_);
   auto submitted_abort = ProposeSync(abort_target);
   ASSERT_TRUE(submitted_abort.ok()) << submitted_abort.status();
 
@@ -1434,7 +1432,7 @@ TEST_F(MetaCoordinatorServerTest,
 
   // Emergency terminalization may not introduce a new variable-length result
   // while snapshot recovery is already gated.
-  keylane::meta::CompleteOperation growing_complete;
+  lavik::meta::CompleteOperation growing_complete;
   growing_complete.request_id_ = MakeRequestId(0x37);
   growing_complete.operation_id_ = complete_target.operation_id_;
   growing_complete.expected_revision_ = 0;
@@ -1445,20 +1443,20 @@ TEST_F(MetaCoordinatorServerTest,
   EXPECT_EQ(growing.status().code(), absl::StatusCode::kResourceExhausted);
   EXPECT_EQ(machine_->last_commit_index(), before_growing);
 
-  keylane::meta::CompleteOperation complete = growing_complete;
+  lavik::meta::CompleteOperation complete = growing_complete;
   complete.request_id_ = MakeRequestId(0x38);
   complete.result_.clear();
   auto completed = ProposeSync(complete);
   ASSERT_TRUE(completed.ok()) << completed.status();
 
-  keylane::meta::AbortOperation abort;
+  lavik::meta::AbortOperation abort;
   abort.request_id_ = MakeRequestId(0x39);
   abort.operation_id_ = abort_target.operation_id_;
   abort.expected_revision_ = 0;
   auto aborted = ProposeSync(abort);
   ASSERT_TRUE(aborted.ok()) << aborted.status();
 
-  keylane::meta::ArchiveOperations archive;
+  lavik::meta::ArchiveOperations archive;
   archive.request_id_ = MakeRequestId(0x3a);
   archive.operation_seqs_ = {submitted_complete->log_index_,
                              submitted_abort->log_index_};
@@ -1470,7 +1468,7 @@ TEST_F(MetaCoordinatorServerTest,
                   .FindArchived(complete_target.operation_id_)
                   .has_value());
 
-  keylane::meta::PruneOperationArchive prune;
+  lavik::meta::PruneOperationArchive prune;
   prune.request_id_ = MakeRequestId(0x3b);
   prune.operation_seqs_ = archive.operation_seqs_;
   auto pruned = ProposeSync(prune);
@@ -1499,10 +1497,10 @@ TEST_F(MetaCoordinatorServerTest,
   submit.operation_id_ = MakeOperationId(0x3d);
   submit.kind_ = "migration";
   submit.intent_ = "uncertain-archive";
-  submit.intent_hash_ = keylane::meta::MetaSha256(submit.intent_);
+  submit.intent_hash_ = lavik::meta::MetaSha256(submit.intent_);
   auto submitted = ProposeSync(submit);
   ASSERT_TRUE(submitted.ok()) << submitted.status();
-  keylane::meta::AbortOperation abort;
+  lavik::meta::AbortOperation abort;
   abort.request_id_ = MakeRequestId(0x3e);
   abort.operation_id_ = submit.operation_id_;
   abort.expected_revision_ = 0;
@@ -1519,7 +1517,7 @@ TEST_F(MetaCoordinatorServerTest,
   MakeCoordinator(options);
 
   server_->pause_state_machine_execution(5000);
-  keylane::meta::ArchiveOperations archive;
+  lavik::meta::ArchiveOperations archive;
   archive.request_id_ = MakeRequestId(0x3f);
   archive.operation_seqs_ = {submitted->log_index_};
   auto uncertain = ProposeSync(archive);
@@ -1540,7 +1538,7 @@ TEST_F(MetaCoordinatorServerTest,
       },
       std::chrono::seconds(10)));
 
-  keylane::meta::PruneOperationArchive prune;
+  lavik::meta::PruneOperationArchive prune;
   prune.request_id_ = MakeRequestId(0x41);
   prune.operation_seqs_ = archive.operation_seqs_;
   auto recovered = ProposeSync(prune);
@@ -1555,16 +1553,16 @@ TEST_F(MetaCoordinatorServerTest, FailSafeAuditWindowGate) {
   // window. The setup command is itself audited and counts toward capacity.
   const std::uint64_t before = server_->get_committed_log_idx();
   std::vector<nuraft::ptr<nuraft::buffer>> logs;
-  logs.reserve(keylane::meta::kMaxMetaAuditWindowRecords);
-  keylane::meta::SetAuditPolicy policy;
+  logs.reserve(lavik::meta::kMaxMetaAuditWindowRecords);
+  lavik::meta::SetAuditPolicy policy;
   policy.request_id_ = MakeRequestId(0x31);
-  policy.policy_ = keylane::meta::MetaAuditPolicy::kStrictExport;
+  policy.policy_ = lavik::meta::MetaAuditPolicy::kStrictExport;
   policy.attestation_ = "test-strict-export";
   auto encoded_policy = MetaStateMachine::EncodeCommand(policy);
   ASSERT_TRUE(encoded_policy.ok()) << encoded_policy.status();
   logs.push_back(*encoded_policy);
   const MetaCommand filler = MakeRegister(0x33);
-  for (std::uint32_t ii = 1; ii < keylane::meta::kMaxMetaAuditWindowRecords;
+  for (std::uint32_t ii = 1; ii < lavik::meta::kMaxMetaAuditWindowRecords;
        ++ii) {
     auto encoded = MetaStateMachine::EncodeCommand(filler);
     ASSERT_TRUE(encoded.ok()) << encoded.status();
@@ -1577,9 +1575,9 @@ TEST_F(MetaCoordinatorServerTest, FailSafeAuditWindowGate) {
   ASSERT_EQ(batch->get_result_code(), nuraft::cmd_result_code::OK)
       << batch->get_result_str();
   ASSERT_EQ(machine_->StoresSnapshot().audit_.size(),
-            keylane::meta::kMaxMetaAuditWindowRecords);
+            lavik::meta::kMaxMetaAuditWindowRecords);
   ASSERT_GE(machine_->last_commit_index(),
-            before + keylane::meta::kMaxMetaAuditWindowRecords);
+            before + lavik::meta::kMaxMetaAuditWindowRecords);
 
   // The window is full: a privileged Propose must fail safe
   // (RESOURCE_EXHAUSTED) instead of appending past capacity (which the audit
@@ -1593,7 +1591,7 @@ TEST_F(MetaCoordinatorServerTest, FailSafeAuditWindowGate) {
   EXPECT_NE(gated.status().message().find("audit"), std::string::npos)
       << gated.status();
   EXPECT_EQ(machine_->StoresSnapshot().audit_.size(),
-            keylane::meta::kMaxMetaAuditWindowRecords);
+            lavik::meta::kMaxMetaAuditWindowRecords);
 
   // A prune owns exclusive audit headroom until Raft resolves it, even when
   // the caller times out first. Without that reservation, a second prune can
@@ -1607,14 +1605,14 @@ TEST_F(MetaCoordinatorServerTest, FailSafeAuditWindowGate) {
   }
   ASSERT_LE(first_audit_index, machine_->last_commit_index());
   server_->pause_state_machine_execution(5000);
-  keylane::meta::PruneAudit first_prune;
+  lavik::meta::PruneAudit first_prune;
   first_prune.request_id_ = MakeRequestId(0x35);
   first_prune.through_log_index_ = first_audit_index;
   auto uncertain = ProposeSync(first_prune);
   ASSERT_FALSE(uncertain.ok());
   EXPECT_EQ(uncertain.status().code(), absl::StatusCode::kDeadlineExceeded);
 
-  keylane::meta::PruneAudit overlapping = first_prune;
+  lavik::meta::PruneAudit overlapping = first_prune;
   overlapping.request_id_ = MakeRequestId(0x36);
   auto reserved = ProposeSync(overlapping);
   ASSERT_FALSE(reserved.ok());
@@ -1628,7 +1626,7 @@ TEST_F(MetaCoordinatorServerTest, FailSafeAuditWindowGate) {
       },
       std::chrono::seconds(10)));
   EXPECT_EQ(machine_->StoresSnapshot().audit_.size(),
-            keylane::meta::kMaxMetaAuditWindowRecords);
+            lavik::meta::kMaxMetaAuditWindowRecords);
 }
 
 TEST_F(MetaCoordinatorServerTest, ValidateHooksObserveAndRejectBeforeAppend) {
@@ -1645,7 +1643,7 @@ TEST_F(MetaCoordinatorServerTest, ValidateHooksObserveAndRejectBeforeAppend) {
   std::vector<HookObservation> observations_log;
   std::vector<std::int64_t> hook_times;
   coordinator_->AddValidateHook(
-      [&](const MetaCommand& cmd, const keylane::meta::MetaCommittedView& view,
+      [&](const MetaCommand& cmd, const lavik::meta::MetaCommittedView& view,
           const MetaObservationStore& obs,
           std::int64_t proposal_now_unix_ms) -> absl::Status {
         HookObservation record;
@@ -1659,7 +1657,7 @@ TEST_F(MetaCoordinatorServerTest, ValidateHooksObserveAndRejectBeforeAppend) {
         return absl::OkStatus();
       });
   coordinator_->AddValidateHook(
-      [&](const MetaCommand& cmd, const keylane::meta::MetaCommittedView&,
+      [&](const MetaCommand& cmd, const lavik::meta::MetaCommittedView&,
           const MetaObservationStore&,
           std::int64_t proposal_now_unix_ms) -> absl::Status {
         hook_times.push_back(proposal_now_unix_ms);
@@ -1782,7 +1780,7 @@ TEST_F(MetaCoordinatorServerTest,
 // Running through LeaderContext::Propose only. Idempotent by construction —
 // every run first reconciles from the committed view, so a restart that finds
 // the operation already Running proposes nothing.
-class MockReconciler : public keylane::meta::MetaReconciler {
+class MockReconciler : public lavik::meta::MetaReconciler {
  public:
   explicit MockReconciler(MetaOperationId op_id) : op_id_(op_id) {}
   ~MockReconciler() override {
@@ -1851,7 +1849,7 @@ class MockReconciler : public keylane::meta::MetaReconciler {
       submit.operation_id_ = op_id_;
       submit.kind_ = "migration";
       submit.intent_ = "move-slot-1";
-      submit.intent_hash_ = keylane::meta::MetaSha256(submit.intent_);
+      submit.intent_hash_ = lavik::meta::MetaSha256(submit.intent_);
       auto proposed = RunTaskSync(ctx.Propose(std::move(submit)));
       {
         std::lock_guard<std::mutex> lock(mu_);
@@ -1863,8 +1861,7 @@ class MockReconciler : public keylane::meta::MetaReconciler {
       record = ctx.CommittedView().operation().FindOperation(op_id_);
       if (!record.has_value()) return;
     }
-    if (record->lifecycle_ ==
-        keylane::meta::MetaOperationLifecycle::kSubmitted) {
+    if (record->lifecycle_ == lavik::meta::MetaOperationLifecycle::kSubmitted) {
       TransitionOperationPhase transition;
       transition.request_id_ = MakeRequestId(0x72);
       transition.operation_id_ = op_id_;
@@ -1876,7 +1873,7 @@ class MockReconciler : public keylane::meta::MetaReconciler {
         reached_running_ = true;
       }
     } else if (record->lifecycle_ ==
-               keylane::meta::MetaOperationLifecycle::kRunning) {
+               lavik::meta::MetaOperationLifecycle::kRunning) {
       // The whole point: an already-Running operation is NOT resubmitted.
       std::lock_guard<std::mutex> lock(mu_);
       resumed_at_running_ = true;

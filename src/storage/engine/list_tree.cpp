@@ -15,14 +15,14 @@
  */
 
 #include "impl.h"
-#include "keylane/storage/detail/grouped_scratch.h"
-#include "keylane/storage/detail/ordered_compact_codec.h"
+#include "lavik/storage/detail/grouped_scratch.h"
+#include "lavik/storage/detail/ordered_compact_codec.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 namespace {
 
-constexpr std::string_view kListMagic = "KLL1";
+constexpr std::string_view kListMagic = "LVL1";
 constexpr std::size_t kListHeaderBytes = 8;
 
 void AppendU32(std::string* output, std::uint32_t value) {
@@ -303,7 +303,7 @@ Task<absl::StatusOr<ListResult>> StorageEngine::Impl::ExecuteListLocked(
           auto& plan = mutation.plan_;
           found = nullptr;
           unlock.Unlock();
-          KEYLANE_FAULT_INJECT({
+          LAVIK_FAULT_INJECT({
             const auto paused = co_await PauseGroupedWriteForTest(
                 *store.worker_, key, "prepare");
             if (!paused.ok()) co_return paused;
@@ -358,16 +358,15 @@ Task<absl::StatusOr<ListResult>> StorageEngine::Impl::ExecuteListLocked(
       found = nullptr;
       unlock.Unlock();
     }
-    KEYLANE_FAULT_INJECT(if (unlocked_create) {
-      KEYLANE_FAULT_BAD_ALLOC("KEYLANE_FAIL_COLLECTION_CREATE_PREPARE_KEY",
-                              key);
+    LAVIK_FAULT_INJECT(if (unlocked_create) {
+      LAVIK_FAULT_BAD_ALLOC("LAVIK_FAIL_COLLECTION_CREATE_PREPARE_KEY", key);
     });
-    KEYLANE_FAULT_INJECT(if (unlocked_compact_write) {
+    LAVIK_FAULT_INJECT(if (unlocked_compact_write) {
       auto paused = co_await PauseCompactWriteForTest(*store.worker_, key);
       if (!paused.ok()) co_return paused;
     });
-    KEYLANE_FAULT_INJECT(if (read_only) {
-      if (const char* configured = std::getenv("KEYLANE_LIST_READ_PAUSE_MS");
+    LAVIK_FAULT_INJECT(if (read_only) {
+      if (const char* configured = std::getenv("LAVIK_LIST_READ_PAUSE_MS");
           configured != nullptr) {
         std::uint64_t milliseconds = 0;
         const char* end = configured + std::strlen(configured);
@@ -592,7 +591,7 @@ Task<absl::StatusOr<ListResult>> StorageEngine::Impl::ExecuteListLocked(
           prepared_compact_payload.emplace(std::move(*encoded));
         }
       }
-      KEYLANE_FAULT_INJECT(if (unlocked_create) {
+      LAVIK_FAULT_INJECT(if (unlocked_create) {
         const auto paused =
             co_await PauseGroupedWriteForTest(*store.worker_, key, "create");
         if (!paused.ok()) co_return paused;
@@ -664,4 +663,4 @@ Task<absl::StatusOr<ListResult>> StorageEngine::Impl::ExecuteListLocked(
   }
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

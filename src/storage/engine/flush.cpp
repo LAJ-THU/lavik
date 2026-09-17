@@ -16,7 +16,7 @@
 
 #include "impl.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 Task<absl::Status> StorageEngine::Impl::PeriodicFlush(WorkerStore* store) {
   const auto interval = std::chrono::milliseconds(options_.flush_max_ms_);
@@ -312,13 +312,13 @@ Task<absl::Status> StorageEngine::Impl::FlushPendingBlocks(WorkerStore* store) {
             : FixedBuffer{.data_ = pending->heap_data_,
                           .size_ = pending->heap_data_size_,
                           .index_ = 0};
-    KEYLANE_FAULT_INJECT(
+    LAVIK_FAULT_INJECT(
         // Deterministic regression hook for the dirty-tail ordering window: let
         // a command append beyond this immutable flush snapshot and roll to a
         // later block before the snapshot completes. Only the first flush in
         // the process pauses; ordinary release builds contain no hook.
         static std::atomic<bool> pause_claimed = false;
-        const char* pause_text = std::getenv("KEYLANE_FLUSH_SNAPSHOT_PAUSE_MS");
+        const char* pause_text = std::getenv("LAVIK_FLUSH_SNAPSHOT_PAUSE_MS");
         bool expected_pause = false;
         if (pause_text != nullptr &&
             pause_claimed.compare_exchange_strong(expected_pause, true)) {
@@ -561,4 +561,4 @@ bool StorageEngine::Impl::IsActiveBlock(const WorkerStore& store,
   return false;
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

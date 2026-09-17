@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/ctl_server.h"
+#include "lavik/meta/ctl_server.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -59,27 +59,27 @@
 #include "libnuraft/srv_config.hxx"
 #pragma GCC diagnostic pop
 
-#include "keylane/cluster/control_protocol.h"
-#include "keylane/cluster/control_transport.h"
-#include "keylane/meta/automatic_failover_detector.h"
-#include "keylane/meta/cluster_create.h"
-#include "keylane/meta/cluster_create_reconciler.h"
-#include "keylane/meta/cluster_status.h"
-#include "keylane/meta/commands.h"
-#include "keylane/meta/coordinator.h"
-#include "keylane/meta/data_control_runtime_status.h"
-#include "keylane/meta/failover.h"
-#include "keylane/meta/failover_admin.h"
-#include "keylane/meta/hash.h"
-#include "keylane/meta/identity_verifier.h"
-#include "keylane/meta/membership_reconciler.h"
-#include "keylane/meta/observation_store.h"
-#include "keylane/meta/population_manifest_store.h"
-#include "keylane/meta/proposal_executor.h"
-#include "keylane/meta/state_machine.h"
-#include "keylane/numeric_endpoint.h"
+#include "lavik/cluster/control_protocol.h"
+#include "lavik/cluster/control_transport.h"
+#include "lavik/meta/automatic_failover_detector.h"
+#include "lavik/meta/cluster_create.h"
+#include "lavik/meta/cluster_create_reconciler.h"
+#include "lavik/meta/cluster_status.h"
+#include "lavik/meta/commands.h"
+#include "lavik/meta/coordinator.h"
+#include "lavik/meta/data_control_runtime_status.h"
+#include "lavik/meta/failover.h"
+#include "lavik/meta/failover_admin.h"
+#include "lavik/meta/hash.h"
+#include "lavik/meta/identity_verifier.h"
+#include "lavik/meta/membership_reconciler.h"
+#include "lavik/meta/observation_store.h"
+#include "lavik/meta/population_manifest_store.h"
+#include "lavik/meta/proposal_executor.h"
+#include "lavik/meta/state_machine.h"
+#include "lavik/numeric_endpoint.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 
 // All Core members below the bind status are worker-thread only; the Core
 // outlives individual sessions via shared_ptr.
@@ -1989,14 +1989,14 @@ bycorf::Task<std::string> HandleConfigChange(
     // Persist the same canonical addresses as the identity store. Otherwise
     // an equivalent IPv6/port spelling would appear to diverge after bind,
     // or a retry could fail to recognize its original operation.
-    auto raft = keylane::ParseNumericEndpoint(endpoint);
-    auto data = keylane::ParseNumericEndpoint(data_control_endpoint);
-    auto ctl = keylane::ParseNumericEndpoint(ctl_endpoint);
+    auto raft = lavik::ParseNumericEndpoint(endpoint);
+    auto data = lavik::ParseNumericEndpoint(data_control_endpoint);
+    auto ctl = lavik::ParseNumericEndpoint(ctl_endpoint);
     if (!raft) co_return "ERR bad-request";
     if (!data || !ctl) co_return "ERR rejected";
-    endpoint = keylane::FormatNumericEndpoint(*raft);
-    data_control_endpoint = keylane::FormatNumericEndpoint(*data);
-    ctl_endpoint = keylane::FormatNumericEndpoint(*ctl);
+    endpoint = lavik::FormatNumericEndpoint(*raft);
+    data_control_endpoint = lavik::FormatNumericEndpoint(*data);
+    ctl_endpoint = lavik::FormatNumericEndpoint(*ctl);
   }
   const auto before = state_machine->StoresSnapshot();
   if (before.topology_.ClusterLifecycle().state_ ==
@@ -2051,7 +2051,7 @@ bycorf::Task<std::string> HandleConfigChange(
       intent.bindings_.push_back(*binding);
     }
     if (add) {
-      if (!keylane::ParseNumericEndpoint(endpoint).has_value())
+      if (!lavik::ParseNumericEndpoint(endpoint).has_value())
         co_return "ERR bad-request";
       intent.target_ = {
           .id_ = static_cast<std::uint32_t>(server_id),
@@ -2648,8 +2648,7 @@ bycorf::Task<std::string> DispatchCommand(
     if (!ParseServerId(tokens[1], server_id)) {
       co_return "ERR bad-request";
     }
-    std::string member_principal =
-        "keylane://meta/" + std::to_string(server_id);
+    std::string member_principal = "lavik://meta/" + std::to_string(server_id);
     if (add && tokens.size() == 6u) {
       member_principal = tokens[5];
     }
@@ -2761,7 +2760,7 @@ absl::Status MetaCtlServer::ValidateOptions(
         "TCP ctl host must be a concrete numeric address");
   }
   const auto local_endpoint =
-      keylane::ParseNumericEndpoint(options.local_ctl_endpoint_);
+      lavik::ParseNumericEndpoint(options.local_ctl_endpoint_);
   if (!local_endpoint.has_value() ||
       local_endpoint->host_ != options.bind_host_ ||
       local_endpoint->port_ != options.port_) {
@@ -3053,7 +3052,7 @@ bycorf::Task<absl::Status> MetaCtlServer::SessionLoop(
     // Reachability of this explicitly configured listener is the operator
     // authorization boundary.
     identity = MetaPrincipalIdentity{
-        "keylane://operator/plaintext", MetaPrincipalRole::kOperator, {}};
+        "lavik://operator/plaintext", MetaPrincipalRole::kOperator, {}};
   }
   if (!identity.ok()) {
     spdlog::warn("ctl rejected unauthenticated peer: {}",
@@ -3146,4 +3145,4 @@ bycorf::Task<absl::Status> MetaCtlServer::SessionLoop(
   co_return absl::OkStatus();
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

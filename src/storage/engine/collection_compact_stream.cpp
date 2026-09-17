@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/storage/detail/collection_compact_stream.h"
+#include "lavik/storage/detail/collection_compact_stream.h"
 
 #include <algorithm>
 #include <bit>
@@ -23,9 +23,9 @@
 #include <limits>
 #include <new>
 
-#include "keylane/storage/detail/grouped_hash.h"
+#include "lavik/storage/detail/grouped_hash.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 bool HashWire(ValueType type) {
@@ -106,7 +106,7 @@ absl::StatusOr<CollectionCompactEncoder> CollectionCompactEncoder::Create(
     Put(out + 16, count, 4);
     Put(out + 24, bytes, 8);
   } else {
-    std::memcpy(out, type == ValueType::kList ? "KLL1" : "KZS1", 4);
+    std::memcpy(out, type == ValueType::kList ? "LVL1" : "LZS1", 4);
     Put(out + 4, count, 4);
   }
   return result;
@@ -245,7 +245,7 @@ absl::Status CollectionCompactDecoder::ReadHeader() {
         Get(in + 16, 4) != total_count_ || Get(in + 20, 4) != 0 ||
         Get(in + 24, 8) != total_bytes_)
       return absl::DataLossError("invalid compact Hash/Set stream header");
-  } else if (std::memcmp(in, type_ == ValueType::kList ? "KLL1" : "KZS1", 4) !=
+  } else if (std::memcmp(in, type_ == ValueType::kList ? "LVL1" : "LZS1", 4) !=
                  0 ||
              Get(in + 4, 4) != total_count_) {
     return absl::DataLossError("invalid ordered compact stream header");
@@ -412,4 +412,4 @@ absl::Status CollectionCompactDecoder::Finish() {
   return absl::OkStatus();
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

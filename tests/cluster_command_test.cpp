@@ -32,16 +32,16 @@
 #include "../src/redis/cluster_gate.h"
 #include "absl/strings/str_cat.h"
 #include "cluster/test_topology_installer.h"
-#include "keylane/cluster/runtime.h"
-#include "keylane/cluster/topology.h"
-#include "keylane/resp.h"
-#include "keylane/resp_version.h"
-#include "keylane/session.h"
-#include "keylane/storage/format.h"
+#include "lavik/cluster/runtime.h"
+#include "lavik/cluster/topology.h"
+#include "lavik/resp.h"
+#include "lavik/resp_version.h"
+#include "lavik/session.h"
+#include "lavik/storage/format.h"
 
 namespace {
 
-namespace cluster = keylane::cluster;
+namespace cluster = lavik::cluster;
 
 // Node ids are 40 lowercase hex chars, as the topology builder validates.
 constexpr std::string_view kNodeA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -164,10 +164,10 @@ class ClusterRuntimeGuard {
   ~ClusterRuntimeGuard() { cluster::InstallClusterRuntime(nullptr); }
 };
 
-keylane::CommandRequest MakeRequest(std::vector<std::string> args,
-                                    bool connection_tls = false) {
-  keylane::CommandRequest request;
-  request.kind_ = keylane::CommandKind::kCluster;
+lavik::CommandRequest MakeRequest(std::vector<std::string> args,
+                                  bool connection_tls = false) {
+  lavik::CommandRequest request;
+  request.kind_ = lavik::CommandKind::kCluster;
   request.args_ = std::move(args);
   request.connection_tls_ = connection_tls;
   return request;
@@ -177,10 +177,10 @@ keylane::CommandRequest MakeRequest(std::vector<std::string> args,
 // subcommands never suspend; a pending handle here means the handler grew an
 // await and this driver must be revisited.
 std::string RunClusterCommand(
-    const keylane::CommandRequest& request,
-    keylane::RespVersion version = keylane::RespVersion::k2) {
-  keylane::ReplyBuilder builder(version);
-  auto task = keylane::ExecuteClusterModeCommand(request, builder);
+    const lavik::CommandRequest& request,
+    lavik::RespVersion version = lavik::RespVersion::k2) {
+  lavik::ReplyBuilder builder(version);
+  auto task = lavik::ExecuteClusterModeCommand(request, builder);
   auto handle = std::move(task).ReleaseHandle();
   handle.resume();
   EXPECT_TRUE(handle.done());
@@ -194,14 +194,14 @@ std::string RunClusterCommand(
   return encoded;
 }
 
-std::string RunDispatch(keylane::ConnectionContext& context,
+std::string RunDispatch(lavik::ConnectionContext& context,
                         std::vector<std::string> args) {
-  auto request = keylane::BuildCommandRequest(
-      keylane::RespCommand{.args_ = std::move(args)}, context.selected_db_);
+  auto request = lavik::BuildCommandRequest(
+      lavik::RespCommand{.args_ = std::move(args)}, context.selected_db_);
   EXPECT_TRUE(request.ok()) << request.status();
   if (!request.ok()) return {};
-  keylane::ReplyBuilder builder(context.resp_version());
-  auto task = keylane::DispatchCommand(context, *request, builder);
+  lavik::ReplyBuilder builder(context.resp_version());
+  auto task = lavik::DispatchCommand(context, *request, builder);
   auto handle = std::move(task).ReleaseHandle();
   handle.resume();
   EXPECT_TRUE(handle.done());
@@ -214,7 +214,7 @@ std::string RunDispatch(keylane::ConnectionContext& context,
 std::string ChannelInGroupARange(std::uint16_t different_from = 101) {
   for (std::uint32_t suffix = 0; suffix < 100000; ++suffix) {
     const std::string candidate = "issue41-channel-" + std::to_string(suffix);
-    const std::uint16_t slot = keylane::storage::RedisSlot(candidate);
+    const std::uint16_t slot = lavik::storage::RedisSlot(candidate);
     if (slot <= 100 && slot != different_from) return candidate;
   }
   ADD_FAILURE() << "failed to find deterministic channel in group-a range";
@@ -247,20 +247,20 @@ std::string_view BulkPayload(std::string_view reply) {
 // [host, port, node-id] entry of a CLUSTER SLOTS range, as nested arrays.
 std::string SlotsNode(std::string_view host, std::uint16_t port,
                       std::string_view node_id) {
-  return absl::StrCat("*3\r\n", keylane::EncodeBulkString(host), ":", port,
-                      "\r\n", keylane::EncodeBulkString(node_id));
+  return absl::StrCat("*3\r\n", lavik::EncodeBulkString(host), ":", port,
+                      "\r\n", lavik::EncodeBulkString(node_id));
 }
 
 TEST(ClusterCommandTest, KeySlotWorksWithoutClusterState) {
   cluster::InstallClusterRuntime(nullptr);
   EXPECT_EQ(RunClusterCommand(MakeRequest({"CLUSTER", "KEYSLOT", "foo"})),
-            keylane::EncodeInteger(keylane::storage::RedisSlot("foo")));
+            lavik::EncodeInteger(lavik::storage::RedisSlot("foo")));
   // The {hashtag} portion decides the slot, so these must agree.
   EXPECT_EQ(RunClusterCommand(MakeRequest({"CLUSTER", "KEYSLOT", "{k}a"})),
             RunClusterCommand(MakeRequest({"CLUSTER", "KEYSLOT", "{k}b"})));
   // Subcommand matching is case-insensitive.
   EXPECT_EQ(RunClusterCommand(MakeRequest({"cluster", "keyslot", "foo"})),
-            keylane::EncodeInteger(keylane::storage::RedisSlot("foo")));
+            lavik::EncodeInteger(lavik::storage::RedisSlot("foo")));
 }
 
 TEST(ClusterCommandTest, PublishUsesItsChannelSlotAndHonorsControlledPause) {
@@ -268,7 +268,7 @@ TEST(ClusterCommandTest, PublishUsesItsChannelSlotAndHonorsControlledPause) {
                                          /*pause_group_a=*/true);
   ASSERT_NE(state, nullptr);
   ClusterRuntimeGuard guard(MakeRuntime(state));
-  keylane::ConnectionContext context;
+  lavik::ConnectionContext context;
 
   EXPECT_EQ(
       RunDispatch(context, {"PUBLISH", ChannelInGroupARange(), "payload"}),
@@ -280,7 +280,7 @@ TEST(ClusterCommandTest, SubcommandErrorsMatchRedis) {
   const auto expect_error = [](std::vector<std::string> args,
                                std::string_view subcommand) {
     EXPECT_EQ(RunClusterCommand(MakeRequest(std::move(args))),
-              keylane::EncodeError(absl::StrCat(
+              lavik::EncodeError(absl::StrCat(
                   "ERR Unknown CLUSTER subcommand or wrong number of "
                   "arguments for '",
                   subcommand, "'")));
@@ -304,7 +304,7 @@ TEST(ClusterCommandTest, SubcommandErrorsMatchRedis) {
   expect_error({"CLUSTER", "NODES", "x"}, "NODES");
   // Below the command's minimum arity the table-level error text applies.
   EXPECT_EQ(RunClusterCommand(MakeRequest({"CLUSTER"})),
-            keylane::EncodeError(
+            lavik::EncodeError(
                 "ERR wrong number of arguments for 'cluster' command"));
 }
 
@@ -314,19 +314,19 @@ TEST(ClusterCommandTest, MyIdReportsSelfNodeId) {
   ASSERT_NE(state, nullptr);
   ClusterRuntimeGuard guard(MakeRuntime(state));
   EXPECT_EQ(RunClusterCommand(MakeRequest({"CLUSTER", "MYID"})),
-            keylane::EncodeBulkString(kNodeA));
+            lavik::EncodeBulkString(kNodeA));
 }
 
 TEST(ClusterCommandTest, MyIdIsEmptyWithoutSelf) {
   // No runtime installed at all.
   cluster::InstallClusterRuntime(nullptr);
   EXPECT_EQ(RunClusterCommand(MakeRequest({"CLUSTER", "MYID"})),
-            keylane::EncodeBulkString(""));
+            lavik::EncodeBulkString(""));
   // Runtime installed but no ServingState published yet.
   {
     ClusterRuntimeGuard guard(MakeRuntime(nullptr));
     EXPECT_EQ(RunClusterCommand(MakeRequest({"CLUSTER", "MYID"})),
-              keylane::EncodeBulkString(""));
+              lavik::EncodeBulkString(""));
   }
   // Published state whose topology does not name this node.
   const std::shared_ptr<const cluster::ServingState> state =
@@ -334,7 +334,7 @@ TEST(ClusterCommandTest, MyIdIsEmptyWithoutSelf) {
   ASSERT_NE(state, nullptr);
   ClusterRuntimeGuard guard(MakeRuntime(state));
   EXPECT_EQ(RunClusterCommand(MakeRequest({"CLUSTER", "MYID"})),
-            keylane::EncodeBulkString(""));
+            lavik::EncodeBulkString(""));
 }
 
 TEST(ClusterCommandTest, InfoReportsPinnedFieldSet) {
@@ -343,17 +343,17 @@ TEST(ClusterCommandTest, InfoReportsPinnedFieldSet) {
   ASSERT_NE(state, nullptr);
   ClusterRuntimeGuard guard(MakeRuntime(state));
   EXPECT_EQ(RunClusterCommand(MakeRequest({"CLUSTER", "INFO"})),
-            keylane::EncodeBulkString("cluster_state:ok\r\n"
-                                      "cluster_slots_assigned:16384\r\n"
-                                      "cluster_slots_ok:16384\r\n"
-                                      "cluster_slots_pfail:0\r\n"
-                                      "cluster_slots_fail:0\r\n"
-                                      "cluster_known_nodes:3\r\n"
-                                      "cluster_size:2\r\n"
-                                      "cluster_current_epoch:2\r\n"
-                                      "cluster_my_epoch:1\r\n"
-                                      "cluster_stats_messages_sent:0\r\n"
-                                      "cluster_stats_messages_received:0\r\n"));
+            lavik::EncodeBulkString("cluster_state:ok\r\n"
+                                    "cluster_slots_assigned:16384\r\n"
+                                    "cluster_slots_ok:16384\r\n"
+                                    "cluster_slots_pfail:0\r\n"
+                                    "cluster_slots_fail:0\r\n"
+                                    "cluster_known_nodes:3\r\n"
+                                    "cluster_size:2\r\n"
+                                    "cluster_current_epoch:2\r\n"
+                                    "cluster_my_epoch:1\r\n"
+                                    "cluster_stats_messages_sent:0\r\n"
+                                    "cluster_stats_messages_received:0\r\n"));
 }
 
 TEST(ClusterCommandTest, InfoReportsCoverageGap) {
@@ -364,33 +364,33 @@ TEST(ClusterCommandTest, InfoReportsCoverageGap) {
   ASSERT_NE(state, nullptr);
   ClusterRuntimeGuard guard(MakeRuntime(state));
   EXPECT_EQ(RunClusterCommand(MakeRequest({"CLUSTER", "INFO"})),
-            keylane::EncodeBulkString("cluster_state:fail\r\n"
-                                      "cluster_slots_assigned:201\r\n"
-                                      "cluster_slots_ok:201\r\n"
-                                      "cluster_slots_pfail:0\r\n"
-                                      "cluster_slots_fail:0\r\n"
-                                      "cluster_known_nodes:3\r\n"
-                                      "cluster_size:2\r\n"
-                                      "cluster_current_epoch:2\r\n"
-                                      "cluster_my_epoch:1\r\n"
-                                      "cluster_stats_messages_sent:0\r\n"
-                                      "cluster_stats_messages_received:0\r\n"));
+            lavik::EncodeBulkString("cluster_state:fail\r\n"
+                                    "cluster_slots_assigned:201\r\n"
+                                    "cluster_slots_ok:201\r\n"
+                                    "cluster_slots_pfail:0\r\n"
+                                    "cluster_slots_fail:0\r\n"
+                                    "cluster_known_nodes:3\r\n"
+                                    "cluster_size:2\r\n"
+                                    "cluster_current_epoch:2\r\n"
+                                    "cluster_my_epoch:1\r\n"
+                                    "cluster_stats_messages_sent:0\r\n"
+                                    "cluster_stats_messages_received:0\r\n"));
 }
 
 TEST(ClusterCommandTest, InfoWithoutStateFailsAndZeroes) {
   ClusterRuntimeGuard guard(MakeRuntime(nullptr));
   EXPECT_EQ(RunClusterCommand(MakeRequest({"CLUSTER", "INFO"})),
-            keylane::EncodeBulkString("cluster_state:fail\r\n"
-                                      "cluster_slots_assigned:0\r\n"
-                                      "cluster_slots_ok:0\r\n"
-                                      "cluster_slots_pfail:0\r\n"
-                                      "cluster_slots_fail:0\r\n"
-                                      "cluster_known_nodes:0\r\n"
-                                      "cluster_size:0\r\n"
-                                      "cluster_current_epoch:0\r\n"
-                                      "cluster_my_epoch:0\r\n"
-                                      "cluster_stats_messages_sent:0\r\n"
-                                      "cluster_stats_messages_received:0\r\n"));
+            lavik::EncodeBulkString("cluster_state:fail\r\n"
+                                    "cluster_slots_assigned:0\r\n"
+                                    "cluster_slots_ok:0\r\n"
+                                    "cluster_slots_pfail:0\r\n"
+                                    "cluster_slots_fail:0\r\n"
+                                    "cluster_known_nodes:0\r\n"
+                                    "cluster_size:0\r\n"
+                                    "cluster_current_epoch:0\r\n"
+                                    "cluster_my_epoch:0\r\n"
+                                    "cluster_stats_messages_sent:0\r\n"
+                                    "cluster_stats_messages_received:0\r\n"));
 }
 
 TEST(ClusterCommandTest, SlotsGroupsRangesByOwningGroup) {
@@ -407,7 +407,7 @@ TEST(ClusterCommandTest, SlotsGroupsRangesByOwningGroup) {
   EXPECT_EQ(RunClusterCommand(MakeRequest({"CLUSTER", "SLOTS"})), expected);
   // RESP2 and RESP3 share the discovery wire shape.
   EXPECT_EQ(RunClusterCommand(MakeRequest({"CLUSTER", "SLOTS"}),
-                              keylane::RespVersion::k3),
+                              lavik::RespVersion::k3),
             expected);
 }
 
@@ -537,7 +537,7 @@ TEST(ClusterCommandTest, NodesCompactsSlotRangesAndFlagsLinkState) {
 TEST(ClusterCommandTest, NodesIsEmptyWithoutState) {
   ClusterRuntimeGuard guard(MakeRuntime(nullptr));
   EXPECT_EQ(RunClusterCommand(MakeRequest({"CLUSTER", "NODES"})),
-            keylane::EncodeBulkString(""));
+            lavik::EncodeBulkString(""));
 }
 
 TEST(ClusterRequestAuthorityTest, SessionLossRevokesCapturedWriteAdmission) {
@@ -589,7 +589,7 @@ TEST(ClusterRequestAuthorityTest, SessionLossRevokesCapturedWriteAdmission) {
                       now)
                   .ok());
 
-  keylane::CommandRequest request;
+  lavik::CommandRequest request;
   request.AddClusterSlot(42);
   const cluster::RequestView view{
       .slots_ = request.ClusterSlots(),
@@ -602,16 +602,16 @@ TEST(ClusterRequestAuthorityTest, SessionLossRevokesCapturedWriteAdmission) {
             cluster::Decision::Kind::kServe);
 
   ClusterRuntimeGuard runtime_guard(std::move(runtime));
-  EXPECT_TRUE(keylane::RecheckClusterRequestAuthority(request).ok());
+  EXPECT_TRUE(lavik::RecheckClusterRequestAuthority(request).ok());
   ASSERT_TRUE(
       cluster::GetClusterRuntime()
           ->node_control_installer_.LoseSession(session, "test disconnect")
           .ok());
-  EXPECT_TRUE(keylane::IsClusterAuthorityChanged(
-      keylane::RecheckClusterRequestAuthority(request)));
+  EXPECT_TRUE(lavik::IsClusterAuthorityChanged(
+      lavik::RecheckClusterRequestAuthority(request)));
 
-  keylane::ReplyBuilder reply_builder(keylane::RespVersion::k2);
-  const keylane::CommandReply reply = keylane::ClusterAuthorityChangedReply(
+  lavik::ReplyBuilder reply_builder(lavik::RespVersion::k2);
+  const lavik::CommandReply reply = lavik::ClusterAuthorityChangedReply(
       request.ClusterSlots(), /*connection_tls=*/false, reply_builder);
   EXPECT_FALSE(reply.close_connection_);
   EXPECT_EQ(reply.encoded_, "-CLUSTERDOWN Hash slot not served\r\n");
@@ -628,15 +628,15 @@ TEST(ClusterRequestAuthorityTest,
   ASSERT_TRUE(topology.Install(state, cluster::LeaseClockNow()).ok());
   ClusterRuntimeGuard runtime_guard(std::move(runtime));
 
-  keylane::CommandRequest request;
-  request.kind_ = keylane::CommandKind::kBLPop;
+  lavik::CommandRequest request;
+  request.kind_ = lavik::CommandKind::kBLPop;
   request.AddClusterSlot(42);
-  keylane::ReplyBuilder reply_builder(keylane::RespVersion::k2);
+  lavik::ReplyBuilder reply_builder(lavik::RespVersion::k2);
   cluster::AuthorityInFlightGuards guards;
 
-  const std::optional<keylane::CommandReply> rejected =
-      keylane::RegisterClusterBlockingWriteAttempt(request, reply_builder,
-                                                   &guards);
+  const std::optional<lavik::CommandReply> rejected =
+      lavik::RegisterClusterBlockingWriteAttempt(request, reply_builder,
+                                                 &guards);
   ASSERT_FALSE(rejected.has_value());
   EXPECT_EQ(guards.size(), 1u);
   EXPECT_EQ(state->GroupInFlightCount("group-a"), 1u);

@@ -18,7 +18,7 @@ limitations under the License.
 
 ## Responsibility and boundary
 
-The transaction subsystem serializes conflicting key access across Keylane's
+The transaction subsystem serializes conflicting key access across Lavik's
 worker-affine storage shards. It provides shard-local shared/exclusive locking
 for ordinary storage operations, a txid-ordered wait queue for contention, and
 a coordinator for commands that must hold keys on several workers or across
@@ -262,15 +262,15 @@ deadline, or timeout for a slow held predecessor.
 
 | Claim | Repository source |
 |---|---|
-| Lock modes, fingerprint identity, key references, and collision boundary | `include/keylane/tx/fingerprint.h`, `include/keylane/tx/transaction.h` |
-| Intent/hold compatibility and the hold-subset-of-intent invariant | `include/keylane/tx/intent_lock.h` |
-| Waiter flavors, txid ordering, removal, and tombstones | `include/keylane/tx/tx_queue.h` |
-| Shard-local acquisition, ordered and bypass-ready polling, WATCH tables, runtime, and metrics | `include/keylane/tx/tx_shard.h`, `src/tx/tx_shard.cpp` |
-| Key grouping, schedule/cancel/arm phases, callbacks, barriers, and release | `include/keylane/tx/transaction.h`, `src/tx/transaction.cpp` |
+| Lock modes, fingerprint identity, key references, and collision boundary | `include/lavik/tx/fingerprint.h`, `include/lavik/tx/transaction.h` |
+| Intent/hold compatibility and the hold-subset-of-intent invariant | `include/lavik/tx/intent_lock.h` |
+| Waiter flavors, txid ordering, removal, and tombstones | `include/lavik/tx/tx_queue.h` |
+| Shard-local acquisition, ordered and bypass-ready polling, WATCH tables, runtime, and metrics | `include/lavik/tx/tx_shard.h`, `src/tx/tx_shard.cpp` |
+| Key grouping, schedule/cancel/arm phases, callbacks, barriers, and release | `include/lavik/tx/transaction.h`, `src/tx/transaction.cpp` |
 | Runtime creation, worker binding, and recovery seeding | `src/redis/server.cpp`, `src/storage/engine/init.cpp` |
-| Command construction, multi-hop use, WATCH checks, replication entry hook, and INFO fields | `include/keylane/command.h`, `include/keylane/session.h`, `src/redis/command.cpp`, `src/redis/string_command.cpp`, `src/redis/set_command.cpp`, `src/redis/list_command.cpp`, `src/redis/sort_command.cpp`, `src/redis/zset_command.cpp` |
-| Owner routing and the pre-locked storage contract | `include/keylane/storage/engine.h`, `src/storage/engine/impl.h` |
+| Command construction, multi-hop use, WATCH checks, replication entry hook, and INFO fields | `include/lavik/command.h`, `include/lavik/session.h`, `src/redis/command.cpp`, `src/redis/string_command.cpp`, `src/redis/set_command.cpp`, `src/redis/list_command.cpp`, `src/redis/sort_command.cpp`, `src/redis/zset_command.cpp` |
+| Owner routing and the pre-locked storage contract | `include/lavik/storage/engine.h`, `src/storage/engine/impl.h` |
 | Ordinary and background storage participation in transaction locks | `src/storage/engine/read.cpp`, `src/storage/engine/write.cpp`, `src/storage/engine/expire.cpp`, `src/storage/engine/backup.cpp`, `src/storage/engine/replication.cpp`, `src/storage/engine/tomb_raider.cpp` |
 | Mutation and database-wide WATCH marking | `src/storage/engine/write.cpp`, `src/storage/engine/expire.cpp`, `src/storage/engine/flush_db.cpp`, `src/storage/engine/replication.cpp` |
-| Durable write ids, undo/commit boundary, worker-local commit batching and backpressure, and storage-owned crash atomicity | `include/keylane/storage/engine.h`, `src/storage/engine.cpp`, `src/storage/engine/write.cpp`, `src/redis/command.cpp`, `src/storage/engine/recovery.cpp`, `src/storage/engine/tx_cleaner.cpp` |
+| Durable write ids, undo/commit boundary, worker-local commit batching and backpressure, and storage-owned crash atomicity | `include/lavik/storage/engine.h`, `src/storage/engine.cpp`, `src/storage/engine/write.cpp`, `src/redis/command.cpp`, `src/storage/engine/recovery.cpp`, `src/storage/engine/tx_cleaner.cpp` |
 | Direct lock tests and end-to-end transaction coverage | `tests/tx_lock_test.cpp`, `tests/multikey_e2e_test.cpp`, `tests/multi_exec_e2e_test.cpp`, `tests/atomicity_stress_e2e_test.cpp` |

@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-#include "keylane/cluster/runtime.h"
+#include "lavik/cluster/runtime.h"
 
-namespace keylane::cluster {
+namespace lavik::cluster {
 
 namespace {
 std::unique_ptr<ClusterRuntime> g_cluster_runtime;
@@ -39,4 +39,4 @@ void InstallClusterRuntime(std::unique_ptr<ClusterRuntime> runtime) noexcept {
   g_cluster_runtime = std::move(runtime);
 }
 
-}  // namespace keylane::cluster
+}  // namespace lavik::cluster

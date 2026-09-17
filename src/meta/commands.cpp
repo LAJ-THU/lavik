@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/commands.h"
+#include "lavik/meta/commands.h"
 
 #include <algorithm>
 #include <limits>
@@ -22,9 +22,9 @@
 #include <vector>
 
 #include "absl/strings/str_cat.h"
-#include "keylane/meta/value_codec.h"
+#include "lavik/meta/value_codec.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
 // Encode-side cap enforcement. A locally constructed out-of-spec command is a
@@ -2651,4 +2651,4 @@ absl::StatusOr<MetaGroupRecord> DecodeMetaGroupRecord(std::string_view bytes) {
   return record;
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

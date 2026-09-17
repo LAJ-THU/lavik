@@ -18,10 +18,10 @@
 
 #include <string>
 
-#include "keylane/meta/encoding.h"
-#include "keylane/meta/topology_store.h"
+#include "lavik/meta/encoding.h"
+#include "lavik/meta/topology_store.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 
 // Fixture-only corruption/setup seam. Production authority transitions cannot
 // independently overwrite the Group's term or owner.
@@ -48,4 +48,4 @@ class MetaTopologyTestAccess {
   }
 };
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

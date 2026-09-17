@@ -19,7 +19,7 @@
 
 #include "impl.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 namespace {
 
@@ -278,10 +278,10 @@ Task<absl::Status> StorageEngine::Impl::MaybeRunTxCleaner(bool force) {
                                 std::memory_order_release);
   tx_cleaner_rounds_.fetch_add(1, std::memory_order_relaxed);
   absl::Status status = absl::OkStatus();
-  KEYLANE_FAULT_INJECT(
+  LAVIK_FAULT_INJECT(
       static std::atomic<bool> cleaner_failure_claimed = false;
       bool expected_failure = false;
-      if (std::getenv("KEYLANE_FAIL_TX_CLEANER_ONCE") != nullptr &&
+      if (std::getenv("LAVIK_FAIL_TX_CLEANER_ONCE") != nullptr &&
           cleaner_failure_claimed.compare_exchange_strong(
               expected_failure, true, std::memory_order_acq_rel)) {
         status = absl::FailedPreconditionError(
@@ -749,4 +749,4 @@ Task<absl::Status> StorageEngine::Impl::DrainTxCleanerForShutdown() {
       "transaction generations did not quiesce during shutdown");
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

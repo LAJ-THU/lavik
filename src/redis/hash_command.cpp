@@ -20,9 +20,9 @@
 #include <limits>
 
 #include "cluster_gate.h"
-#include "keylane/resp.h"
+#include "lavik/resp.h"
 
-namespace keylane {
+namespace lavik {
 
 namespace {
 
@@ -335,4 +335,4 @@ Task<CommandReply> ExecuteHashCommandLocked(const CommandRequest& request,
   return ExecuteHashCommandImpl(request, &digest, tx, reply_builder);
 }
 
-}  // namespace keylane
+}  // namespace lavik

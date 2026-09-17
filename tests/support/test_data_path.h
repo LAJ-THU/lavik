@@ -21,12 +21,12 @@
 #include <string>
 #include <string_view>
 
-namespace keylane::test {
+namespace lavik::test {
 
 // Keeps large test devices and diagnostic logs relocatable without changing
 // the host's general-purpose temporary-file policy.
 inline std::filesystem::path TestDataDirectory() {
-  const char* configured = std::getenv("KEYLANE_TEST_DATA_DIR");
+  const char* configured = std::getenv("LAVIK_TEST_DATA_DIR");
   return configured != nullptr && configured[0] != '\0'
              ? std::filesystem::path(configured)
              : std::filesystem::path("/tmp");
@@ -46,4 +46,4 @@ inline std::string TestDataPathPrefix() {
   return prefix;
 }
 
-}  // namespace keylane::test
+}  // namespace lavik::test

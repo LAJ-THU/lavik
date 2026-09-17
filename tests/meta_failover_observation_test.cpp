@@ -24,11 +24,11 @@
 #include <utility>
 
 #include "gtest/gtest.h"
-#include "keylane/meta/observation_store.h"
+#include "lavik/meta/observation_store.h"
 
 namespace {
 
-namespace meta = keylane::meta;
+namespace meta = lavik::meta;
 
 template <std::size_t N>
 std::array<std::uint8_t, N> Bytes(std::uint8_t value) {

@@ -28,13 +28,13 @@
 
 #include "../src/storage/engine/impl.h"
 #include "bycorf/net/server.h"
-#include "keylane/memory.h"
-#include "keylane/metrics.h"
-#include "keylane/storage/engine.h"
-#include "keylane/tx/tx_shard.h"
+#include "lavik/memory.h"
+#include "lavik/metrics.h"
+#include "lavik/storage/engine.h"
+#include "lavik/tx/tx_shard.h"
 #include "support/test_data_path.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 class ExpirationAuthorityTestPeer {
  public:
@@ -108,7 +108,7 @@ class ExpirationAuthorityTestPeer {
     return absl::OkStatus();
   }
 
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
   using Point = StorageEngine::Impl::ExpirationTestPoint;
   using Hook = StorageEngine::Impl::ExpirationTestHook;
 
@@ -131,7 +131,7 @@ class ExpirationAuthorityTestPeer {
 #endif
 };
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage
 
 namespace {
 
@@ -168,10 +168,10 @@ std::uint64_t FileSize(const std::string& path) {
 
 absl::Status Prepare(const std::vector<std::string>& paths,
                      bool reset = false) {
-  keylane::storage::StorageEngineOptions options;
+  lavik::storage::StorageEngineOptions options;
   options.data_files_ = paths;
   options.reset_data_files_ = reset;
-  keylane::storage::StorageEngine engine(std::move(options));
+  lavik::storage::StorageEngine engine(std::move(options));
   return engine.Prepare(1);
 }
 
@@ -192,7 +192,7 @@ constexpr std::chrono::nanoseconds FarFutureExpirationDeadline() {
 
 class FiniteExpirationAuthorityService final : public bycorf::Service {
  public:
-  FiniteExpirationAuthorityService(keylane::storage::StorageEngine* storage,
+  FiniteExpirationAuthorityService(lavik::storage::StorageEngine* storage,
                                    bycorf::Server* server)
       : storage_(storage), server_(server) {}
 
@@ -205,8 +205,8 @@ class FiniteExpirationAuthorityService final : public bycorf::Service {
 
   bycorf::Task<absl::Status> Run(bycorf::Worker& worker,
                                  bycorf::ServiceContext) override {
-    keylane::BindMemoryAccountingShard(worker.id());
-    keylane::tx::TxRuntime::Get()->shard(worker.id()).Bind(worker);
+    lavik::BindMemoryAccountingShard(worker.id());
+    lavik::tx::TxRuntime::Get()->shard(worker.id()).Bind(worker);
     result_ = co_await storage_->InitializeWorker(worker);
     if (!result_.ok()) co_return Finish();
 
@@ -218,8 +218,8 @@ class FiniteExpirationAuthorityService final : public bycorf::Service {
         storage_->SetExpirationAuthorityUntil(FarFutureExpirationDeadline());
     if (!result_.ok()) co_return Finish();
     const absl::Status tomb_raider = co_await storage_->ConfigureTombRaider(
-        keylane::storage::TombRaiderConfigUpdate{
-            .action_ = keylane::storage::TombRaiderConfigAction::kInterval,
+        lavik::storage::TombRaiderConfigUpdate{
+            .action_ = lavik::storage::TombRaiderConfigAction::kInterval,
             .value_ = 60'000});
     if (tomb_raider.code() != absl::StatusCode::kFailedPrecondition) {
       result_ = absl::FailedPreconditionError(
@@ -229,13 +229,13 @@ class FiniteExpirationAuthorityService final : public bycorf::Service {
     // Cancellation cleanup obeys the same per-cycle work budget as actual and
     // failed deletion attempts; a zero remaining budget is a strict no-op.
     result_ =
-        keylane::storage::ExpirationAuthorityTestPeer::VerifyStaleQueueBudget(
+        lavik::storage::ExpirationAuthorityTestPeer::VerifyStaleQueueBudget(
             *storage_);
     if (!result_.ok()) co_return Finish();
     result_ =
         storage_->SetExpirationAuthorityUntil(FarFutureExpirationDeadline());
     if (!result_.ok()) co_return Finish();
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
     result_ = co_await ExerciseDurableFinalPrecondition();
     if (!result_.ok()) co_return Finish();
     result_ = co_await ExerciseUnrelatedDurableFailure();
@@ -258,20 +258,20 @@ class FiniteExpirationAuthorityService final : public bycorf::Service {
  private:
   bycorf::Task<absl::Status> SeedExpired(std::string_view key) {
     auto seeded = co_await storage_->Set(
-        0, key, "value", keylane::storage::SetOptions{.expire_at_ms_ = 1});
+        0, key, "value", lavik::storage::SetOptions{.expire_at_ms_ = 1});
     if (!seeded.ok()) co_return seeded.status();
     co_return co_await QueueExpired(key);
   }
 
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
   bycorf::Task<absl::Status> ExerciseDurableFinalPrecondition() {
     constexpr std::string_view kKey = "expiration-final-{foo}";
     absl::Status prepared = co_await SeedExpired(kKey);
     if (!prepared.ok()) co_return prepared;
     bool reached_final_append = false;
-    keylane::storage::ExpirationAuthorityTestPeer::SetHook(
+    lavik::storage::ExpirationAuthorityTestPeer::SetHook(
         *storage_, [&](auto point) -> std::optional<absl::Status> {
-          if (point == keylane::storage::ExpirationAuthorityTestPeer::Point::
+          if (point == lavik::storage::ExpirationAuthorityTestPeer::Point::
                            kBeforeDurableAppend) {
             reached_final_append = true;
             storage_->SetExpirationAuthority(false);
@@ -279,9 +279,9 @@ class FiniteExpirationAuthorityService final : public bycorf::Service {
           return std::nullopt;
         });
     expiration_paused_ = false;
-    const absl::Status expired = co_await keylane::storage::
+    const absl::Status expired = co_await lavik::storage::
         ExpirationAuthorityTestPeer::ResumeAndExpireFront(*storage_);
-    keylane::storage::ExpirationAuthorityTestPeer::SetHook(*storage_, {});
+    lavik::storage::ExpirationAuthorityTestPeer::SetHook(*storage_, {});
     absl::Status paused = co_await storage_->QuiesceExpiration();
     expiration_paused_ = paused.ok();
     if (!paused.ok()) co_return paused;
@@ -298,9 +298,9 @@ class FiniteExpirationAuthorityService final : public bycorf::Service {
     absl::Status prepared = co_await SeedExpired(kKey);
     if (!prepared.ok()) co_return prepared;
     bool injected = false;
-    keylane::storage::ExpirationAuthorityTestPeer::SetHook(
+    lavik::storage::ExpirationAuthorityTestPeer::SetHook(
         *storage_, [&](auto point) -> std::optional<absl::Status> {
-          if (point != keylane::storage::ExpirationAuthorityTestPeer::Point::
+          if (point != lavik::storage::ExpirationAuthorityTestPeer::Point::
                            kBeforeDurableAppend) {
             return std::nullopt;
           }
@@ -309,9 +309,9 @@ class FiniteExpirationAuthorityService final : public bycorf::Service {
           return absl::InternalError("injected unrelated append failure");
         });
     expiration_paused_ = false;
-    const absl::Status expired = co_await keylane::storage::
+    const absl::Status expired = co_await lavik::storage::
         ExpirationAuthorityTestPeer::ResumeAndExpireFront(*storage_);
-    keylane::storage::ExpirationAuthorityTestPeer::SetHook(*storage_, {});
+    lavik::storage::ExpirationAuthorityTestPeer::SetHook(*storage_, {});
     absl::Status paused = co_await storage_->QuiesceExpiration();
     expiration_paused_ = paused.ok();
     if (!paused.ok()) co_return paused;
@@ -330,9 +330,9 @@ class FiniteExpirationAuthorityService final : public bycorf::Service {
     if (!prepared.ok()) co_return prepared;
     bool forced_disk_full = false;
     bool reached_fallback = false;
-    keylane::storage::ExpirationAuthorityTestPeer::SetHook(
+    lavik::storage::ExpirationAuthorityTestPeer::SetHook(
         *storage_, [&](auto point) -> std::optional<absl::Status> {
-          using Point = keylane::storage::ExpirationAuthorityTestPeer::Point;
+          using Point = lavik::storage::ExpirationAuthorityTestPeer::Point;
           if (point == Point::kBeforeDurableAppend) {
             forced_disk_full = true;
             return absl::ResourceExhaustedError("injected full device");
@@ -342,9 +342,9 @@ class FiniteExpirationAuthorityService final : public bycorf::Service {
           return std::nullopt;
         });
     expiration_paused_ = false;
-    const absl::Status expired = co_await keylane::storage::
+    const absl::Status expired = co_await lavik::storage::
         ExpirationAuthorityTestPeer::ResumeAndExpireFront(*storage_);
-    keylane::storage::ExpirationAuthorityTestPeer::SetHook(*storage_, {});
+    lavik::storage::ExpirationAuthorityTestPeer::SetHook(*storage_, {});
     absl::Status paused = co_await storage_->QuiesceExpiration();
     expiration_paused_ = paused.ok();
     if (!paused.ok()) co_return paused;
@@ -364,7 +364,7 @@ class FiniteExpirationAuthorityService final : public bycorf::Service {
     absl::Status prepared = co_await SeedExpired(kKey);
     if (!prepared.ok()) co_return prepared;
     expiration_paused_ = false;
-    const absl::Status expired = co_await keylane::storage::
+    const absl::Status expired = co_await lavik::storage::
         ExpirationAuthorityTestPeer::ResumeAndExpireFront(*storage_);
     absl::Status paused = co_await storage_->QuiesceExpiration();
     expiration_paused_ = paused.ok();
@@ -387,8 +387,8 @@ class FiniteExpirationAuthorityService final : public bycorf::Service {
   }
 
   absl::Status Finish() {
-#if KEYLANE_FAULTS_ENABLED
-    keylane::storage::ExpirationAuthorityTestPeer::SetHook(*storage_, {});
+#if LAVIK_FAULTS_ENABLED
+    lavik::storage::ExpirationAuthorityTestPeer::SetHook(*storage_, {});
 #endif
     ResumeExpiration();
     server_->RequestStop();
@@ -401,7 +401,7 @@ class FiniteExpirationAuthorityService final : public bycorf::Service {
     expiration_paused_ = false;
   }
 
-  keylane::storage::StorageEngine* storage_ = nullptr;
+  lavik::storage::StorageEngine* storage_ = nullptr;
   bycorf::Server* server_ = nullptr;
   bool expiration_paused_ = false;
   absl::Status result_ =
@@ -412,7 +412,7 @@ class FiniteExpirationAuthorityService final : public bycorf::Service {
 
 TEST(StorageEngineRuntimeFailureTest,
      PermanentRequestFenceAlsoPublishesTheMonitorLatch) {
-  keylane::storage::StorageEngine engine({});
+  lavik::storage::StorageEngine engine({});
   EXPECT_FALSE(engine.ReplicaRecoveryFenced());
   EXPECT_FALSE(engine.RuntimeFailureLatched());
 
@@ -423,7 +423,7 @@ TEST(StorageEngineRuntimeFailureTest,
 }
 
 TEST(StorageExpirationAuthorityTest, RejectsElapsedFiniteAuthority) {
-  keylane::storage::StorageEngine engine({});
+  lavik::storage::StorageEngine engine({});
 
   const absl::Status status =
       engine.SetExpirationAuthorityUntil(std::chrono::nanoseconds::zero());
@@ -434,68 +434,68 @@ TEST(StorageExpirationAuthorityTest, RejectsElapsedFiniteAuthority) {
 TEST(StorageExpirationAuthorityTest,
      RecognizesOnlyMarkedAuthorityCancellation) {
   const absl::Status cancelled =
-      keylane::storage::ExpirationAuthorityTestPeer::RevokedGrantStatus();
+      lavik::storage::ExpirationAuthorityTestPeer::RevokedGrantStatus();
 
   EXPECT_TRUE(
-      keylane::storage::ExpirationAuthorityTestPeer::IsCancellation(cancelled));
-  EXPECT_FALSE(keylane::storage::ExpirationAuthorityTestPeer::IsCancellation(
+      lavik::storage::ExpirationAuthorityTestPeer::IsCancellation(cancelled));
+  EXPECT_FALSE(lavik::storage::ExpirationAuthorityTestPeer::IsCancellation(
       absl::InternalError("unrelated storage failure")));
-  EXPECT_FALSE(keylane::storage::ExpirationAuthorityTestPeer::IsCancellation(
+  EXPECT_FALSE(lavik::storage::ExpirationAuthorityTestPeer::IsCancellation(
       absl::DataLossError("unrelated storage corruption")));
-  EXPECT_FALSE(keylane::storage::ExpirationAuthorityTestPeer::IsCancellation(
+  EXPECT_FALSE(lavik::storage::ExpirationAuthorityTestPeer::IsCancellation(
       absl::FailedPreconditionError("unmarked precondition")));
 }
 
 TEST(StorageExpirationAuthorityTest, LegacyPermanentGrantIsIdempotent) {
-  keylane::storage::StorageEngineOptions options;
+  lavik::storage::StorageEngineOptions options;
   options.expiration_authority_ = false;
-  keylane::storage::StorageEngine engine(std::move(options));
+  lavik::storage::StorageEngine engine(std::move(options));
 
   engine.SetExpirationAuthority(true);
   auto first =
-      keylane::storage::ExpirationAuthorityTestPeer::CurrentGrant(engine);
+      lavik::storage::ExpirationAuthorityTestPeer::CurrentGrant(engine);
   ASSERT_NE(first, nullptr);
   engine.SetExpirationAuthority(true);
   auto repeated =
-      keylane::storage::ExpirationAuthorityTestPeer::CurrentGrant(engine);
+      lavik::storage::ExpirationAuthorityTestPeer::CurrentGrant(engine);
 
   EXPECT_EQ(first.get(), repeated.get());
 
   engine.SetExpirationAuthority(false);
   engine.SetExpirationAuthority(true);
   auto reenabled =
-      keylane::storage::ExpirationAuthorityTestPeer::CurrentGrant(engine);
+      lavik::storage::ExpirationAuthorityTestPeer::CurrentGrant(engine);
   EXPECT_NE(first.get(), reenabled.get());
 
   ASSERT_TRUE(
       engine.SetExpirationAuthorityUntil(FarFutureExpirationDeadline()).ok());
   auto finite =
-      keylane::storage::ExpirationAuthorityTestPeer::CurrentGrant(engine);
+      lavik::storage::ExpirationAuthorityTestPeer::CurrentGrant(engine);
   engine.SetExpirationAuthority(true);
   auto permanent =
-      keylane::storage::ExpirationAuthorityTestPeer::CurrentGrant(engine);
+      lavik::storage::ExpirationAuthorityTestPeer::CurrentGrant(engine);
   EXPECT_NE(finite.get(), permanent.get());
 }
 
 TEST(StorageExpirationAuthorityTest,
      FiniteAuthorityIsExactCancellableAndIndependentOfTombRaider) {
-  const std::string path = keylane::test::TestDataPath(
-      "keylane-expiration-authority-" + std::to_string(::getpid()) + ".data");
+  const std::string path = lavik::test::TestDataPath(
+      "lavik-expiration-authority-" + std::to_string(::getpid()) + ".data");
   Cleanup cleanup{{path}};
   ASSERT_CHECK(CreateFile(path, 96 * kMiB),
                "failed to create expiration-authority storage file");
 
-  keylane::storage::StorageEngineOptions options;
+  lavik::storage::StorageEngineOptions options;
   options.data_files_ = {path};
   options.buffers_.registered_bytes_ = 64 * kMiB;
   options.expiration_authority_ = false;
   options.tomb_raider_interval_ms_ = 0;
   options.tx_cleaner_cooldown_ms_ = 0;
-  keylane::storage::StorageEngine storage(std::move(options));
-  keylane::InitWorkerMetrics(1);
-  ASSERT_TRUE(keylane::InitMemoryLimit(512 * kMiB, 1).ok());
+  lavik::storage::StorageEngine storage(std::move(options));
+  lavik::InitWorkerMetrics(1);
+  ASSERT_TRUE(lavik::InitMemoryLimit(512 * kMiB, 1).ok());
   ASSERT_TRUE(storage.Prepare(1).ok());
-  keylane::tx::TxRuntime::Create(1);
+  lavik::tx::TxRuntime::Create(1);
 
   bycorf::Server server;
   FiniteExpirationAuthorityService service(&storage, &server);
@@ -510,8 +510,8 @@ TEST(StorageExpirationAuthorityTest,
 }
 
 TEST(StorageCapacityTest, ValidatesAndPreservesDeviceCapacities) {
-  const std::string prefix = keylane::test::TestDataPath(
-      "keylane-storage-capacity-" + std::to_string(::getpid()));
+  const std::string prefix = lavik::test::TestDataPath(
+      "lavik-storage-capacity-" + std::to_string(::getpid()));
   Cleanup cleanup;
 
   const std::string unequal_a = prefix + "-unequal-a.data";
@@ -558,8 +558,8 @@ TEST(StorageCapacityTest, ValidatesAndPreservesDeviceCapacities) {
 }
 
 TEST(StorageCapacityTest, ExpandsAnInitializedStorageSet) {
-  const std::string prefix = keylane::test::TestDataPath(
-      "keylane-storage-expansion-" + std::to_string(::getpid()));
+  const std::string prefix = lavik::test::TestDataPath(
+      "lavik-storage-expansion-" + std::to_string(::getpid()));
   Cleanup cleanup;
   const std::string original = prefix + "-original.data";
   const std::string added = prefix + "-added.data";
@@ -580,8 +580,8 @@ TEST(StorageCapacityTest, ExpandsAnInitializedStorageSet) {
 }
 
 TEST(StorageCapacityTest, RejectsForeignDeviceDuringExpansion) {
-  const std::string prefix = keylane::test::TestDataPath(
-      "keylane-storage-foreign-" + std::to_string(::getpid()));
+  const std::string prefix = lavik::test::TestDataPath(
+      "lavik-storage-foreign-" + std::to_string(::getpid()));
   Cleanup cleanup;
   const std::string first = prefix + "-first.data";
   const std::string foreign = prefix + "-foreign.data";

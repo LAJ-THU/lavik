@@ -30,7 +30,7 @@
 #include <utility>
 #include <vector>
 
-namespace keylane::test {
+namespace lavik::test {
 
 // Test-support failures throw std::runtime_error so callers can retain logs and
 // let the test framework report a single contextual failure.
@@ -44,7 +44,7 @@ std::string ReadFile(const std::filesystem::path& path);
 
 class TempDirectory {
  public:
-  // Creates a uniquely named directory below KEYLANE_TEST_DATA_DIR, or /tmp
+  // Creates a uniquely named directory below LAVIK_TEST_DATA_DIR, or /tmp
   // when that variable is unset or empty. The configured root must exist.
   // Normal destruction recursively removes the directory; Preserve or stack
   // unwinding retains it for failure diagnosis.
@@ -146,4 +146,4 @@ void WaitUntil(
     const std::function<bool()>& ready,
     std::chrono::milliseconds poll_interval = std::chrono::milliseconds(100));
 
-}  // namespace keylane::test
+}  // namespace lavik::test

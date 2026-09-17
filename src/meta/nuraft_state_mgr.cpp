@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/nuraft_state_mgr.h"
+#include "lavik/meta/nuraft_state_mgr.h"
 
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -30,12 +30,12 @@
 #include <utility>
 
 #include "absl/status/status.h"
-#include "keylane/fault_injection.h"
-#include "keylane/meta/encoding.h"
-#include "keylane/meta/identity_verifier.h"
-#include "keylane/meta/nuraft_log_store.h"
-#include "keylane/meta/state_machine.h"
-#include "keylane/numeric_endpoint.h"
+#include "lavik/fault_injection.h"
+#include "lavik/meta/encoding.h"
+#include "lavik/meta/identity_verifier.h"
+#include "lavik/meta/nuraft_log_store.h"
+#include "lavik/meta/state_machine.h"
+#include "lavik/numeric_endpoint.h"
 #include "libnuraft/buffer.hxx"
 #include "libnuraft/cluster_config.hxx"
 #include "libnuraft/error_code.hxx"
@@ -43,14 +43,14 @@
 #include "libnuraft/srv_state.hxx"
 #include "spdlog/spdlog.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
-constexpr std::string_view kInitialBindingsMarker = "KIB1";
-constexpr std::string_view kInitialBindingsCompleteMarker = "KIC1";
-constexpr std::string_view kWaitingJoinerMarker = "KWJ1";
-constexpr std::string_view kRaftStartedMarker = "KRS1";
-constexpr std::string_view kTransportBindingsMarker = "KTB1";
+constexpr std::string_view kInitialBindingsMarker = "LIB1";
+constexpr std::string_view kInitialBindingsCompleteMarker = "LIC1";
+constexpr std::string_view kWaitingJoinerMarker = "LWJ1";
+constexpr std::string_view kRaftStartedMarker = "LRS1";
+constexpr std::string_view kTransportBindingsMarker = "LTB1";
 constexpr std::size_t kMaxClusterConfigBytes = 4 * 1024 * 1024;
 constexpr std::size_t kMaxServerStateBytes = 64 * 1024;
 constexpr std::size_t kTransportBindingsHeaderBytes =
@@ -117,8 +117,7 @@ absl::Status RemoveFileDurably(const std::string& data_dir,
 }
 
 absl::Status RenameFileDurably(const std::string& data_dir,
-                               const std::string& from,
-                               const std::string& to) {
+                               const std::string& from, const std::string& to) {
   const std::string from_path = data_dir + "/" + from;
   const std::string to_path = data_dir + "/" + to;
   if (::rename(from_path.c_str(), to_path.c_str()) < 0) {
@@ -199,8 +198,8 @@ struct TransportBindingBaseline {
 nuraft::ptr<nuraft::buffer> EncodeTransportBindingBaseline(
     const nuraft::cluster_config& config, std::uint64_t applied_index) {
   const nuraft::ptr<nuraft::buffer> serialized = config.serialize();
-  nuraft::ptr<nuraft::buffer> baseline = nuraft::buffer::alloc(
-      kTransportBindingsHeaderBytes + serialized->size());
+  nuraft::ptr<nuraft::buffer> baseline =
+      nuraft::buffer::alloc(kTransportBindingsHeaderBytes + serialized->size());
   std::memcpy(baseline->data_begin(), kTransportBindingsMarker.data(),
               kTransportBindingsMarker.size());
   EncodeU64(applied_index,
@@ -212,7 +211,8 @@ nuraft::ptr<nuraft::buffer> EncodeTransportBindingBaseline(
 
 absl::StatusOr<TransportBindingBaseline> DecodeTransportBindingBaseline(
     const nuraft::ptr<nuraft::buffer>& baseline) {
-  if (baseline == nullptr || baseline->size() <= kTransportBindingsHeaderBytes ||
+  if (baseline == nullptr ||
+      baseline->size() <= kTransportBindingsHeaderBytes ||
       std::memcmp(baseline->data_begin(), kTransportBindingsMarker.data(),
                   kTransportBindingsMarker.size()) != 0) {
     return absl::DataLossError("invalid durable transport-binding baseline");
@@ -259,7 +259,7 @@ absl::StatusOr<nuraft::ptr<nuraft::buffer>> ReadWholeFile(
     if (errno == ENOENT) return nuraft::ptr<nuraft::buffer>(nullptr);
     return ErrnoStatus("open", path);
   }
-  struct stat file_status {};
+  struct stat file_status{};
   if (::fstat(fd, &file_status) < 0) {
     absl::Status status = ErrnoStatus("fstat", path);
     ::close(fd);
@@ -299,15 +299,15 @@ absl::StatusOr<nuraft::ptr<nuraft::buffer>> ReadWholeFile(
 }
 
 bool CanonicalEndpoint(std::string_view text) {
-  const auto endpoint = keylane::ParseNumericEndpoint(text);
+  const auto endpoint = lavik::ParseNumericEndpoint(text);
   return endpoint.has_value() &&
-         keylane::FormatNumericEndpoint(*endpoint) == text;
+         lavik::FormatNumericEndpoint(*endpoint) == text;
 }
 
 absl::Status ValidateMember(const NuraftMemberConfig& member) {
   if (member.server_id_ <= 0 ||
       member.principal_ !=
-          "keylane://meta/" + std::to_string(member.server_id_)) {
+          "lavik://meta/" + std::to_string(member.server_id_)) {
     return absl::InvalidArgumentError("invalid Meta member id or principal");
   }
   if (!CanonicalEndpoint(member.raft_endpoint_) ||
@@ -510,7 +510,7 @@ absl::StatusOr<SnapshotMembershipPlan> PlanSnapshotMembership(
     std::int32_t local_id, std::uint64_t baseline_index) {
   NuraftMemberConfig local;
   local.server_id_ = local_id;
-  local.principal_ = "keylane://meta/" + std::to_string(local_id);
+  local.principal_ = "lavik://meta/" + std::to_string(local_id);
   if (auto status = ValidateLoadedConfig(snapshot.config_, local,
                                          /*require_local=*/false);
       !status.ok())
@@ -588,20 +588,20 @@ absl::Status PersistSnapshotMembership(const std::string& data_dir,
                                             *baseline);
         !status.ok())
       return status;
-    KEYLANE_MAYBE_CRASH_AT("meta-snapshot-after-candidate");
+    LAVIK_MAYBE_CRASH_AT("meta-snapshot-after-candidate");
   }
   const auto config = snapshot.config_->serialize();
   if (auto status =
           WriteFileAtomicallyAt(data_dir, "cluster_config.dat", *config);
       !status.ok())
     return status;
-  KEYLANE_MAYBE_CRASH_AT("meta-snapshot-after-config");
+  LAVIK_MAYBE_CRASH_AT("meta-snapshot-after-config");
   if (plan.publish_baseline_) {
     if (auto status = RenameFileDurably(data_dir, "transport_bindings.next",
                                         "transport_bindings.dat");
         !status.ok())
       return status;
-    KEYLANE_MAYBE_CRASH_AT("meta-snapshot-after-baseline");
+    LAVIK_MAYBE_CRASH_AT("meta-snapshot-after-baseline");
   }
   if (plan.complete_initial_) {
     const auto marker = BufferFrom(kInitialBindingsCompleteMarker);
@@ -609,7 +609,7 @@ absl::Status PersistSnapshotMembership(const std::string& data_dir,
             data_dir, "initial_bindings_complete.dat", *marker);
         !status.ok())
       return status;
-    KEYLANE_MAYBE_CRASH_AT("meta-snapshot-after-completion");
+    LAVIK_MAYBE_CRASH_AT("meta-snapshot-after-completion");
     if (auto status = RemoveFileDurably(data_dir, "initial_bindings.dat");
         !status.ok())
       return status;
@@ -1066,10 +1066,10 @@ void NuraftStateMgr::save_config(const nuraft::cluster_config& config) {
   std::lock_guard<std::mutex> lock(mutex_);
   if (initial_bindings_pending_.load(std::memory_order_relaxed)) {
     if (!SameMemberDescriptors(initial_binding_config_, next_config)) {
-      FatalStateError(
-          "change membership before genesis bindings converged", data_dir_,
-          absl::FailedPreconditionError(
-              "membership gate invariant was violated"));
+      FatalStateError("change membership before genesis bindings converged",
+                      data_dir_,
+                      absl::FailedPreconditionError(
+                          "membership gate invariant was violated"));
     }
     WriteFileAtomically("cluster_config.dat", *blob, "save_config");
     config_ = std::move(next_config);
@@ -1084,9 +1084,9 @@ void NuraftStateMgr::save_config(const nuraft::cluster_config& config) {
     return;
   }
 
-  const std::uint64_t config_index = std::max(
-      static_cast<std::uint64_t>(next_config->get_log_idx()),
-      static_cast<std::uint64_t>(next_config->get_prev_log_idx()));
+  const std::uint64_t config_index =
+      std::max(static_cast<std::uint64_t>(next_config->get_log_idx()),
+               static_cast<std::uint64_t>(next_config->get_prev_log_idx()));
   const std::uint64_t applied_index =
       std::max(transport_binding_index_, config_index);
   const absl::Status status = PublishTransportBindingBaselineLocked(
@@ -1163,8 +1163,7 @@ absl::Status NuraftStateMgr::CompleteWaitingJoinerCatchupLocked(
       !status.ok()) {
     return status;
   }
-  if (absl::Status status =
-          RemoveFileDurably(data_dir_, "waiting_joiner.dat");
+  if (absl::Status status = RemoveFileDurably(data_dir_, "waiting_joiner.dat");
       !status.ok()) {
     return status;
   }
@@ -1318,4 +1317,4 @@ void NuraftStateMgr::WriteFileAtomically(const std::string& name,
   if (!status.ok()) FatalStateError(what, data_dir_ + "/" + name, status);
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

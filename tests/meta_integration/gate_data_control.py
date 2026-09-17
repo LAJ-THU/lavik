@@ -15,15 +15,15 @@
 
 """Process gate for the Meta-to-Data control session.
 
-The plaintext scenario uses three real keylane-meta processes and one real
-keylane process.  The Data node starts with only a follower as its seed, then
+The plaintext scenario uses three real lavik-meta processes and one real
+lavik process.  The Data node starts with only a follower as its seed, then
 must follow the committed leader redirect, install a complete desired-state
 object, and publish heartbeat observations.  Killing the accepted leader must
 make the same Data process discover the replacement leader and install a fresh
 complete object; no Data-side persisted control state participates.
 
 The mTLS scenario uses a real single-member Meta process.  A CA-authenticated
-Data certificate with the committed ``keylane://node/<id>`` URI SAN completes
+Data certificate with the committed ``lavik://node/<id>`` URI SAN completes
 the same FDS/heartbeat flow.  A certificate signed by the same CA but naming a
 different Data principal must remain connected to neither control authority
 nor FDS while the process itself stays healthy.
@@ -42,7 +42,7 @@ indefinitely blocked write cannot exercise a non-empty process-level drain in
 this gate; the request/NodeControl drain seams cover that ordering in unit
 tests until reconciliation can bootstrap the population.
 
-Usage: gate_data_control.py /path/to/keylane-meta /path/to/keylane [workdir]
+Usage: gate_data_control.py /path/to/lavik-meta /path/to/lavik [workdir]
 """
 
 import os
@@ -107,8 +107,8 @@ class DataProcess:
         self.seed = seed
         self.tls = tls
         self.workers = workers
-        self.log_path = os.path.join(workdir, "keylane.log")
-        self.data_path = os.path.join(workdir, "keylane.data")
+        self.log_path = os.path.join(workdir, "lavik.log")
+        self.data_path = os.path.join(workdir, "lavik.data")
         self.proc = None
         self.log_file = None
 
@@ -284,7 +284,7 @@ def observation_count(node):
 
 def register_data_node(leader, data):
     reply = leader.ctl(
-        f"registernode {data.node_id} keylane://node/{data.node_id} "
+        f"registernode {data.node_id} lavik://node/{data.node_id} "
         f"primary {data.advertised_endpoint}")
     expect_ok(reply, f"register Data node {data.node_id[:8]}")
 
@@ -303,23 +303,23 @@ def seed_assigned_authority(leader, data):
 
 def assert_grantless_session(data, leader, minimum_fds=1):
     data.wait_metric(
-        "keylane_cluster_control_connected", lambda value: value == 1,
+        "lavik_cluster_control_connected", lambda value: value == 1,
         f"Data node {data.node_id[:8]} accepts Meta leader")
     data.wait_metric(
-        "keylane_cluster_control_full_states_applied_total",
+        "lavik_cluster_control_full_states_applied_total",
         lambda value: value >= minimum_fds,
         f"Data node {data.node_id[:8]} applies FDS #{minimum_fds}")
     H.wait_until(
         f"Meta leader {leader.id} ingests Data heartbeat", 15,
         lambda: observation_count(leader) >= 2)
-    if data.metric("keylane_cluster_control_protocol_errors_total") != 0:
+    if data.metric("lavik_cluster_control_protocol_errors_total") != 0:
         raise H.Failure("healthy session recorded a protocol error")
     if data.metric(
-            "keylane_cluster_control_lease_decisions_total",
+            "lavik_cluster_control_lease_decisions_total",
             '{decision="granted"}') != 0:
         raise H.Failure("grantless projection unexpectedly received a lease")
     if data.metric(
-            "keylane_cluster_control_lease_decisions_total",
+            "lavik_cluster_control_lease_decisions_total",
             '{decision="denied"}') != 0:
         raise H.Failure("NoChallenge heartbeat was counted as a lease denial")
 
@@ -327,14 +327,14 @@ def assert_grantless_session(data, leader, minimum_fds=1):
 def assert_authority_challenge_denied(data, leader, minimum_fds=1,
                                       prior_denials=0):
     data.wait_metric(
-        "keylane_cluster_control_connected", lambda value: value == 1,
+        "lavik_cluster_control_connected", lambda value: value == 1,
         f"Data node {data.node_id[:8]} accepts Meta leader")
     data.wait_metric(
-        "keylane_cluster_control_full_states_applied_total",
+        "lavik_cluster_control_full_states_applied_total",
         lambda value: value >= minimum_fds,
         f"Data node {data.node_id[:8]} applies authority FDS #{minimum_fds}")
     data.wait_metric(
-        "keylane_cluster_control_lease_decisions_total",
+        "lavik_cluster_control_lease_decisions_total",
         lambda value: value > prior_denials,
         "assigned owner challenges authority and decodes LeaseDenied",
         labels='{decision="denied"}')
@@ -345,11 +345,11 @@ def assert_authority_challenge_denied(data, leader, minimum_fds=1,
         f"Meta leader {leader.id} ingests assigned Data heartbeat", 15,
         lambda: observation_count(leader) >= 2)
     if data.metric(
-            "keylane_cluster_control_lease_decisions_total",
+            "lavik_cluster_control_lease_decisions_total",
             '{decision="granted"}') != 0:
         raise H.Failure(
             "unpopulated assignment unexpectedly received a live lease")
-    if data.metric("keylane_cluster_control_protocol_errors_total") != 0:
+    if data.metric("lavik_cluster_control_protocol_errors_total") != 0:
         raise H.Failure("authority denial recorded a protocol error")
 
 
@@ -407,35 +407,35 @@ def run_plaintext(meta_binary, data_binary, workdir):
             raise H.Failure(
                 f"FUNCTION KILL did not reach run control: {kill}")
         redirected_reconnects = data.metric(
-            "keylane_cluster_control_reconnects_total")
+            "lavik_cluster_control_reconnects_total")
         if redirected_reconnects < 1:
             raise H.Failure(
                 "follower-only seed did not produce a redirect/reconnect")
         first_fds = data.metric(
-            "keylane_cluster_control_full_states_applied_total")
+            "lavik_cluster_control_full_states_applied_total")
         denials_before_loss = data.metric(
-            "keylane_cluster_control_lease_decisions_total",
+            "lavik_cluster_control_lease_decisions_total",
             '{decision="denied"}')
         H.log("plaintext: assigned authority challenge/denial verified")
 
         old_leader = leader
         old_leader.kill9()
         data.wait_metric(
-            "keylane_cluster_control_connected", lambda value: value == 0,
+            "lavik_cluster_control_connected", lambda value: value == 0,
             "Data node observes authority-session loss", timeout=5)
         assert_keyed_write_fenced(data, "lost authority session")
         survivors = [node for node in nodes if node.id != old_leader.id]
         leader = H.find_leader(survivors, timeout=15)
         data.wait_metric(
-            "keylane_cluster_control_full_states_applied_total",
+            "lavik_cluster_control_full_states_applied_total",
             lambda value: value > first_fds,
             "Data node installs a fresh FDS after Meta leader change",
             timeout=25)
         data.wait_metric(
-            "keylane_cluster_control_connected", lambda value: value == 1,
+            "lavik_cluster_control_connected", lambda value: value == 1,
             "Data node reconnects to replacement Meta leader", timeout=10)
         current_reconnects = data.metric(
-            "keylane_cluster_control_reconnects_total")
+            "lavik_cluster_control_reconnects_total")
         if current_reconnects <= redirected_reconnects:
             raise H.Failure("leader death did not advance reconnect attempts")
         assert_authority_challenge_denied(
@@ -444,17 +444,17 @@ def run_plaintext(meta_binary, data_binary, workdir):
         H.log("plaintext: session loss remains fail-closed and reconnects")
 
         before_fence_fds = data.metric(
-            "keylane_cluster_control_full_states_applied_total")
+            "lavik_cluster_control_full_states_applied_total")
         expect_commit(leader.fencegroup(GROUP, 1), "fence active group")
         # Meta does not publish the grantless replacement until the Data node
         # has closed admission, run the superseded-anchor drain barrier, and
         # returned FenceAck. Observing that replacement is therefore the
         # process-level proof of the whole Fence/FenceAck barrier.
         data.wait_metric(
-            "keylane_cluster_control_full_states_applied_total",
+            "lavik_cluster_control_full_states_applied_total",
             lambda value: value > before_fence_fds,
             "Data FenceAck releases grantless replacement FDS", timeout=15)
-        if data.metric("keylane_cluster_control_protocol_errors_total") != 0:
+        if data.metric("lavik_cluster_control_protocol_errors_total") != 0:
             raise H.Failure("Fence/FenceAck recorded a protocol error")
         assert_keyed_write_fenced(data, "committed group fence")
         H.log("plaintext: Fence/FenceAck replacement ordering verified")
@@ -476,7 +476,7 @@ def run_plaintext(meta_binary, data_binary, workdir):
                 try:
                     control_metrics = [
                         line for line in data.metrics().splitlines()
-                        if line.startswith("keylane_cluster_control_")
+                        if line.startswith("lavik_cluster_control_")
                     ]
                     print("--- Data control metrics ---", file=sys.stderr)
                     print("\n".join(control_metrics), file=sys.stderr)
@@ -504,7 +504,7 @@ def make_ca(workdir):
     run_openssl([
         "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-sha256",
         "-keyout", "ca.key", "-out", "ca.crt", "-days", "2",
-        "-subj", "/CN=keylane-data-control-test-ca",
+        "-subj", "/CN=lavik-data-control-test-ca",
     ], workdir)
     return (os.path.join(workdir, "ca.crt"),
             os.path.join(workdir, "ca.key"))
@@ -534,9 +534,9 @@ def assert_wrong_uri_rejected(data, meta):
     while time.monotonic() < deadline:
         if not data.alive():
             raise H.Failure("wrong-URI Data process crashed")
-        connected = data.metric("keylane_cluster_control_connected")
+        connected = data.metric("lavik_cluster_control_connected")
         full_states = data.metric(
-            "keylane_cluster_control_full_states_applied_total")
+            "lavik_cluster_control_full_states_applied_total")
         if connected != 0 or full_states != 0:
             raise H.Failure(
                 "wrong-URI Data certificate reached an accepted FDS")
@@ -544,7 +544,7 @@ def assert_wrong_uri_rejected(data, meta):
             raise H.Failure(
                 "wrong-URI Data certificate published an observation")
         time.sleep(0.1)
-    if data.metric("keylane_cluster_control_reconnects_total") < 1:
+    if data.metric("lavik_cluster_control_reconnects_total") < 1:
         raise H.Failure("wrong-URI Data process did not retry the handshake")
 
 
@@ -554,13 +554,13 @@ def run_mtls(meta_binary, data_binary, workdir):
     os.makedirs(cert_dir, exist_ok=True)
     ca_cert, ca_key = make_ca(cert_dir)
     meta_cert, meta_key = make_leaf(
-        cert_dir, ca_cert, ca_key, "meta-1", "keylane://meta/1")
+        cert_dir, ca_cert, ca_key, "meta-1", "lavik://meta/1")
     good_cert, good_key = make_leaf(
         cert_dir, ca_cert, ca_key, "data-good",
-        f"keylane://node/{DATA_NODE}")
+        f"lavik://node/{DATA_NODE}")
     bad_cert, bad_key = make_leaf(
         cert_dir, ca_cert, ca_key, "data-wrong-uri",
-        f"keylane://node/{OTHER_DATA_NODE}")
+        f"lavik://node/{OTHER_DATA_NODE}")
 
     meta_dir = os.path.join(scenario, "meta")
     os.makedirs(meta_dir, exist_ok=True)
@@ -608,7 +608,7 @@ def run_mtls(meta_binary, data_binary, workdir):
                 try:
                     control_metrics = [
                         line for line in data.metrics().splitlines()
-                        if line.startswith("keylane_cluster_control_")
+                        if line.startswith("lavik_cluster_control_")
                     ]
                     print("--- Data control metrics ---", file=sys.stderr)
                     print("\n".join(control_metrics), file=sys.stderr)

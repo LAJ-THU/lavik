@@ -18,9 +18,9 @@
 
 #include <span>
 
-#include "keylane/command.h"
+#include "lavik/command.h"
 
-namespace keylane {
+namespace lavik {
 
 void InitZSetCommandStorage(storage::StorageEngine* engine);
 
@@ -59,4 +59,4 @@ Task<std::string> ExecuteZSetMultiPopLocked(
     const CommandRequest& request, std::span<const ZSetExecKey> keys,
     std::vector<storage::TxShardWrites>& tx_writes);
 
-}  // namespace keylane
+}  // namespace lavik

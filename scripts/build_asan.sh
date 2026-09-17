@@ -17,9 +17,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-build_dir=${KEYLANE_ASAN_BUILD_DIR:-build_asan}
-clang_c=${KEYLANE_ASAN_CC:-clang-18}
-clang_cxx=${KEYLANE_ASAN_CXX:-clang++-18}
+build_dir=${LAVIK_ASAN_BUILD_DIR:-build_asan}
+clang_c=${LAVIK_ASAN_CC:-clang-18}
+clang_cxx=${LAVIK_ASAN_CXX:-clang++-18}
 
 command -v "${clang_c}" >/dev/null || {
   echo "ASan C compiler not found: ${clang_c}" >&2
@@ -37,10 +37,10 @@ cmake -S . -B "${build_dir}" \
   -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer" \
   -DCMAKE_CXX_FLAGS_RELWITHDEBINFO="-O1 -g" \
   -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address" \
-  -DKEYLANE_ENABLE_OPT=OFF \
-  -DKEYLANE_STATIC_OPENSSL=ON \
-  -DKEYLANE_BUILD_FAULT_SERVER=ON \
+  -DLAVIK_ENABLE_OPT=OFF \
+  -DLAVIK_STATIC_OPENSSL=ON \
+  -DLAVIK_BUILD_FAULT_SERVER=ON \
   -DBUILD_TESTING=ON
 cmake --build "${build_dir}" -j"$(nproc)"
 
-echo "Clang ASan build complete: ${build_dir}/keylane"
+echo "Clang ASan build complete: ${build_dir}/lavik"

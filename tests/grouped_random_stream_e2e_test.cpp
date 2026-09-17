@@ -167,14 +167,14 @@ TEST(GroupedRandomStreamE2e, DisconnectDuringLargeBulkReleasesStreamState) {
 
 TEST(GroupedRandomStreamE2e,
      AllocationFailureReturnsOneErrorWithoutArrayPrefix) {
-#if !KEYLANE_TEST_FAULTS_AVAILABLE
+#if !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires Debug/fault random stream construction hook";
 #endif
   const std::string key = "random-build-failure";
   for (const auto* stage : {"before-source", "after-header"}) {
     SCOPED_TRACE(stage);
-    ScopedEnvironment fail_key("KEYLANE_FAIL_RANDOM_STREAM_KEY", key.c_str());
-    ScopedEnvironment fail_stage("KEYLANE_FAIL_RANDOM_STREAM_STAGE", stage);
+    ScopedEnvironment fail_key("LAVIK_FAIL_RANDOM_STREAM_KEY", key.c_str());
+    ScopedEnvironment fail_stage("LAVIK_FAIL_RANDOM_STREAM_STAGE", stage);
     PrivateDisk disk;
     Server server(disk);
     Client client(server.port());

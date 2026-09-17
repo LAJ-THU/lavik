@@ -221,7 +221,7 @@ RespClient Connect(std::uint16_t port) {
     ::close(fd);
     std::this_thread::sleep_for(10ms);
   }
-  Fail("timed out connecting to Keylane");
+  Fail("timed out connecting to Lavik");
 }
 
 RespClient ConnectReady(std::uint16_t port) {
@@ -237,7 +237,7 @@ RespClient ConnectReady(std::uint16_t port) {
     }
     std::this_thread::sleep_for(10ms);
   }
-  Fail("timed out waiting for Keylane readiness");
+  Fail("timed out waiting for Lavik readiness");
 }
 
 class ServerProcess {
@@ -294,7 +294,7 @@ class ServerProcess {
       return;
     }
     if (::kill(pid_, SIGINT) != 0 && errno != ESRCH) {
-      Fail("failed to signal Keylane");
+      Fail("failed to signal Lavik");
     }
     const auto deadline = std::chrono::steady_clock::now() + 60s;
     while (std::chrono::steady_clock::now() < deadline) {
@@ -303,7 +303,7 @@ class ServerProcess {
       if (waited == pid_) {
         pid_ = -1;
         if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-          Fail("Keylane exited unsuccessfully");
+          Fail("Lavik exited unsuccessfully");
         }
         return;
       }
@@ -312,7 +312,7 @@ class ServerProcess {
       }
       std::this_thread::sleep_for(10ms);
     }
-    Fail("Keylane did not stop after SIGINT");
+    Fail("Lavik did not stop after SIGINT");
   }
 
  private:
@@ -357,12 +357,12 @@ std::string ExternalKey(int index) {
 
 int main(int argc, char** argv) {
   if (argc < 2) {
-    std::cerr << "usage: extent_recovery_e2e_test /path/to/keylane\n";
+    std::cerr << "usage: extent_recovery_e2e_test /path/to/lavik\n";
     return 2;
   }
   try {
-    const std::string prefix = keylane::test::TestDataPath(
-        "keylane-extent-recovery-" + std::to_string(::getpid()));
+    const std::string prefix = lavik::test::TestDataPath(
+        "lavik-extent-recovery-" + std::to_string(::getpid()));
     const std::string data_path = prefix + ".data";
     const std::string log_path = prefix + ".log";
     (void)::unlink(data_path.c_str());
@@ -460,14 +460,14 @@ int main(int argc, char** argv) {
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << "\n";
-    const std::string log_path = keylane::test::TestDataPath(
-        "keylane-extent-recovery-" + std::to_string(::getpid()) + ".log");
+    const std::string log_path = lavik::test::TestDataPath(
+        "lavik-extent-recovery-" + std::to_string(::getpid()) + ".log");
     std::ifstream log(log_path);
     if (log) {
       std::string contents((std::istreambuf_iterator<char>(log)),
                            std::istreambuf_iterator<char>());
       if (!contents.empty()) {
-        std::cerr << "--- Keylane log ---\n" << contents;
+        std::cerr << "--- Lavik log ---\n" << contents;
       }
     }
     return 1;

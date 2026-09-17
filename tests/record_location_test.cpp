@@ -21,7 +21,7 @@
 #include "../src/storage/engine/impl.h"
 #include "gtest/gtest.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 TEST(RecoveryMemoryTest, DividesTemporaryBatchTargetAcrossWorkers) {
@@ -431,4 +431,4 @@ TEST(RecordLocationTest, IndexKeyMatchingPreservesTailAndCollisionSemantics) {
 }
 
 }  // namespace
-}  // namespace keylane::storage
+}  // namespace lavik::storage

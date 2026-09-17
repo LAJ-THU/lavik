@@ -26,9 +26,9 @@
 #include <vector>
 
 #include "absl/status/statusor.h"
-#include "keylane/resp_version.h"
+#include "lavik/resp_version.h"
 
-namespace keylane {
+namespace lavik {
 
 enum LuaFunctionFlag : std::uint64_t {
   kLuaFunctionNoWrites = 1ULL << 0,
@@ -156,4 +156,4 @@ bool LuaScriptsBusy();
 void SetLuaScriptBusyThresholdMs(std::uint64_t milliseconds);
 std::uint64_t LuaScriptBusyThresholdMs();
 
-}  // namespace keylane
+}  // namespace lavik

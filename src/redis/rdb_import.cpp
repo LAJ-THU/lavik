@@ -15,9 +15,9 @@
  */
 
 #include "bycorf/runtime/cross_core.h"
-#include "keylane/rdb.h"
+#include "lavik/rdb.h"
 
-namespace keylane::rdb {
+namespace lavik::rdb {
 
 bycorf::Task<absl::StatusOr<storage::RestoreRawResult>> RestoreFileEntry(
     storage::StorageEngine* storage, FileReader* reader, const FileEntry& entry,
@@ -52,4 +52,4 @@ bycorf::Task<absl::StatusOr<storage::RestoreRawResult>> RestoreFileEntry(
   co_return co_await bycorf::SubmitTaskTo(owner, apply);
 }
 
-}  // namespace keylane::rdb
+}  // namespace lavik::rdb

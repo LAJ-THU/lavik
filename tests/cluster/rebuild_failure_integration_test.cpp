@@ -27,20 +27,20 @@
 
 namespace {
 using namespace std::chrono_literals;
-using keylane::test::ChildProcess;
-using keylane::test::Connect;
-using keylane::test::CreateDataFile;
-using keylane::test::PortReservation;
-using keylane::test::ReadFile;
-using keylane::test::RespClient;
-using keylane::test::TempDirectory;
-using keylane::test::WaitUntil;
+using lavik::test::ChildProcess;
+using lavik::test::Connect;
+using lavik::test::CreateDataFile;
+using lavik::test::PortReservation;
+using lavik::test::ReadFile;
+using lavik::test::RespClient;
+using lavik::test::TempDirectory;
+using lavik::test::WaitUntil;
 
-std::string g_keylane_binary;
+std::string g_lavik_binary;
 
 std::vector<std::string> ServerArguments(std::uint16_t port,
                                          const std::filesystem::path& data) {
-  return {g_keylane_binary,
+  return {g_lavik_binary,
           "--port",
           std::to_string(port),
           "--threads",
@@ -55,7 +55,7 @@ std::vector<std::string> ServerArguments(std::uint16_t port,
 
 TEST(RebuildFailureIntegrationTest,
      PromotionUncertaintyStopsTheWholeAttemptWithoutRetrying) {
-  ASSERT_FALSE(g_keylane_binary.empty());
+  ASSERT_FALSE(g_lavik_binary.empty());
   TempDirectory directory("cluster-rebuild-failure");
   const std::filesystem::path source_data = directory.path() / "source.data";
   const std::filesystem::path target_data = directory.path() / "target.data";
@@ -69,10 +69,9 @@ TEST(RebuildFailureIntegrationTest,
   const std::uint16_t source_port = source_reservation.ReleaseForSpawn();
   const std::uint16_t target_port = target_reservation.ReleaseForSpawn();
   ChildProcess source(ServerArguments(source_port, source_data), source_log);
-  ChildProcess target(
-      ServerArguments(target_port, target_data), target_log,
-      {{"KEYLANE_REPLICATION_FAIL_PROMOTE_ONCE", "1"},
-       {"KEYLANE_REPLICATION_PAUSE_AFTER_FAIL_STOP_MS", "1000"}});
+  ChildProcess target(ServerArguments(target_port, target_data), target_log,
+                      {{"LAVIK_REPLICATION_FAIL_PROMOTE_ONCE", "1"},
+                       {"LAVIK_REPLICATION_PAUSE_AFTER_FAIL_STOP_MS", "1000"}});
 
   WaitUntil("source startup", 20s, [&] {
     RespClient client = Connect(source_port, 200ms);
@@ -106,16 +105,14 @@ TEST(RebuildFailureIntegrationTest,
   std::string info;
   WaitUntil("promotion failure terminal state", 30s, [&] {
     info = target_client.Command({"INFO", "replication"});
-    return info.find("keylane_replication_failed_stopped:1") !=
+    return info.find("lavik_replication_failed_stopped:1") !=
                std::string::npos ||
-           info.find("keylane_replication_state:online") != std::string::npos;
+           info.find("lavik_replication_state:online") != std::string::npos;
   });
-  ASSERT_NE(info.find("keylane_replication_failed_stopped:1"),
-            std::string::npos)
+  ASSERT_NE(info.find("lavik_replication_failed_stopped:1"), std::string::npos)
       << info;
-  EXPECT_NE(info.find("keylane_replication_state:connecting"),
-            std::string::npos);
-  EXPECT_EQ(info.find("keylane_replication_state:online"), std::string::npos);
+  EXPECT_NE(info.find("lavik_replication_state:connecting"), std::string::npos);
+  EXPECT_EQ(info.find("lavik_replication_state:online"), std::string::npos);
   EXPECT_TRUE(target_client.Command({"GET", "population{failure}"})
                   .starts_with("-LOADING"));
 
@@ -124,9 +121,8 @@ TEST(RebuildFailureIntegrationTest,
   // writable primary.
   std::this_thread::sleep_for(1500ms);
   info = target_client.Command({"INFO", "replication"});
-  EXPECT_NE(info.find("keylane_replication_failed_stopped:1"),
-            std::string::npos);
-  EXPECT_EQ(info.find("keylane_replication_state:online"), std::string::npos);
+  EXPECT_NE(info.find("lavik_replication_failed_stopped:1"), std::string::npos);
+  EXPECT_EQ(info.find("lavik_replication_state:online"), std::string::npos);
   EXPECT_TRUE(
       target_client.Command({"REPLICAOF", "NO", "ONE"}).starts_with("-ERR"));
 
@@ -138,7 +134,7 @@ TEST(RebuildFailureIntegrationTest,
 
 int main(int argc, char** argv) {
   if (argc != 2) return 2;
-  g_keylane_binary = argv[1];
+  g_lavik_binary = argv[1];
   testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

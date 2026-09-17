@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/slowlog.h"
+#include "lavik/slowlog.h"
 
 #include <sys/time.h>
 
@@ -37,7 +37,7 @@
 #include "bycorf/runtime/cross_core.h"
 #include "bycorf/runtime/cycle_clock.h"
 
-namespace keylane {
+namespace lavik {
 namespace {
 
 constexpr std::size_t kMaximumArgumentCount = 32;
@@ -299,4 +299,4 @@ std::size_t SlowLogMaxLen() noexcept {
   return shard == nullptr ? 0 : shard->capacity();
 }
 
-}  // namespace keylane
+}  // namespace lavik

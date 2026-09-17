@@ -26,7 +26,7 @@
 #include <utility>
 #include <vector>
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 // A single-owner FIFO backed by one contiguous allocation. Push and pop do
 // not allocate while spare slots remain. PrepareCapacity() allocates a
@@ -168,4 +168,4 @@ class RingBuffer {
   std::size_t size_ = 0;
 };
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

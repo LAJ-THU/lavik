@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-#include "keylane/storage/detail/grouped_sorted_rewrite.h"
+#include "lavik/storage/detail/grouped_sorted_rewrite.h"
 
 #include <algorithm>
 #include <map>
 
 #include "gtest/gtest.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 namespace {
 
 struct SortedFixture {
@@ -181,4 +181,4 @@ TEST(GroupedSortedRewriteTest, NoopDeletionAndInvalidOrder) {
 }
 
 }  // namespace
-}  // namespace keylane::storage
+}  // namespace lavik::storage

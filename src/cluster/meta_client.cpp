@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/cluster/meta_client.h"
+#include "lavik/cluster/meta_client.h"
 
 #include <sys/socket.h>
 #include <unistd.h>
@@ -47,16 +47,16 @@
 #include "bycorf/net/tls.h"
 #include "bycorf/runtime/sync.h"
 #include "bycorf/runtime/worker.h"
-#include "keylane/cluster/control_transport.h"
-#include "keylane/cluster/meta_control.h"
-#include "keylane/cluster/node_control.h"
-#include "keylane/cluster/topology.h"
-#include "keylane/metrics.h"
-#include "keylane/numeric_endpoint.h"
-#include "keylane/replication.h"
+#include "lavik/cluster/control_transport.h"
+#include "lavik/cluster/meta_control.h"
+#include "lavik/cluster/node_control.h"
+#include "lavik/cluster/topology.h"
+#include "lavik/metrics.h"
+#include "lavik/numeric_endpoint.h"
+#include "lavik/replication.h"
 #include "spdlog/spdlog.h"
 
-namespace keylane::cluster {
+namespace lavik::cluster {
 namespace {
 
 using namespace std::chrono_literals;
@@ -912,7 +912,7 @@ detail::EvaluateMetaSessionReplicationIdentity(
 
 absl::StatusOr<MetaControlEndpoint> ParseNumericControlEndpoint(
     std::string_view endpoint) {
-  auto parsed = keylane::ParseNumericEndpoint(endpoint);
+  auto parsed = lavik::ParseNumericEndpoint(endpoint);
   if (!parsed.has_value()) {
     return absl::InvalidArgumentError(
         "control endpoint must be IPv4:port or [IPv6]:port");
@@ -1166,7 +1166,7 @@ absl::Status MetaEndpointDirectory::Update(
       return absl::InvalidArgumentError("Meta directory has server id zero");
     }
     const std::string expected_principal =
-        absl::StrCat("keylane://meta/", endpoint.server_id);
+        absl::StrCat("lavik://meta/", endpoint.server_id);
     if (!endpoint.principal.has_value() ||
         *endpoint.principal != expected_principal) {
       return absl::InvalidArgumentError(
@@ -3259,4 +3259,4 @@ std::unique_ptr<NodeControlActions> CreateReplicationNodeControlActions(
   return std::make_unique<ReplicationNodeControlActions>(replication, use_tls);
 }
 
-}  // namespace keylane::cluster
+}  // namespace lavik::cluster

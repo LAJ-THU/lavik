@@ -35,8 +35,8 @@ import harness as H  # noqa: E402
 import gate_failover as F  # noqa: E402
 
 
-PAUSE_BEFORE_PROPOSE = "KEYLANE_TEST_PAUSE_AUTOMATIC_BEFORE_PROPOSE_MS"
-PAUSE_AFTER_COMMIT = "KEYLANE_TEST_PAUSE_FAILOVER_AFTER_AUTOMATIC_BEGIN_MS"
+PAUSE_BEFORE_PROPOSE = "LAVIK_TEST_PAUSE_AUTOMATIC_BEFORE_PROPOSE_MS"
+PAUSE_AFTER_COMMIT = "LAVIK_TEST_PAUSE_FAILOVER_AFTER_AUTOMATIC_BEGIN_MS"
 
 
 def start_with_automatic_failover_disabled(fixture):
@@ -90,7 +90,7 @@ def configure_fast_policies(fixture, suspect_after_ms=1000,
     # adopting the final FDS, leaving the deliberately candidate-less Begin
     # with no completed population to select. Observe one post-commit FDS on
     # every member before accepting readiness for the fault cut.
-    fds_metric = "keylane_cluster_control_full_states_applied_total"
+    fds_metric = "lavik_cluster_control_full_states_applied_total"
     fds_before = {data.node_id: data.metric(fds_metric)
                   for data in fixture.data_nodes}
     lease_reply = fixture.leader.put_authority_lease_policy(
@@ -274,7 +274,7 @@ def run_partition(meta, data, ctl, workdir, direction, require_fault_hook):
         for probe in replica_probes.values():
             probe.start()
         old_probe.wait_for_success("old Owner serves before partition", 5)
-        lease_metric = "keylane_cluster_control_lease_expirations_total"
+        lease_metric = "lavik_cluster_control_lease_expirations_total"
         expirations_before = fixture.by_id[F.OWNER].metric(lease_metric)
 
         fixture.partition_owner_control(direction)

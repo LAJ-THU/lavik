@@ -22,19 +22,19 @@
 #include <new>
 #include <optional>
 
-#include "keylane/memory.h"
-#include "keylane/replication_command.h"
+#include "lavik/memory.h"
+#include "lavik/replication_command.h"
 
-namespace keylane {
+namespace lavik {
 namespace {
 
-constexpr std::string_view kMagic = "KRC1";
+constexpr std::string_view kMagic = "LRC1";
 constexpr std::uint8_t kVersion = 1;
 constexpr std::size_t kFixedHeaderBytes = 8;
 constexpr std::size_t kMaxArgumentCount = 1024;
 constexpr std::size_t kMaxArgumentBytes =
     static_cast<std::size_t>(kMaxNativeReplicationEventBytes);
-constexpr std::string_view kTransactionMagic = "KTX1";
+constexpr std::string_view kTransactionMagic = "LTX1";
 constexpr std::size_t kTransactionFixedBytes = 16;
 constexpr std::size_t kMaxTransactionBitmapBytes =
     (static_cast<std::size_t>(std::numeric_limits<std::uint16_t>::max()) + 1) /
@@ -386,4 +386,4 @@ void AppendReplicationExpirationEffect(std::vector<std::string>* args,
   }
 }
 
-}  // namespace keylane
+}  // namespace lavik

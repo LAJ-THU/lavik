@@ -42,16 +42,16 @@
 #include <vector>
 
 #include "gtest/gtest.h"
-#include "keylane/command_table.h"
-#include "keylane/rdb.h"
-#include "keylane/storage/format.h"
+#include "lavik/command_table.h"
+#include "lavik/rdb.h"
+#include "lavik/storage/format.h"
 #include "support/test_data_path.h"
 
 namespace {
 
 using namespace std::chrono_literals;
 
-std::string g_keylane_binary;
+std::string g_lavik_binary;
 
 class FileCleanup {
  public:
@@ -525,7 +525,7 @@ std::string KeyForWorker(std::string_view prefix, unsigned worker,
                          unsigned worker_count) {
   for (std::uint64_t candidate = 0;; ++candidate) {
     std::string key = std::string(prefix) + "-" + std::to_string(candidate);
-    if (keylane::storage::StorageShardForKey(key) % worker_count == worker) {
+    if (lavik::storage::StorageShardForKey(key) % worker_count == worker) {
       return key;
     }
   }
@@ -535,7 +535,7 @@ std::string KeyForPartition(std::string_view prefix,
                             std::uint16_t partition_id) {
   for (std::uint64_t candidate = 0;; ++candidate) {
     std::string key = std::string(prefix) + "-" + std::to_string(candidate);
-    if (keylane::storage::RedisSlot(key) == partition_id) return key;
+    if (lavik::storage::RedisSlot(key) == partition_id) return key;
   }
 }
 
@@ -684,7 +684,7 @@ class ServerProcess {
         if (::setrlimit(RLIMIT_NOFILE, &limit) != 0) _exit(126);
       }
       if (!crash_point.empty()) {
-        (void)::setenv("KEYLANE_CRASH_POINT", std::string(crash_point).c_str(),
+        (void)::setenv("LAVIK_CRASH_POINT", std::string(crash_point).c_str(),
                        1);
       }
       for (const auto& [name, value] : environment) {
@@ -767,7 +767,7 @@ class ServerProcess {
       ASSERT_GE(waited, 0);
       std::this_thread::sleep_for(10ms);
     }
-    FAIL() << "Keylane did not stop";
+    FAIL() << "Lavik did not stop";
   }
 
   void Kill() {
@@ -808,7 +808,7 @@ class ServerProcess {
       ASSERT_GE(waited, 0);
       std::this_thread::sleep_for(10ms);
     }
-    FAIL() << "Keylane did not reach the armed crash point";
+    FAIL() << "Lavik did not reach the armed crash point";
   }
 
  private:
@@ -820,7 +820,7 @@ std::string Bulk(std::string_view value) {
 }
 
 std::string Moved(std::string_view key, std::uint16_t master_port) {
-  return "-MOVED " + std::to_string(keylane::storage::RedisSlot(key)) +
+  return "-MOVED " + std::to_string(lavik::storage::RedisSlot(key)) +
          " 127.0.0.1:" + std::to_string(master_port);
 }
 
@@ -831,9 +831,9 @@ std::string BulkArray(const std::vector<std::string_view>& values) {
 }
 
 TEST(ListE2eTest, FreshMinimumStorageUsesImplicitEmptyCatalog) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-minimum-storage-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-minimum-storage-e2e-" +
                              std::to_string(::getpid());
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
@@ -847,11 +847,11 @@ TEST(ListE2eTest, FreshMinimumStorageUsesImplicitEmptyCatalog) {
 
   const std::uint16_t port = FindFreePort();
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 2);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 2);
     RespClient client(port);
     EXPECT_EQ(client.Command({"PING"}), "+PONG");
     EXPECT_EQ(InfoUnsigned(client.Command({"INFO", "replication"}),
-                           "keylane_function_catalog_generation"),
+                           "lavik_function_catalog_generation"),
               0);
 
     constexpr std::string_view library =
@@ -865,16 +865,16 @@ TEST(ListE2eTest, FreshMinimumStorageUsesImplicitEmptyCatalog) {
                   .find("Function not found"),
               std::string::npos);
     EXPECT_EQ(InfoUnsigned(client.Command({"INFO", "replication"}),
-                           "keylane_function_catalog_generation"),
+                           "lavik_function_catalog_generation"),
               0);
     server.Stop();
   }
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 2);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 2);
     RespClient client(port);
     EXPECT_EQ(client.Command({"PING"}), "+PONG");
     EXPECT_EQ(InfoUnsigned(client.Command({"INFO", "replication"}),
-                           "keylane_function_catalog_generation"),
+                           "lavik_function_catalog_generation"),
               0);
     EXPECT_NE(client.Command({"FCALL", "minimum_capacity_value", "0"})
                   .find("Function not found"),
@@ -884,10 +884,10 @@ TEST(ListE2eTest, FreshMinimumStorageUsesImplicitEmptyCatalog) {
 }
 
 TEST(ListE2eTest, FunctionCatalogCrashRecoverySelectsCommittedRoot) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires a Debug or fault-instrumented server";
 #endif
-  ASSERT_FALSE(g_keylane_binary.empty());
+  ASSERT_FALSE(g_lavik_binary.empty());
   constexpr std::string_view old_library =
       "#!lua name=crash_catalog\n"
       "redis.register_function('crash_catalog_value', function(keys, args) "
@@ -911,10 +911,9 @@ TEST(ListE2eTest, FunctionCatalogCrashRecoverySelectsCommittedRoot) {
 
   for (std::size_t case_index = 0; case_index < std::size(cases);
        ++case_index) {
-    const std::string prefix = keylane::test::TestDataPathPrefix() +
-                               "keylane-function-catalog-crash-" +
-                               std::to_string(::getpid()) + "-" +
-                               std::to_string(case_index);
+    const std::string prefix =
+        lavik::test::TestDataPathPrefix() + "lavik-function-catalog-crash-" +
+        std::to_string(::getpid()) + "-" + std::to_string(case_index);
     const std::string first_path = prefix + "-0.data";
     const std::string second_path = prefix + "-1.data";
     const std::string log_path = prefix + ".log";
@@ -935,7 +934,7 @@ TEST(ListE2eTest, FunctionCatalogCrashRecoverySelectsCommittedRoot) {
     }
     const std::uint16_t port = FindFreePort();
     {
-      ServerProcess server(g_keylane_binary, port, first_path, log_path, 2, {},
+      ServerProcess server(g_lavik_binary, port, first_path, log_path, 2, {},
                            extra_arguments);
       RespClient client(port);
       ASSERT_EQ(client.Command({"FUNCTION", "LOAD", old_library}),
@@ -943,7 +942,7 @@ TEST(ListE2eTest, FunctionCatalogCrashRecoverySelectsCommittedRoot) {
       server.Stop();
     }
     {
-      ServerProcess server(g_keylane_binary, port, first_path, log_path, 2,
+      ServerProcess server(g_lavik_binary, port, first_path, log_path, 2,
                            cases[case_index].point_, extra_arguments);
       RespClient ready(port);
       const int crash_fd = ConnectSocket(port);
@@ -954,7 +953,7 @@ TEST(ListE2eTest, FunctionCatalogCrashRecoverySelectsCommittedRoot) {
       ASSERT_EQ(::close(crash_fd), 0);
     }
     {
-      ServerProcess server(g_keylane_binary, port, first_path, log_path, 2, {},
+      ServerProcess server(g_lavik_binary, port, first_path, log_path, 2, {},
                            extra_arguments);
       RespClient client(port);
       EXPECT_EQ(client.Command({"FCALL", "crash_catalog_value", "0"}),
@@ -967,10 +966,10 @@ TEST(ListE2eTest, FunctionCatalogCrashRecoverySelectsCommittedRoot) {
 }
 
 TEST(ListE2eTest, AmbiguousCatalogRootCommitFencesAllClientsUntilRestart) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires a Debug or fault-instrumented server";
 #endif
-  ASSERT_FALSE(g_keylane_binary.empty());
+  ASSERT_FALSE(g_lavik_binary.empty());
   constexpr std::string_view old_library =
       "#!lua name=ambiguous_catalog\n"
       "redis.register_function('ambiguous_catalog_value', function(keys, "
@@ -979,8 +978,8 @@ TEST(ListE2eTest, AmbiguousCatalogRootCommitFencesAllClientsUntilRestart) {
       "#!lua name=ambiguous_catalog\n"
       "redis.register_function('ambiguous_catalog_value', function(keys, "
       "args) return 'new' end)";
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-function-catalog-ambiguous-" +
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-function-catalog-ambiguous-" +
                              std::to_string(::getpid());
   const std::string first_path = prefix + "-0.data";
   const std::string second_path = prefix + "-1.data";
@@ -1000,9 +999,9 @@ TEST(ListE2eTest, AmbiguousCatalogRootCommitFencesAllClientsUntilRestart) {
   {
     // A fresh set has implicit generation zero. The initial LOAD commits
     // generation one, so inject ambiguity into the REPLACE at generation two.
-    ServerProcess server(g_keylane_binary, port, first_path, log_path, 2, {},
+    ServerProcess server(g_lavik_binary, port, first_path, log_path, 2, {},
                          {"--data-file", second_path},
-                         {{"KEYLANE_FAIL_SYSTEM_STATE_ROOT_ONCE", "1:2"}});
+                         {{"LAVIK_FAIL_SYSTEM_STATE_ROOT_ONCE", "1:2"}});
     RespClient mutation_client(port);
     RespClient observer_client(port);
     ASSERT_EQ(mutation_client.Command({"FUNCTION", "LOAD", old_library}),
@@ -1019,7 +1018,7 @@ TEST(ListE2eTest, AmbiguousCatalogRootCommitFencesAllClientsUntilRestart) {
     server.Kill();
   }
   {
-    ServerProcess server(g_keylane_binary, port, first_path, log_path, 2, {},
+    ServerProcess server(g_lavik_binary, port, first_path, log_path, 2, {},
                          {"--data-file", second_path});
     RespClient client(port);
     EXPECT_EQ(client.Command({"FCALL", "ambiguous_catalog_value", "0"}),
@@ -1030,9 +1029,9 @@ TEST(ListE2eTest, AmbiguousCatalogRootCommitFencesAllClientsUntilRestart) {
 }
 
 TEST(ListE2eTest, PersistsStreamApproximateTrimNodeBoundaries) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-stream-trim-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-stream-trim-e2e-" +
                              std::to_string(::getpid());
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
@@ -1046,7 +1045,7 @@ TEST(ListE2eTest, PersistsStreamApproximateTrimNodeBoundaries) {
 
   const std::uint16_t port = FindFreePort();
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 2);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 2);
     RespClient client(port);
     EXPECT_EQ(
         client.Command({"CONFIG", "SET", "stream-node-max-entries", "10"}),
@@ -1063,7 +1062,7 @@ TEST(ListE2eTest, PersistsStreamApproximateTrimNodeBoundaries) {
     server.Stop();
   }
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 2);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 2);
     RespClient client(port);
     EXPECT_EQ(client.Command({"XLEN", "trim-stream"}), ":71");
     EXPECT_EQ(client.Command({"XADD", "trim-stream", "MAXLEN", "~", "55",
@@ -1080,9 +1079,9 @@ TEST(ListE2eTest, PersistsStreamApproximateTrimNodeBoundaries) {
 }
 
 TEST(ListE2eTest, PersistsLogicalLengthSeparatelyFromSerializedBytes) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-list-e2e-" + std::to_string(::getpid());
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-list-e2e-" + std::to_string(::getpid());
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
   FileCleanup data_cleanup(data_path);
@@ -1098,7 +1097,7 @@ TEST(ListE2eTest, PersistsLogicalLengthSeparatelyFromSerializedBytes) {
   // header. This makes the first encoding exactly three full extents; pushing
   // an empty element adds four bytes and forces a fourth extent.
   constexpr std::size_t kThreeExtentElementBytes =
-      3 * keylane::storage::kExtentPayloadBytes - 12;
+      3 * lavik::storage::kExtentPayloadBytes - 12;
   const std::string large_element(kThreeExtentElementBytes, 'x');
   std::string binary_element;
   binary_element.push_back('\0');
@@ -1106,7 +1105,7 @@ TEST(ListE2eTest, PersistsLogicalLengthSeparatelyFromSerializedBytes) {
   binary_element.append("\r\n");
   const std::string external_key(5000, 'k');
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 2);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 2);
     RespClient client(port);
     EXPECT_EQ(client.Command({"LPUSH", "list", "a", "bb", "ccc"}), ":3");
     EXPECT_EQ(client.Command({"LPUSH", "list", "z"}), ":4");
@@ -1141,7 +1140,7 @@ TEST(ListE2eTest, PersistsLogicalLengthSeparatelyFromSerializedBytes) {
     EXPECT_EQ(
         client.Command({"BLPOP", binary_blocking_key, "0.1"}),
         "*2\r\n" + Bulk(binary_blocking_key) + "\r\n" + Bulk(binary_element));
-    const std::string oversized_key(keylane::storage::kStorageBlockBytes + 4096,
+    const std::string oversized_key(lavik::storage::kStorageBlockBytes + 4096,
                                     'q');
     EXPECT_EQ(client.Command({"SET", oversized_key, "string-value"}), "+OK");
     EXPECT_EQ(client.Command({"DEL", oversized_key}), ":1");
@@ -1151,7 +1150,7 @@ TEST(ListE2eTest, PersistsLogicalLengthSeparatelyFromSerializedBytes) {
   }
 
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 3);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 3);
     RespClient client(port);
     EXPECT_EQ(client.Command({"LPUSH", "list", "after-restart"}), ":8");
     EXPECT_EQ(client.Command({"LPUSH", "", "after-restart"}), ":2");
@@ -1167,10 +1166,9 @@ TEST(ListE2eTest, PersistsLogicalLengthSeparatelyFromSerializedBytes) {
 }
 
 TEST(ListE2eTest, BlockingAndStreamedCommandsDoNotHoldFlushDbGate) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-db-gate-e2e-" +
-                             std::to_string(::getpid());
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-db-gate-e2e-" + std::to_string(::getpid());
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
   FileCleanup data_cleanup(data_path);
@@ -1182,7 +1180,7 @@ TEST(ListE2eTest, BlockingAndStreamedCommandsDoNotHoldFlushDbGate) {
   ASSERT_EQ(::close(data_fd), 0);
 
   const std::uint16_t port = FindFreePort();
-  ServerProcess server(g_keylane_binary, port, data_path, log_path, 2);
+  ServerProcess server(g_lavik_binary, port, data_path, log_path, 2);
   RespClient client(port);
 
   auto blocked = std::async(std::launch::async, [port] {
@@ -1288,9 +1286,9 @@ TEST(ListE2eTest, BlockingAndStreamedCommandsDoNotHoldFlushDbGate) {
 }
 
 TEST(ListE2eTest, StreamBlockingRegistryBroadcastsAndKeepsGroupFifo) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-stream-wait-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-stream-wait-e2e-" +
                              std::to_string(::getpid());
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
@@ -1303,7 +1301,7 @@ TEST(ListE2eTest, StreamBlockingRegistryBroadcastsAndKeepsGroupFifo) {
   ASSERT_EQ(::close(data_fd), 0);
 
   const std::uint16_t port = FindFreePort();
-  ServerProcess server(g_keylane_binary, port, data_path, log_path, 3);
+  ServerProcess server(g_lavik_binary, port, data_path, log_path, 3);
   RespClient client(port);
 
   auto xread = [port] {
@@ -1371,9 +1369,9 @@ TEST(ListE2eTest, StreamBlockingRegistryBroadcastsAndKeepsGroupFifo) {
 }
 
 TEST(ListE2eTest, ClientUnblockFindsBlockedClientsAcrossWorkers) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-client-unblock-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-client-unblock-e2e-" +
                              std::to_string(::getpid());
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
@@ -1386,7 +1384,7 @@ TEST(ListE2eTest, ClientUnblockFindsBlockedClientsAcrossWorkers) {
   ASSERT_EQ(::close(data_fd), 0);
 
   const std::uint16_t port = FindFreePort();
-  ServerProcess server(g_keylane_binary, port, data_path, log_path, 3);
+  ServerProcess server(g_lavik_binary, port, data_path, log_path, 3);
   RespClient client(port);
   auto wait_until_blocked = [&](std::string_view id) {
     const auto deadline = std::chrono::steady_clock::now() + 2s;
@@ -1509,9 +1507,9 @@ TEST(ListE2eTest, ClientUnblockFindsBlockedClientsAcrossWorkers) {
 }
 
 TEST(ListE2eTest, DisconnectCancelsActiveBlockingWait) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-blocking-disconnect-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-blocking-disconnect-e2e-" +
                              std::to_string(::getpid());
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
@@ -1524,7 +1522,7 @@ TEST(ListE2eTest, DisconnectCancelsActiveBlockingWait) {
   ASSERT_EQ(::close(data_fd), 0);
 
   const std::uint16_t port = FindFreePort();
-  ServerProcess server(g_keylane_binary, port, data_path, log_path, 3);
+  ServerProcess server(g_lavik_binary, port, data_path, log_path, 3);
   RespClient control(port);
   auto wait_for_blocked_clients = [&](std::uint64_t expected) {
     const std::string field =
@@ -1556,9 +1554,9 @@ TEST(ListE2eTest, DisconnectCancelsActiveBlockingWait) {
 }
 
 TEST(ListE2eTest, PipelineFlushesRepliesBeforeBlockingCommand) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-blocking-pipeline-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-blocking-pipeline-e2e-" +
                              std::to_string(::getpid());
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
@@ -1571,7 +1569,7 @@ TEST(ListE2eTest, PipelineFlushesRepliesBeforeBlockingCommand) {
   ASSERT_EQ(::close(data_fd), 0);
 
   const std::uint16_t port = FindFreePort();
-  ServerProcess server(g_keylane_binary, port, data_path, log_path, 3);
+  ServerProcess server(g_lavik_binary, port, data_path, log_path, 3);
   RespClient control(port);
   auto wait_for_blocked_clients = [&](std::uint64_t expected) {
     const std::string field =
@@ -1623,9 +1621,9 @@ TEST(ListE2eTest, PipelineFlushesRepliesBeforeBlockingCommand) {
 }
 
 TEST(ListE2eTest, ExecWakesBlockersOnlyForFinalValueTypes) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-exec-final-type-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-exec-final-type-e2e-" +
                              std::to_string(::getpid());
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
@@ -1639,8 +1637,7 @@ TEST(ListE2eTest, ExecWakesBlockersOnlyForFinalValueTypes) {
 
   constexpr unsigned kWorkerCount = 3;
   const std::uint16_t port = FindFreePort();
-  ServerProcess server(g_keylane_binary, port, data_path, log_path,
-                       kWorkerCount);
+  ServerProcess server(g_lavik_binary, port, data_path, log_path, kWorkerCount);
   RespClient client(port);
   const std::string list_key = KeyForWorker("exec-final-list", 0, kWorkerCount);
   const std::string extra_list_key =
@@ -1722,9 +1719,9 @@ TEST(ListE2eTest, ExecWakesBlockersOnlyForFinalValueTypes) {
 }
 
 TEST(ListE2eTest, CircularBlockingMovesDrainBeforeTriggerReply) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-circular-blocking-move-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-circular-blocking-move-e2e-" +
                              std::to_string(::getpid());
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
@@ -1737,7 +1734,7 @@ TEST(ListE2eTest, CircularBlockingMovesDrainBeforeTriggerReply) {
   ASSERT_EQ(::close(data_fd), 0);
 
   const std::uint16_t port = FindFreePort();
-  ServerProcess server(g_keylane_binary, port, data_path, log_path, 3);
+  ServerProcess server(g_lavik_binary, port, data_path, log_path, 3);
   RespClient client(port);
   const std::string first = "circular-first{nested}";
   const std::string second = "circular-second{nested}";
@@ -1794,9 +1791,9 @@ TEST(ListE2eTest, CircularBlockingMovesDrainBeforeTriggerReply) {
 }
 
 TEST(ListE2eTest, BlockingMovesDoNotDirtyWatchBeforeWakeAndCountChanges) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-blocking-watch-dirty-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-blocking-watch-dirty-e2e-" +
                              std::to_string(::getpid());
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
@@ -1809,7 +1806,7 @@ TEST(ListE2eTest, BlockingMovesDoNotDirtyWatchBeforeWakeAndCountChanges) {
   ASSERT_EQ(::close(data_fd), 0);
 
   const std::uint16_t port = FindFreePort();
-  ServerProcess server(g_keylane_binary, port, data_path, log_path, 3);
+  ServerProcess server(g_lavik_binary, port, data_path, log_path, 3);
   RespClient trigger(port);
   auto blocked_clients = [&](std::uint64_t expected) {
     const std::string field =
@@ -1898,9 +1895,9 @@ TEST(ListE2eTest, BlockingMovesDoNotDirtyWatchBeforeWakeAndCountChanges) {
 }
 
 TEST(ListE2eTest, CommandsLargeKeyTransactionsAndCrashRecovery) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-list-complete-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-list-complete-e2e-" +
                              std::to_string(::getpid());
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
@@ -1923,7 +1920,7 @@ TEST(ListE2eTest, CommandsLargeKeyTransactionsAndCrashRecovery) {
   }
 
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 4);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 4);
     RespClient client(port);
 
     const auto expect_arity_error = [&](std::vector<std::string_view> args,
@@ -2307,7 +2304,7 @@ TEST(ListE2eTest, CommandsLargeKeyTransactionsAndCrashRecovery) {
   }
 
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 3);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 3);
     RespClient client(port);
     EXPECT_EQ(client.Command({"LLEN", "merge-list"}), ":16");
     EXPECT_EQ(
@@ -2353,7 +2350,7 @@ TEST(ListE2eTest, CommandsLargeKeyTransactionsAndCrashRecovery) {
   }
 
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 2);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 2);
     RespClient client(port);
     EXPECT_EQ(client.Command({"LLEN", "large-list"}), ":1199");
     EXPECT_EQ(client.Command({"LINDEX", "large-list", "79"}),
@@ -2367,7 +2364,7 @@ TEST(ListE2eTest, CommandsLargeKeyTransactionsAndCrashRecovery) {
   }
 
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 2);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 2);
     RespClient client(port);
     EXPECT_EQ(client.Command({"LTRIM", "large-list", "0", "9"}), "+OK");
     EXPECT_EQ(client.Command({"LLEN", "large-list"}), ":10");
@@ -2377,7 +2374,7 @@ TEST(ListE2eTest, CommandsLargeKeyTransactionsAndCrashRecovery) {
   }
 
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 3);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 3);
     RespClient client(port);
     EXPECT_EQ(client.Command({"LLEN", "large-list"}), ":10");
     EXPECT_EQ(client.Command({"LINDEX", "large-list", "-1"}),
@@ -2388,7 +2385,7 @@ TEST(ListE2eTest, CommandsLargeKeyTransactionsAndCrashRecovery) {
   }
 
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 2);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 2);
     RespClient client(port);
     EXPECT_EQ(client.Command({"LLEN", "large-list"}), ":0");
     server.Stop();
@@ -2396,9 +2393,9 @@ TEST(ListE2eTest, CommandsLargeKeyTransactionsAndCrashRecovery) {
 }
 
 TEST(ListE2eTest, SortsCollectionsAndStoresResultsAtomically) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-sort-e2e-" + std::to_string(::getpid());
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-sort-e2e-" + std::to_string(::getpid());
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
   FileCleanup data_cleanup(data_path);
@@ -2410,7 +2407,7 @@ TEST(ListE2eTest, SortsCollectionsAndStoresResultsAtomically) {
   ASSERT_EQ(::close(fd), 0);
 
   const std::uint16_t port = FindFreePort();
-  ServerProcess server(g_keylane_binary, port, data_path, log_path, 3);
+  ServerProcess server(g_lavik_binary, port, data_path, log_path, 3);
   RespClient client(port);
 
   EXPECT_EQ(client.Command({"RPUSH", "numbers", "3", "10", "2", "1"}), ":4");
@@ -2500,9 +2497,9 @@ TEST(ListE2eTest, SortsCollectionsAndStoresResultsAtomically) {
 }
 
 TEST(ListE2eTest, NativeFlowCapabilityRejectsSessionHijack) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-replication-flow-capability-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-replication-flow-capability-e2e-" +
                              std::to_string(::getpid());
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
@@ -2515,7 +2512,7 @@ TEST(ListE2eTest, NativeFlowCapabilityRejectsSessionHijack) {
   ASSERT_EQ(::close(data_fd), 0);
 
   const std::uint16_t port = FindFreePort();
-  ServerProcess server(g_keylane_binary, port, data_path, log_path, 1);
+  ServerProcess server(g_lavik_binary, port, data_path, log_path, 1);
   RespClient client(port);
   const auto ready_deadline = std::chrono::steady_clock::now() + 30s;
   while (std::chrono::steady_clock::now() < ready_deadline &&
@@ -2526,24 +2523,23 @@ TEST(ListE2eTest, NativeFlowCapabilityRejectsSessionHijack) {
 
   const int control = ConnectSocket(port);
   ASSERT_GE(control, 0);
-  const std::string target_identity =
-      "?" + std::string(40, 'a') + ":12345";
+  const std::string target_identity = "?" + std::string(40, 'a') + ":12345";
   SendAll(control,
-          EncodeCommand({"KLPSYNC", "1", target_identity, "?", "?",
+          EncodeCommand({"LVPSYNC", "1", target_identity, "?", "?",
                          std::string(40, 'b'), std::string(40, 'c'), "?"}));
   const std::string resync = ReadRespLine(control);
   const std::string_view resync_view(resync);
   std::vector<std::string_view> words;
   for (std::size_t begin = 0; begin < resync_view.size();) {
     const std::size_t end = resync_view.find(' ', begin);
-    words.push_back(resync_view.substr(
-        begin, end == std::string::npos ? resync_view.size() - begin
-                                        : end - begin));
+    words.push_back(resync_view.substr(begin, end == std::string::npos
+                                                  ? resync_view.size() - begin
+                                                  : end - begin));
     if (end == std::string::npos) break;
     begin = end + 1;
   }
   ASSERT_EQ(words.size(), 8U) << resync;
-  ASSERT_EQ(words[0], "+KLFULLRESYNC");
+  ASSERT_EQ(words[0], "+LVFULLRESYNC");
   ASSERT_EQ(words[6], "1");
   ASSERT_EQ(words[7].size(), 40U);
   const std::string session_id(words[1]);
@@ -2553,19 +2549,16 @@ TEST(ListE2eTest, NativeFlowCapabilityRejectsSessionHijack) {
 
   const int hijack = ConnectSocket(port);
   ASSERT_GE(hijack, 0);
-  SendAll(hijack,
-          EncodeCommand({"KLFLOW", "1", session_id, "0", "1", "0",
-                         wrong_capability}));
+  SendAll(hijack, EncodeCommand({"LVFLOW", "1", session_id, "0", "1", "0",
+                                 wrong_capability}));
   EXPECT_THROW((void)ReadRespLine(hijack), std::runtime_error);
   ASSERT_EQ(::close(hijack), 0);
 
   const int authorized = ConnectSocket(port);
   ASSERT_GE(authorized, 0);
-  SendAll(authorized,
-          EncodeCommand({"KLFLOW", "1", session_id, "0", "1", "0",
-                         capability}));
-  EXPECT_EQ(ReadRespLine(authorized),
-            "+KLFLOW " + session_id + " 0 FULL");
+  SendAll(authorized, EncodeCommand({"LVFLOW", "1", session_id, "0", "1", "0",
+                                     capability}));
+  EXPECT_EQ(ReadRespLine(authorized), "+LVFLOW " + session_id + " 0 FULL");
   ASSERT_EQ(::close(authorized), 0);
   ASSERT_EQ(::close(control), 0);
 
@@ -2575,17 +2568,17 @@ TEST(ListE2eTest, NativeFlowCapabilityRejectsSessionHijack) {
   const int shutdown_control = ConnectSocket(port);
   ASSERT_GE(shutdown_control, 0);
   SendAll(shutdown_control,
-          EncodeCommand({"KLPSYNC", "1", target_identity, "?", "?",
+          EncodeCommand({"LVPSYNC", "1", target_identity, "?", "?",
                          std::string(40, 'd'), std::string(40, 'e'), "?"}));
-  ASSERT_TRUE(ReadRespLine(shutdown_control).starts_with("+KLFULLRESYNC "));
+  ASSERT_TRUE(ReadRespLine(shutdown_control).starts_with("+LVFULLRESYNC "));
   server.Stop();
   ASSERT_EQ(::close(shutdown_control), 0);
 }
 
 TEST(ListE2eTest, GracefulShutdownCancelsBackpressuredNativeSource) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-native-source-shutdown-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-native-source-shutdown-e2e-" +
                              std::to_string(::getpid());
   const std::string source_data = prefix + "-source.data";
   const std::string replica_data = prefix + "-replica.data";
@@ -2609,13 +2602,13 @@ TEST(ListE2eTest, GracefulShutdownCancelsBackpressuredNativeSource) {
   while (replica_port == source_port || replica_port == metrics_port) {
     replica_port = FindFreePort();
   }
-  ServerProcess source(
-      g_keylane_binary, source_port, source_data, source_log, 1, {},
-      {"--repl-backlog-size", "8388608",
-       "--replication-publish-queue-mb-per-worker", "1", "--metrics-port",
-       std::to_string(metrics_port)});
-  ServerProcess replica(g_keylane_binary, replica_port, replica_data,
-                        replica_log, 1);
+  ServerProcess source(g_lavik_binary, source_port, source_data, source_log, 1,
+                       {},
+                       {"--repl-backlog-size", "8388608",
+                        "--replication-publish-queue-mb-per-worker", "1",
+                        "--metrics-port", std::to_string(metrics_port)});
+  ServerProcess replica(g_lavik_binary, replica_port, replica_data, replica_log,
+                        1);
   RespClient source_client(source_port);
   RespClient replica_client(replica_port);
   ASSERT_EQ(replica_client.Command(
@@ -2625,13 +2618,13 @@ TEST(ListE2eTest, GracefulShutdownCancelsBackpressuredNativeSource) {
   std::string replica_info;
   do {
     replica_info = replica_client.Command({"INFO", "replication"});
-    if (replica_info.find("keylane_replication_state:online") !=
+    if (replica_info.find("lavik_replication_state:online") !=
         std::string::npos) {
       break;
     }
     std::this_thread::sleep_for(10ms);
   } while (std::chrono::steady_clock::now() < online_deadline);
-  ASSERT_NE(replica_info.find("keylane_replication_state:online"),
+  ASSERT_NE(replica_info.find("lavik_replication_state:online"),
             std::string::npos)
       << replica_info;
 
@@ -2650,7 +2643,7 @@ TEST(ListE2eTest, GracefulShutdownCancelsBackpressuredNativeSource) {
             "+OK");
 
   const std::string backpressured_metric =
-      "keylane_replication_backlog_backpressured{worker=\"0\"} 1";
+      "lavik_replication_backlog_backpressured{worker=\"0\"} 1";
   const auto blocked_deadline = std::chrono::steady_clock::now() + 15s;
   bool observed_backpressure = false;
   while (std::chrono::steady_clock::now() < blocked_deadline) {
@@ -2690,9 +2683,9 @@ TEST(ListE2eTest, GracefulShutdownCancelsBackpressuredNativeSource) {
 }
 
 TEST(ListE2eTest, EstablishesNativeReplicationFlowsAndChangesRole) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-replication-session-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-replication-session-e2e-" +
                              std::to_string(::getpid());
   const std::string source_data = prefix + "-source.data";
   const std::string replica_data = prefix + "-replica.data";
@@ -2715,11 +2708,10 @@ TEST(ListE2eTest, EstablishesNativeReplicationFlowsAndChangesRole) {
   const std::uint16_t source_port = FindFreePort();
   std::uint16_t replica_port = FindFreePort();
   while (replica_port == source_port) replica_port = FindFreePort();
-  ServerProcess source(g_keylane_binary, source_port, source_data, source_log,
-                       3, {}, {"--recv-buffers-per-worker", "1024"});
-  ServerProcess replica(g_keylane_binary, replica_port, replica_data,
-                        replica_log, 2, {},
-                        {"--recv-buffers-per-worker", "1024"});
+  ServerProcess source(g_lavik_binary, source_port, source_data, source_log, 3,
+                       {}, {"--recv-buffers-per-worker", "1024"});
+  ServerProcess replica(g_lavik_binary, replica_port, replica_data, replica_log,
+                        2, {}, {"--recv-buffers-per-worker", "1024"});
   RespClient source_client(source_port);
   RespClient replica_client(replica_port);
 
@@ -2837,19 +2829,16 @@ TEST(ListE2eTest, EstablishesNativeReplicationFlowsAndChangesRole) {
   do {
     replication_info = replica_client.Command({"INFO", "replication"});
     if (replication_info.find("master_link_status:up") != std::string::npos &&
-        replication_info.find("keylane_source_workers:3") !=
-            std::string::npos &&
-        replication_info.find("keylane_connected_flows:3") !=
-            std::string::npos) {
+        replication_info.find("lavik_source_workers:3") != std::string::npos &&
+        replication_info.find("lavik_connected_flows:3") != std::string::npos) {
       break;
     }
     std::this_thread::sleep_for(10ms);
   } while (std::chrono::steady_clock::now() < online_deadline);
-  EXPECT_NE(replication_info.find("keylane_replication_state:online"),
+  EXPECT_NE(replication_info.find("lavik_replication_state:online"),
             std::string::npos);
-  EXPECT_NE(replication_info.find("keylane_source_workers:3"),
-            std::string::npos);
-  EXPECT_NE(replication_info.find("keylane_connected_flows:3"),
+  EXPECT_NE(replication_info.find("lavik_source_workers:3"), std::string::npos);
+  EXPECT_NE(replication_info.find("lavik_connected_flows:3"),
             std::string::npos);
   EXPECT_NE(replication_info.find("role:slave"), std::string::npos);
   EXPECT_NE(replication_info.find("slave_read_only:1"), std::string::npos);
@@ -2857,14 +2846,14 @@ TEST(ListE2eTest, EstablishesNativeReplicationFlowsAndChangesRole) {
   {
     RespClient downstream_probe(replica_port);
     EXPECT_EQ(downstream_probe.Command(
-                  {"KLPSYNC", "1", "?", "?", "?", "?", "?", "?"}),
+                  {"LVPSYNC", "1", "?", "?", "?", "?", "?", "?"}),
               "-ERR native cascading replication is not supported");
   }
   {
     RespClient redis_export_probe(replica_port);
     EXPECT_EQ(redis_export_probe.Command({"REPLCONF", "capa", "eof"}), "+OK");
     EXPECT_EQ(redis_export_probe.Command({"PSYNC", "?", "-1"}),
-              "-ERR detach this Keylane replica before Redis export");
+              "-ERR detach this Lavik replica before Redis export");
   }
   const std::string source_replication =
       source_client.Command({"INFO", "replication"});
@@ -2937,7 +2926,7 @@ TEST(ListE2eTest, EstablishesNativeReplicationFlowsAndChangesRole) {
             std::to_string(replica_port));
   EXPECT_EQ(source_slot.elements_[3].elements_[2].scalar_.size(), 40);
   EXPECT_EQ(source_client.Command({"COMMAND", "COUNT"}),
-            ":" + std::to_string(keylane::CommandSpecs().size()));
+            ":" + std::to_string(lavik::CommandSpecs().size()));
   EXPECT_EQ(source_client.Command(
                 {"COMMAND", "GETKEYS", "SET", "command-key", "value"}),
             "*1\r\n$11\r\ncommand-key");
@@ -2947,7 +2936,7 @@ TEST(ListE2eTest, EstablishesNativeReplicationFlowsAndChangesRole) {
       ParseEncodedResp(command_metadata, &command_metadata_offset);
   ASSERT_EQ(command_metadata_offset, command_metadata.size());
   EXPECT_EQ(parsed_command_metadata.elements_.size(),
-            keylane::CommandSpecs().size());
+            lavik::CommandSpecs().size());
   EXPECT_TRUE(std::any_of(parsed_command_metadata.elements_.begin(),
                           parsed_command_metadata.elements_.end(),
                           [](const ParsedRespValue& value) {
@@ -3293,7 +3282,7 @@ TEST(ListE2eTest, EstablishesNativeReplicationFlowsAndChangesRole) {
   ASSERT_EQ(replica_client.Command({"SLAVEOF", "NO", "ONE"}), "+OK");
   replication_info = replica_client.Command({"INFO", "replication"});
   EXPECT_NE(replication_info.find("role:master"), std::string::npos);
-  EXPECT_NE(replication_info.find("keylane_replication_state:master"),
+  EXPECT_NE(replication_info.find("lavik_replication_state:master"),
             std::string::npos);
   const std::string promoted_nodes =
       replica_client.Command({"CLUSTER", "NODES"});
@@ -3311,15 +3300,15 @@ TEST(ListE2eTest, EstablishesNativeReplicationFlowsAndChangesRole) {
   const auto reattach_deadline = std::chrono::steady_clock::now() + 600s;
   do {
     replication_info = replica_client.Command({"INFO", "replication"});
-    if (replication_info.find("keylane_replication_state:online") !=
+    if (replication_info.find("lavik_replication_state:online") !=
         std::string::npos) {
       break;
     }
     std::this_thread::sleep_for(10ms);
   } while (std::chrono::steady_clock::now() < reattach_deadline);
-  ASSERT_NE(replication_info.find("keylane_replication_state:online"),
+  ASSERT_NE(replication_info.find("lavik_replication_state:online"),
             std::string::npos);
-  EXPECT_NE(replication_info.find("keylane_connected_flows:3"),
+  EXPECT_NE(replication_info.find("lavik_connected_flows:3"),
             std::string::npos);
   EXPECT_EQ(replica_client.Command({"GET", "replicated-after{mvp}"}),
             Bulk("delta"));
@@ -3338,7 +3327,7 @@ TEST(ListE2eTest, EstablishesNativeReplicationFlowsAndChangesRole) {
             static_cast<ssize_t>(config.size()));
   ASSERT_EQ(::close(config_fd), 0);
   {
-    ServerProcess startup_replica(g_keylane_binary, replica_port, replica_data,
+    ServerProcess startup_replica(g_lavik_binary, replica_port, replica_data,
                                   replica_log, 2, {}, {}, {}, config_path);
     RespClient startup_client(replica_port);
     const auto startup_deadline = std::chrono::steady_clock::now() + 600s;
@@ -3349,9 +3338,9 @@ TEST(ListE2eTest, EstablishesNativeReplicationFlowsAndChangesRole) {
       }
       std::this_thread::sleep_for(10ms);
     } while (std::chrono::steady_clock::now() < startup_deadline);
-    EXPECT_NE(replication_info.find("keylane_replication_state:online"),
+    EXPECT_NE(replication_info.find("lavik_replication_state:online"),
               std::string::npos);
-    EXPECT_NE(replication_info.find("keylane_connected_flows:3"),
+    EXPECT_NE(replication_info.find("lavik_connected_flows:3"),
               std::string::npos);
     EXPECT_EQ(startup_client.Command({"CONFIG", "GET", "replica-priority"}),
               BulkArray({"replica-priority", "90"}));
@@ -3369,7 +3358,7 @@ TEST(ListE2eTest, EstablishesNativeReplicationFlowsAndChangesRole) {
     startup_replica.Stop();
   }
   {
-    ServerProcess rewritten_master(g_keylane_binary, replica_port, replica_data,
+    ServerProcess rewritten_master(g_lavik_binary, replica_port, replica_data,
                                    replica_log, 2, {}, {}, {}, config_path);
     RespClient rewritten_client(replica_port);
     replication_info = rewritten_client.Command({"INFO", "replication"});
@@ -3384,9 +3373,9 @@ TEST(ListE2eTest, EstablishesNativeReplicationFlowsAndChangesRole) {
 }
 
 TEST(ListE2eTest, WaitsForNativeReplicaAcknowledgementsAcrossFlows) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-wait-e2e-" + std::to_string(::getpid());
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-wait-e2e-" + std::to_string(::getpid());
   const std::string source_data = prefix + "-source.data";
   const std::string replica_data = prefix + "-replica.data";
   const std::string second_replica_data = prefix + "-second-replica.data";
@@ -3416,12 +3405,11 @@ TEST(ListE2eTest, WaitsForNativeReplicaAcknowledgementsAcrossFlows) {
          second_replica_port == replica_port) {
     second_replica_port = FindFreePort();
   }
-  ServerProcess source(g_keylane_binary, source_port, source_data, source_log,
-                       2, {}, {"--recv-buffers-per-worker", "1024"});
-  ServerProcess replica(g_keylane_binary, replica_port, replica_data,
-                        replica_log, 2, {},
-                        {"--recv-buffers-per-worker", "1024"});
-  ServerProcess second_replica(g_keylane_binary, second_replica_port,
+  ServerProcess source(g_lavik_binary, source_port, source_data, source_log, 2,
+                       {}, {"--recv-buffers-per-worker", "1024"});
+  ServerProcess replica(g_lavik_binary, replica_port, replica_data, replica_log,
+                        2, {}, {"--recv-buffers-per-worker", "1024"});
+  ServerProcess second_replica(g_lavik_binary, second_replica_port,
                                second_replica_data, second_replica_log, 2, {},
                                {"--recv-buffers-per-worker", "1024"});
   RespClient source_client(source_port);
@@ -3451,7 +3439,7 @@ TEST(ListE2eTest, WaitsForNativeReplicaAcknowledgementsAcrossFlows) {
     std::string info;
     do {
       info = client.Command({"INFO", "replication"});
-      if (info.find("keylane_replication_state:online") != std::string::npos) {
+      if (info.find("lavik_replication_state:online") != std::string::npos) {
         return true;
       }
       std::this_thread::sleep_for(10ms);
@@ -3474,7 +3462,7 @@ TEST(ListE2eTest, WaitsForNativeReplicaAcknowledgementsAcrossFlows) {
   for (unsigned candidate = 0; worker_keys[0].empty() || worker_keys[1].empty();
        ++candidate) {
     const std::string key = "wait-flow-" + std::to_string(candidate);
-    const unsigned worker = keylane::storage::RedisSlot(key) % 2;
+    const unsigned worker = lavik::storage::RedisSlot(key) % 2;
     if (worker_keys[worker].empty()) worker_keys[worker] = key;
   }
 
@@ -3541,12 +3529,12 @@ TEST(ListE2eTest, WaitsForNativeReplicaAcknowledgementsAcrossFlows) {
 }
 
 TEST(ListE2eTest, ControlDisconnectBeforeFirstFlowCannotResumeEmptyDataset) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires a Debug or fault-instrumented server";
 #endif
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-control-drop-fullsync-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-control-drop-fullsync-e2e-" +
                              std::to_string(::getpid());
   const std::string source_data = prefix + "-source.data";
   const std::string replica_data = prefix + "-replica.data";
@@ -3564,13 +3552,12 @@ TEST(ListE2eTest, ControlDisconnectBeforeFirstFlowCannotResumeEmptyDataset) {
 
   const std::uint16_t source_port = FindFreePort();
   const std::uint16_t replica_port = FindFreePort();
-  ServerProcess source(g_keylane_binary, source_port, source_data, source_log,
-                       2);
+  ServerProcess source(g_lavik_binary, source_port, source_data, source_log, 2);
   RespClient source_client(source_port);
   ASSERT_EQ(source_client.Command({"SET", "fullsync-seed", "present"}), "+OK");
   ServerProcess replica(
-      g_keylane_binary, replica_port, replica_data, replica_log, 2, {}, {},
-      {{"KEYLANE_REPLICATION_DROP_AFTER_CONTROL_RESPONSE_ONCE", "1"}});
+      g_lavik_binary, replica_port, replica_data, replica_log, 2, {}, {},
+      {{"LAVIK_REPLICATION_DROP_AFTER_CONTROL_RESPONSE_ONCE", "1"}});
   RespClient replica_client(replica_port);
   ASSERT_EQ(replica_client.Command({"READONLY"}), "+OK");
   ASSERT_EQ(replica_client.Command(
@@ -3581,12 +3568,12 @@ TEST(ListE2eTest, ControlDisconnectBeforeFirstFlowCannotResumeEmptyDataset) {
   std::string info;
   do {
     info = replica_client.Command({"INFO", "replication"});
-    if (info.find("keylane_replication_state:online") != std::string::npos) {
+    if (info.find("lavik_replication_state:online") != std::string::npos) {
       break;
     }
     std::this_thread::sleep_for(10ms);
   } while (std::chrono::steady_clock::now() < deadline);
-  ASSERT_NE(info.find("keylane_replication_state:online"), std::string::npos)
+  ASSERT_NE(info.find("lavik_replication_state:online"), std::string::npos)
       << info;
   EXPECT_EQ(replica_client.Command({"GET", "fullsync-seed"}), Bulk("present"));
 
@@ -3595,9 +3582,9 @@ TEST(ListE2eTest, ControlDisconnectBeforeFirstFlowCannotResumeEmptyDataset) {
 }
 
 TEST(ListE2eTest, ExecReusesAdmissionAndAccountsForReplicatedChildren) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-exec-admission-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-exec-admission-e2e-" +
                              std::to_string(::getpid());
   const std::string source_data = prefix + "-source.data";
   const std::string replica_data = prefix + "-replica.data";
@@ -3615,10 +3602,10 @@ TEST(ListE2eTest, ExecReusesAdmissionAndAccountsForReplicatedChildren) {
 
   const std::uint16_t source_port = FindFreePort();
   const std::uint16_t replica_port = FindFreePort();
-  ServerProcess source(g_keylane_binary, source_port, source_data, source_log,
-                       1, {}, {"--repl-backlog-size", "8388608"});
-  ServerProcess replica(g_keylane_binary, replica_port, replica_data,
-                        replica_log, 1);
+  ServerProcess source(g_lavik_binary, source_port, source_data, source_log, 1,
+                       {}, {"--repl-backlog-size", "8388608"});
+  ServerProcess replica(g_lavik_binary, replica_port, replica_data, replica_log,
+                        1);
   RespClient source_client(source_port);
   RespClient replica_client(replica_port);
   ASSERT_EQ(replica_client.Command({"READONLY"}), "+OK");
@@ -3629,13 +3616,13 @@ TEST(ListE2eTest, ExecReusesAdmissionAndAccountsForReplicatedChildren) {
   std::string replica_info;
   do {
     replica_info = replica_client.Command({"INFO", "replication"});
-    if (replica_info.find("keylane_replication_state:online") !=
+    if (replica_info.find("lavik_replication_state:online") !=
         std::string::npos) {
       break;
     }
     std::this_thread::sleep_for(10ms);
   } while (std::chrono::steady_clock::now() < online_deadline);
-  ASSERT_NE(replica_info.find("keylane_replication_state:online"),
+  ASSERT_NE(replica_info.find("lavik_replication_state:online"),
             std::string::npos);
   ASSERT_EQ(
       source_client.Command(
@@ -3688,9 +3675,9 @@ TEST(ListE2eTest, ExecReusesAdmissionAndAccountsForReplicatedChildren) {
 }
 
 TEST(ListE2eTest, ClientKillDisconnectsReplicaSocketsAndReplicaReconnects) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-client-kill-replica-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-client-kill-replica-e2e-" +
                              std::to_string(::getpid());
   const std::string source_data = prefix + "-source.data";
   const std::string replica_data = prefix + "-replica.data";
@@ -3711,11 +3698,10 @@ TEST(ListE2eTest, ClientKillDisconnectsReplicaSocketsAndReplicaReconnects) {
   const std::uint16_t source_port = FindFreePort();
   std::uint16_t replica_port = FindFreePort();
   while (replica_port == source_port) replica_port = FindFreePort();
-  ServerProcess source(g_keylane_binary, source_port, source_data, source_log,
-                       2, {}, {"--recv-buffers-per-worker", "1024"});
-  ServerProcess replica(g_keylane_binary, replica_port, replica_data,
-                        replica_log, 2, {},
-                        {"--recv-buffers-per-worker", "1024"});
+  ServerProcess source(g_lavik_binary, source_port, source_data, source_log, 2,
+                       {}, {"--recv-buffers-per-worker", "1024"});
+  ServerProcess replica(g_lavik_binary, replica_port, replica_data, replica_log,
+                        2, {}, {"--recv-buffers-per-worker", "1024"});
   RespClient source_client(source_port);
   RespClient replica_client(replica_port);
   ASSERT_EQ(replica_client.Command(
@@ -3726,13 +3712,13 @@ TEST(ListE2eTest, ClientKillDisconnectsReplicaSocketsAndReplicaReconnects) {
   std::string replica_info;
   do {
     replica_info = replica_client.Command({"INFO", "replication"});
-    if (replica_info.find("keylane_replication_state:online") !=
+    if (replica_info.find("lavik_replication_state:online") !=
         std::string::npos) {
       break;
     }
     std::this_thread::sleep_for(10ms);
   } while (std::chrono::steady_clock::now() < online_deadline);
-  ASSERT_NE(replica_info.find("keylane_replication_state:online"),
+  ASSERT_NE(replica_info.find("lavik_replication_state:online"),
             std::string::npos);
 
   auto client_list = [&]() {
@@ -3827,9 +3813,9 @@ TEST(ListE2eTest, ClientKillDisconnectsReplicaSocketsAndReplicaReconnects) {
 }
 
 TEST(ListE2eTest, ExpiredDisconnectedReplicaDisablesHistoryAndFullSyncs) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-expired-replica-lease-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-expired-replica-lease-e2e-" +
                              std::to_string(::getpid());
   const std::string source_data = prefix + "-source.data";
   const std::string replica_data = prefix + "-replica.data";
@@ -3851,10 +3837,10 @@ TEST(ListE2eTest, ExpiredDisconnectedReplicaDisablesHistoryAndFullSyncs) {
   // Two workers require at least two 8 MiB backlog blocks. Keeping that
   // minimum makes the disconnected cursor expire after a small bounded write
   // set instead of making this test depend on the production 1 GiB default.
-  ServerProcess source(g_keylane_binary, source_port, source_data, source_log,
-                       2, {}, {"--repl-backlog-size", "16777216"});
-  ServerProcess replica(g_keylane_binary, replica_port, replica_data,
-                        replica_log, 2);
+  ServerProcess source(g_lavik_binary, source_port, source_data, source_log, 2,
+                       {}, {"--repl-backlog-size", "16777216"});
+  ServerProcess replica(g_lavik_binary, replica_port, replica_data, replica_log,
+                        2);
   RespClient source_client(source_port);
   RespClient replica_client(replica_port);
   ASSERT_EQ(replica_client.Command(
@@ -3866,7 +3852,7 @@ TEST(ListE2eTest, ExpiredDisconnectedReplicaDisablesHistoryAndFullSyncs) {
     std::string info;
     do {
       info = replica_client.Command({"INFO", "replication"});
-      if (info.find("keylane_replication_state:online") != std::string::npos) {
+      if (info.find("lavik_replication_state:online") != std::string::npos) {
         return info;
       }
       std::this_thread::sleep_for(10ms);
@@ -3881,7 +3867,7 @@ TEST(ListE2eTest, ExpiredDisconnectedReplicaDisablesHistoryAndFullSyncs) {
     const std::size_t end = info.find("\r\n", value_begin);
     return info.substr(value_begin, end - value_begin);
   };
-  ASSERT_NE(wait_online().find("keylane_replication_state:online"),
+  ASSERT_NE(wait_online().find("lavik_replication_state:online"),
             std::string::npos);
   const std::string old_history =
       history_id(source_client.Command({"INFO", "replication"}));
@@ -3923,14 +3909,14 @@ TEST(ListE2eTest, ExpiredDisconnectedReplicaDisablesHistoryAndFullSyncs) {
   const auto resumed_deadline = std::chrono::steady_clock::now() + 60s;
   do {
     resumed_info = replica_client.Command({"INFO", "replication"});
-    if (resumed_info.find("keylane_replication_state:online") !=
+    if (resumed_info.find("lavik_replication_state:online") !=
             std::string::npos &&
         history_id(resumed_info) == new_history) {
       break;
     }
     std::this_thread::sleep_for(10ms);
   } while (std::chrono::steady_clock::now() < resumed_deadline);
-  ASSERT_NE(resumed_info.find("keylane_replication_state:online"),
+  ASSERT_NE(resumed_info.find("lavik_replication_state:online"),
             std::string::npos);
   EXPECT_EQ(history_id(resumed_info), new_history);
   EXPECT_EQ(replica_client.Command({"STRLEN", hot_key}),
@@ -3940,9 +3926,9 @@ TEST(ListE2eTest, ExpiredDisconnectedReplicaDisablesHistoryAndFullSyncs) {
 }
 
 TEST(ListE2eTest, ReplicationUsesConfiguredTlsForControlAndEveryFlow) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-replication-tls-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-replication-tls-e2e-" +
                              std::to_string(::getpid());
   const std::string source_data = prefix + "-source.data";
   const std::string replica_data = prefix + "-replica.data";
@@ -3965,7 +3951,7 @@ TEST(ListE2eTest, ReplicationUsesConfiguredTlsForControlAndEveryFlow) {
     ASSERT_EQ(::close(fd), 0);
   }
 
-  const std::string tls_dir = std::string(KEYLANE_SOURCE_DIR) + "/tests/tls";
+  const std::string tls_dir = std::string(LAVIK_SOURCE_DIR) + "/tests/tls";
   const std::string ca = tls_dir + "/ca.crt";
   const std::string cert = tls_dir + "/server.crt";
   const std::string key = tls_dir + "/server.key";
@@ -3983,14 +3969,13 @@ TEST(ListE2eTest, ReplicationUsesConfiguredTlsForControlAndEveryFlow) {
   }
 
   ServerProcess source(
-      g_keylane_binary, source_port, source_data, source_log, 2, {},
+      g_lavik_binary, source_port, source_data, source_log, 2, {},
       {"--tls-port", std::to_string(source_tls_port), "--tls-cert-file", cert,
        "--tls-key-file", key, "--tls-ca-cert-file", ca, "--tls-auth-clients",
        "no", "--tls-replication"});
-  ServerProcess replica(g_keylane_binary, replica_port, replica_data,
-                        replica_log, 2, {},
-                        {"--tls-replication", "--tls-ca-cert-file", ca});
-  ServerProcess mismatch(g_keylane_binary, mismatch_port, mismatch_data,
+  ServerProcess replica(g_lavik_binary, replica_port, replica_data, replica_log,
+                        2, {}, {"--tls-replication", "--tls-ca-cert-file", ca});
+  ServerProcess mismatch(g_lavik_binary, mismatch_port, mismatch_data,
                          mismatch_log, 2);
   RespClient source_client(source_port);
   RespClient replica_client(replica_port);
@@ -4005,12 +3990,12 @@ TEST(ListE2eTest, ReplicationUsesConfiguredTlsForControlAndEveryFlow) {
   std::string info;
   do {
     info = replica_client.Command({"INFO", "replication"});
-    if (info.find("keylane_replication_state:online") != std::string::npos) {
+    if (info.find("lavik_replication_state:online") != std::string::npos) {
       break;
     }
     std::this_thread::sleep_for(10ms);
   } while (std::chrono::steady_clock::now() < online_deadline);
-  ASSERT_NE(info.find("keylane_replication_state:online"), std::string::npos);
+  ASSERT_NE(info.find("lavik_replication_state:online"), std::string::npos);
   const std::string tls_replica_clients =
       source_client.Command({"CLIENT", "LIST", "TYPE", "REPLICA"});
   std::size_t tls_clients_offset = 0;
@@ -4044,7 +4029,7 @@ TEST(ListE2eTest, ReplicationUsesConfiguredTlsForControlAndEveryFlow) {
   std::this_thread::sleep_for(200ms);
   const std::string mismatch_info =
       mismatch_client.Command({"INFO", "replication"});
-  EXPECT_EQ(mismatch_info.find("keylane_replication_state:online"),
+  EXPECT_EQ(mismatch_info.find("lavik_replication_state:online"),
             std::string::npos);
   EXPECT_NE(mismatch_info.find("master_link_status:down"), std::string::npos);
 
@@ -4054,9 +4039,9 @@ TEST(ListE2eTest, ReplicationUsesConfiguredTlsForControlAndEveryFlow) {
 }
 
 TEST(ListE2eTest, MaxClientsRejectsBeforeTlsAndUpdatesAtRuntime) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-maxclients-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-maxclients-e2e-" +
                              std::to_string(::getpid());
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
@@ -4068,7 +4053,7 @@ TEST(ListE2eTest, MaxClientsRejectsBeforeTlsAndUpdatesAtRuntime) {
   ASSERT_EQ(::posix_fallocate(data_fd, 0, 256ULL * 1024 * 1024), 0);
   ASSERT_EQ(::close(data_fd), 0);
 
-  const std::string tls_dir = std::string(KEYLANE_SOURCE_DIR) + "/tests/tls";
+  const std::string tls_dir = std::string(LAVIK_SOURCE_DIR) + "/tests/tls";
   const std::uint16_t port = FindFreePort();
   std::uint16_t tls_port = FindFreePort();
   while (tls_port == port) tls_port = FindFreePort();
@@ -4077,7 +4062,7 @@ TEST(ListE2eTest, MaxClientsRejectsBeforeTlsAndUpdatesAtRuntime) {
     metrics_port = FindFreePort();
   }
   ServerProcess server(
-      g_keylane_binary, port, data_path, log_path, 2, {},
+      g_lavik_binary, port, data_path, log_path, 2, {},
       {"--maxclients", "3", "--tls-port", std::to_string(tls_port),
        "--metrics-port", std::to_string(metrics_port), "--tls-cert-file",
        tls_dir + "/server.crt", "--tls-key-file", tls_dir + "/server.key"},
@@ -4175,12 +4160,12 @@ TEST(ListE2eTest, MaxClientsRejectsBeforeTlsAndUpdatesAtRuntime) {
 }
 
 TEST(ListE2eTest, FlushDbDuringFullSyncCancelsAndRestartsWithoutOldKeys) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires a Debug or fault-instrumented server";
 #endif
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-replication-flush-fullsync-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-replication-flush-fullsync-e2e-" +
                              std::to_string(::getpid());
   const std::string source_data = prefix + "-source.data";
   const std::string replica_data = prefix + "-replica.data";
@@ -4202,10 +4187,10 @@ TEST(ListE2eTest, FlushDbDuringFullSyncCancelsAndRestartsWithoutOldKeys) {
   std::uint16_t replica_port = FindFreePort();
   while (replica_port == source_port) replica_port = FindFreePort();
   ServerProcess source(
-      g_keylane_binary, source_port, source_data, source_log, 2, {}, {},
-      {{"KEYLANE_REPLICATION_PAUSE_FULLSYNC_AFTER_RESET_MS", "1500"}});
-  ServerProcess replica(g_keylane_binary, replica_port, replica_data,
-                        replica_log, 2);
+      g_lavik_binary, source_port, source_data, source_log, 2, {}, {},
+      {{"LAVIK_REPLICATION_PAUSE_FULLSYNC_AFTER_RESET_MS", "1500"}});
+  ServerProcess replica(g_lavik_binary, replica_port, replica_data, replica_log,
+                        2);
   RespClient source_client(source_port);
   RespClient replica_client(replica_port);
   ASSERT_EQ(replica_client.Command({"SET", "shared{fullsync}", "old-root"}),
@@ -4223,10 +4208,10 @@ TEST(ListE2eTest, FlushDbDuringFullSyncCancelsAndRestartsWithoutOldKeys) {
   std::string info;
   do {
     info = replica_client.Command({"INFO", "replication"});
-    if (info.find("keylane_connected_flows:2") != std::string::npos) break;
+    if (info.find("lavik_connected_flows:2") != std::string::npos) break;
     std::this_thread::sleep_for(10ms);
   } while (std::chrono::steady_clock::now() < flows_deadline);
-  ASSERT_NE(info.find("keylane_connected_flows:2"), std::string::npos);
+  ASSERT_NE(info.find("lavik_connected_flows:2"), std::string::npos);
   ASSERT_EQ(replica_client.Command({"READONLY"}), "+OK");
   // Full sync destructively rebuilds the single root. No partial or previous
   // population is visible while the first attempt is paused.
@@ -4243,12 +4228,12 @@ TEST(ListE2eTest, FlushDbDuringFullSyncCancelsAndRestartsWithoutOldKeys) {
   const auto online_deadline = std::chrono::steady_clock::now() + 30s;
   do {
     info = replica_client.Command({"INFO", "replication"});
-    if (info.find("keylane_replication_state:online") != std::string::npos) {
+    if (info.find("lavik_replication_state:online") != std::string::npos) {
       break;
     }
     std::this_thread::sleep_for(10ms);
   } while (std::chrono::steady_clock::now() < online_deadline);
-  ASSERT_NE(info.find("keylane_replication_state:online"), std::string::npos);
+  ASSERT_NE(info.find("lavik_replication_state:online"), std::string::npos);
   EXPECT_EQ(replica_client.Command({"GET", "before-flush{fullsync}"}), "$-1");
   EXPECT_EQ(replica_client.Command({"GET", "after-flush{fullsync}"}),
             Bulk("new"));
@@ -4260,12 +4245,12 @@ TEST(ListE2eTest, FlushDbDuringFullSyncCancelsAndRestartsWithoutOldKeys) {
 }
 
 TEST(ListE2eTest, FullSyncInstallsOnlyTheFinalFunctionCatalog) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires a Debug or fault-instrumented server";
 #endif
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-function-fullsync-cut-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-function-fullsync-cut-e2e-" +
                              std::to_string(::getpid());
   const std::string source_data = prefix + "-source.data";
   const std::string replica_data = prefix + "-replica.data";
@@ -4287,10 +4272,10 @@ TEST(ListE2eTest, FullSyncInstallsOnlyTheFinalFunctionCatalog) {
   std::uint16_t replica_port = FindFreePort();
   while (replica_port == source_port) replica_port = FindFreePort();
   ServerProcess source(
-      g_keylane_binary, source_port, source_data, source_log, 1, {}, {},
-      {{"KEYLANE_REPLICATION_PAUSE_FULLSYNC_AFTER_RESET_MS", "1500"}});
-  ServerProcess replica(g_keylane_binary, replica_port, replica_data,
-                        replica_log, 1);
+      g_lavik_binary, source_port, source_data, source_log, 1, {}, {},
+      {{"LAVIK_REPLICATION_PAUSE_FULLSYNC_AFTER_RESET_MS", "1500"}});
+  ServerProcess replica(g_lavik_binary, replica_port, replica_data, replica_log,
+                        1);
   RespClient source_client(source_port);
   RespClient replica_client(replica_port);
 
@@ -4315,7 +4300,7 @@ TEST(ListE2eTest, FullSyncInstallsOnlyTheFinalFunctionCatalog) {
             Bulk("target_old"));
   const auto baseline_generation =
       InfoUnsigned(replica_client.Command({"INFO", "replication"}),
-                   "keylane_function_catalog_generation");
+                   "lavik_function_catalog_generation");
   ASSERT_TRUE(baseline_generation.has_value());
   ASSERT_EQ(source_client.Command({"FUNCTION", "LOAD", base_library}),
             Bulk("source_base"));
@@ -4332,10 +4317,10 @@ TEST(ListE2eTest, FullSyncInstallsOnlyTheFinalFunctionCatalog) {
   std::string info;
   do {
     info = replica_client.Command({"INFO", "replication"});
-    if (info.find("keylane_connected_flows:1") != std::string::npos) break;
+    if (info.find("lavik_connected_flows:1") != std::string::npos) break;
     std::this_thread::sleep_for(10ms);
   } while (std::chrono::steady_clock::now() < flows_deadline);
-  ASSERT_NE(info.find("keylane_connected_flows:1"), std::string::npos);
+  ASSERT_NE(info.find("lavik_connected_flows:1"), std::string::npos);
 
   ASSERT_EQ(source_client.Command({"FUNCTION", "LOAD", standalone_library}),
             Bulk("source_standalone"));
@@ -4350,14 +4335,14 @@ TEST(ListE2eTest, FullSyncInstallsOnlyTheFinalFunctionCatalog) {
   const auto online_deadline = std::chrono::steady_clock::now() + 30s;
   do {
     info = replica_client.Command({"INFO", "replication"});
-    if (info.find("keylane_replication_state:online") != std::string::npos) {
+    if (info.find("lavik_replication_state:online") != std::string::npos) {
       break;
     }
     std::this_thread::sleep_for(10ms);
   } while (std::chrono::steady_clock::now() < online_deadline);
-  ASSERT_NE(info.find("keylane_replication_state:online"), std::string::npos);
+  ASSERT_NE(info.find("lavik_replication_state:online"), std::string::npos);
   const auto final_generation =
-      InfoUnsigned(info, "keylane_function_catalog_generation");
+      InfoUnsigned(info, "lavik_function_catalog_generation");
   ASSERT_TRUE(final_generation.has_value());
   EXPECT_EQ(*final_generation, *baseline_generation + 1);
   EXPECT_EQ(subscriber.ReadPush(), "*3\r\n" + Bulk("message") + "\r\n" +
@@ -4379,12 +4364,12 @@ TEST(ListE2eTest, FullSyncInstallsOnlyTheFinalFunctionCatalog) {
 }
 
 TEST(ListE2eTest, FlushAllDuringFullSyncRestartsEveryDatabaseEpoch) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires a Debug or fault-instrumented server";
 #endif
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-replication-flushall-fullsync-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-replication-flushall-fullsync-e2e-" +
                              std::to_string(::getpid());
   const std::string source_data = prefix + "-source.data";
   const std::string replica_data = prefix + "-replica.data";
@@ -4405,10 +4390,10 @@ TEST(ListE2eTest, FlushAllDuringFullSyncRestartsEveryDatabaseEpoch) {
   std::uint16_t replica_port = FindFreePort();
   while (replica_port == source_port) replica_port = FindFreePort();
   ServerProcess source(
-      g_keylane_binary, source_port, source_data, source_log, 2, {}, {},
-      {{"KEYLANE_REPLICATION_PAUSE_FULLSYNC_AFTER_RESET_MS", "1200"}});
-  ServerProcess replica(g_keylane_binary, replica_port, replica_data,
-                        replica_log, 2);
+      g_lavik_binary, source_port, source_data, source_log, 2, {}, {},
+      {{"LAVIK_REPLICATION_PAUSE_FULLSYNC_AFTER_RESET_MS", "1200"}});
+  ServerProcess replica(g_lavik_binary, replica_port, replica_data, replica_log,
+                        2);
   RespClient source_client(source_port);
   RespClient replica_client(replica_port);
   ASSERT_EQ(source_client.Command({"SET", "flushall-old-db0", "old0"}), "+OK");
@@ -4432,11 +4417,10 @@ TEST(ListE2eTest, FlushAllDuringFullSyncRestartsEveryDatabaseEpoch) {
   std::string info;
   do {
     info = replica_client.Command({"INFO", "replication"});
-    if (info.find("keylane_replication_state:online") != std::string::npos)
-      break;
+    if (info.find("lavik_replication_state:online") != std::string::npos) break;
     std::this_thread::sleep_for(10ms);
   } while (std::chrono::steady_clock::now() < deadline);
-  ASSERT_NE(info.find("keylane_replication_state:online"), std::string::npos);
+  ASSERT_NE(info.find("lavik_replication_state:online"), std::string::npos);
   ASSERT_EQ(replica_client.Command({"READONLY"}), "+OK");
   EXPECT_EQ(replica_client.Command({"GET", "flushall-old-db0"}), "$-1");
   EXPECT_EQ(replica_client.Command({"GET", "flushall-new-db0"}), Bulk("new0"));
@@ -4448,12 +4432,12 @@ TEST(ListE2eTest, FlushAllDuringFullSyncRestartsEveryDatabaseEpoch) {
 }
 
 TEST(ListE2eTest, FullSyncHandoffProjectsNonIdempotentTailExactlyOnce) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires a Debug or fault-instrumented server";
 #endif
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-replication-handoff-tail-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-replication-handoff-tail-e2e-" +
                              std::to_string(::getpid());
   const std::string source_data = prefix + "-source.data";
   const std::string replica_data = prefix + "-replica.data";
@@ -4475,11 +4459,11 @@ TEST(ListE2eTest, FullSyncHandoffProjectsNonIdempotentTailExactlyOnce) {
   std::uint16_t replica_port = FindFreePort();
   while (replica_port == source_port) replica_port = FindFreePort();
   ServerProcess source(
-      g_keylane_binary, source_port, source_data, source_log, 2, {}, {},
-      {{"KEYLANE_REPLICATION_PAUSE_FULLSYNC_AFTER_HANDOFF_MS", "2000"},
-       {"KEYLANE_REPLICATION_PAUSE_FULLSYNC_BEFORE_CUT_MS", "3000"}});
-  ServerProcess replica(g_keylane_binary, replica_port, replica_data,
-                        replica_log, 2);
+      g_lavik_binary, source_port, source_data, source_log, 2, {}, {},
+      {{"LAVIK_REPLICATION_PAUSE_FULLSYNC_AFTER_HANDOFF_MS", "2000"},
+       {"LAVIK_REPLICATION_PAUSE_FULLSYNC_BEFORE_CUT_MS", "3000"}});
+  ServerProcess replica(g_lavik_binary, replica_port, replica_data, replica_log,
+                        2);
   RespClient source_client(source_port);
   RespClient replica_client(replica_port);
   RespClient source_db1(source_port);
@@ -4545,12 +4529,12 @@ TEST(ListE2eTest, FullSyncHandoffProjectsNonIdempotentTailExactlyOnce) {
   std::string info;
   do {
     info = replica_client.Command({"INFO", "replication"});
-    if (info.find("keylane_replication_state:online") != std::string::npos) {
+    if (info.find("lavik_replication_state:online") != std::string::npos) {
       break;
     }
     std::this_thread::sleep_for(10ms);
   } while (std::chrono::steady_clock::now() < online_deadline);
-  ASSERT_NE(info.find("keylane_replication_state:online"), std::string::npos);
+  ASSERT_NE(info.find("lavik_replication_state:online"), std::string::npos);
   ASSERT_EQ(replica_client.Command({"READONLY"}), "+OK");
   for (const std::string* key : {&counter0, &counter1}) {
     EXPECT_EQ(replica_client.Command({"GET", *key}),
@@ -4579,12 +4563,12 @@ TEST(ListE2eTest, FullSyncHandoffProjectsNonIdempotentTailExactlyOnce) {
 }
 
 TEST(ListE2eTest, PromotionDrainsAdmittedReplicaApplyBeforeClosingDbGate) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires a Debug or fault-instrumented server";
 #endif
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-promotion-apply-drain-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-promotion-apply-drain-e2e-" +
                              std::to_string(::getpid());
   const std::string source_data = prefix + "-source.data";
   const std::string replica_data = prefix + "-replica.data";
@@ -4605,13 +4589,12 @@ TEST(ListE2eTest, PromotionDrainsAdmittedReplicaApplyBeforeClosingDbGate) {
   const std::uint16_t source_port = FindFreePort();
   std::uint16_t replica_port = FindFreePort();
   while (replica_port == source_port) replica_port = FindFreePort();
-  ServerProcess source(g_keylane_binary, source_port, source_data, source_log,
-                       1);
+  ServerProcess source(g_lavik_binary, source_port, source_data, source_log, 1);
   RespClient source_client(source_port);
   {
     ServerProcess replica(
-        g_keylane_binary, replica_port, replica_data, replica_log, 1, {}, {},
-        {{"KEYLANE_REPLICATION_PAUSE_BEFORE_COMMAND_APPLY_MS", "1500"}});
+        g_lavik_binary, replica_port, replica_data, replica_log, 1, {}, {},
+        {{"LAVIK_REPLICATION_PAUSE_BEFORE_COMMAND_APPLY_MS", "1500"}});
     RespClient replica_client(replica_port);
     ASSERT_EQ(replica_client.Command(
                   {"REPLICAOF", "127.0.0.1", std::to_string(source_port)}),
@@ -4620,12 +4603,12 @@ TEST(ListE2eTest, PromotionDrainsAdmittedReplicaApplyBeforeClosingDbGate) {
     std::string info;
     do {
       info = replica_client.Command({"INFO", "replication"});
-      if (info.find("keylane_replication_state:online") != std::string::npos) {
+      if (info.find("lavik_replication_state:online") != std::string::npos) {
         break;
       }
       std::this_thread::sleep_for(10ms);
     } while (std::chrono::steady_clock::now() < online_deadline);
-    ASSERT_NE(info.find("keylane_replication_state:online"), std::string::npos);
+    ASSERT_NE(info.find("lavik_replication_state:online"), std::string::npos);
 
     ASSERT_EQ(source_client.Command({"SET", "promotion-drain", "committed"}),
               "+OK");
@@ -4650,7 +4633,7 @@ TEST(ListE2eTest, PromotionDrainsAdmittedReplicaApplyBeforeClosingDbGate) {
     replica.Stop();
   }
   {
-    ServerProcess replica(g_keylane_binary, replica_port, replica_data,
+    ServerProcess replica(g_lavik_binary, replica_port, replica_data,
                           replica_log, 1);
     RespClient replica_client(replica_port);
     EXPECT_EQ(replica_client.Command({"GET", "promotion-drain"}),
@@ -4661,12 +4644,12 @@ TEST(ListE2eTest, PromotionDrainsAdmittedReplicaApplyBeforeClosingDbGate) {
 }
 
 TEST(ListE2eTest, PromotionDrainsCompleteReplicaTransaction) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires a Debug or fault-instrumented server";
 #endif
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-promotion-transaction-drain-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-promotion-transaction-drain-e2e-" +
                              std::to_string(::getpid());
   const std::string source_data = prefix + "-source.data";
   const std::string replica_data = prefix + "-replica.data";
@@ -4689,13 +4672,12 @@ TEST(ListE2eTest, PromotionDrainsCompleteReplicaTransaction) {
   const std::uint16_t source_port = FindFreePort();
   std::uint16_t replica_port = FindFreePort();
   while (replica_port == source_port) replica_port = FindFreePort();
-  ServerProcess source(g_keylane_binary, source_port, source_data, source_log,
-                       2);
+  ServerProcess source(g_lavik_binary, source_port, source_data, source_log, 2);
   RespClient source_client(source_port);
   {
     ServerProcess replica(
-        g_keylane_binary, replica_port, replica_data, replica_log, 2, {}, {},
-        {{"KEYLANE_REPLICATION_PAUSE_BEFORE_TRANSACTION_APPLY_MS", "1500"}});
+        g_lavik_binary, replica_port, replica_data, replica_log, 2, {}, {},
+        {{"LAVIK_REPLICATION_PAUSE_BEFORE_TRANSACTION_APPLY_MS", "1500"}});
     RespClient replica_client(replica_port);
     ASSERT_EQ(replica_client.Command(
                   {"REPLICAOF", "127.0.0.1", std::to_string(source_port)}),
@@ -4704,12 +4686,12 @@ TEST(ListE2eTest, PromotionDrainsCompleteReplicaTransaction) {
     std::string info;
     do {
       info = replica_client.Command({"INFO", "replication"});
-      if (info.find("keylane_replication_state:online") != std::string::npos) {
+      if (info.find("lavik_replication_state:online") != std::string::npos) {
         break;
       }
       std::this_thread::sleep_for(10ms);
     } while (std::chrono::steady_clock::now() < online_deadline);
-    ASSERT_NE(info.find("keylane_replication_state:online"), std::string::npos);
+    ASSERT_NE(info.find("lavik_replication_state:online"), std::string::npos);
 
     ASSERT_EQ(source_client.Command(
                   {"MSET", first_key, "first", second_key, "second"}),
@@ -4728,7 +4710,7 @@ TEST(ListE2eTest, PromotionDrainsCompleteReplicaTransaction) {
     replica.Stop();
   }
   {
-    ServerProcess replica(g_keylane_binary, replica_port, replica_data,
+    ServerProcess replica(g_lavik_binary, replica_port, replica_data,
                           replica_log, 2);
     RespClient replica_client(replica_port);
     EXPECT_EQ(replica_client.Command({"GET", first_key}), Bulk("first"));
@@ -4739,12 +4721,12 @@ TEST(ListE2eTest, PromotionDrainsCompleteReplicaTransaction) {
 }
 
 TEST(ListE2eTest, PromotionDrainsCompleteReplicaControlBarrier) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires a Debug or fault-instrumented server";
 #endif
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-promotion-control-drain-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-promotion-control-drain-e2e-" +
                              std::to_string(::getpid());
   const std::string source_data = prefix + "-source.data";
   const std::string replica_data = prefix + "-replica.data";
@@ -4765,13 +4747,12 @@ TEST(ListE2eTest, PromotionDrainsCompleteReplicaControlBarrier) {
   const std::uint16_t source_port = FindFreePort();
   std::uint16_t replica_port = FindFreePort();
   while (replica_port == source_port) replica_port = FindFreePort();
-  ServerProcess source(g_keylane_binary, source_port, source_data, source_log,
-                       2);
+  ServerProcess source(g_lavik_binary, source_port, source_data, source_log, 2);
   RespClient source_client(source_port);
   {
     ServerProcess replica(
-        g_keylane_binary, replica_port, replica_data, replica_log, 2, {}, {},
-        {{"KEYLANE_REPLICATION_PAUSE_BEFORE_CONTROL_APPLY_MS", "1500"}});
+        g_lavik_binary, replica_port, replica_data, replica_log, 2, {}, {},
+        {{"LAVIK_REPLICATION_PAUSE_BEFORE_CONTROL_APPLY_MS", "1500"}});
     RespClient replica_client(replica_port);
     ASSERT_EQ(replica_client.Command({"READONLY"}), "+OK");
     ASSERT_EQ(source_client.Command({"SET", "promotion-control", "present"}),
@@ -4783,12 +4764,12 @@ TEST(ListE2eTest, PromotionDrainsCompleteReplicaControlBarrier) {
     std::string info;
     do {
       info = replica_client.Command({"INFO", "replication"});
-      if (info.find("keylane_replication_state:online") != std::string::npos) {
+      if (info.find("lavik_replication_state:online") != std::string::npos) {
         break;
       }
       std::this_thread::sleep_for(10ms);
     } while (std::chrono::steady_clock::now() < online_deadline);
-    ASSERT_NE(info.find("keylane_replication_state:online"), std::string::npos);
+    ASSERT_NE(info.find("lavik_replication_state:online"), std::string::npos);
     ASSERT_EQ(replica_client.Command({"GET", "promotion-control"}),
               Bulk("present"));
 
@@ -4806,7 +4787,7 @@ TEST(ListE2eTest, PromotionDrainsCompleteReplicaControlBarrier) {
     replica.Stop();
   }
   {
-    ServerProcess replica(g_keylane_binary, replica_port, replica_data,
+    ServerProcess replica(g_lavik_binary, replica_port, replica_data,
                           replica_log, 2);
     RespClient replica_client(replica_port);
     EXPECT_EQ(replica_client.Command({"GET", "promotion-control"}), "$-1");
@@ -4816,9 +4797,9 @@ TEST(ListE2eTest, PromotionDrainsCompleteReplicaControlBarrier) {
 }
 
 TEST(ListE2eTest, RedisPsyncFullSyncActivatesBeforeOnlineWrites) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-redis-fullsync-activation-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-redis-fullsync-activation-e2e-" +
                              std::to_string(::getpid());
   const std::string replica_data = prefix + "-replica.data";
   const std::string replica_log = prefix + "-replica.log";
@@ -4835,20 +4816,20 @@ TEST(ListE2eTest, RedisPsyncFullSyncActivatesBeforeOnlineWrites) {
       "redis.register_function{function_name='redis_baseline_value', "
       "callback=function(keys, args) return args[1] end, "
       "flags={'no-writes'}}";
-  keylane::rdb::StreamEncoder encoder(10);
+  lavik::rdb::StreamEncoder encoder(10);
   std::string rdb(encoder.Header());
-  keylane::storage::RawValue baseline_value{
+  lavik::storage::RawValue baseline_value{
       .encoded_ = "snapshot-value",
       .logical_size_ = 14,
-      .value_type_ = keylane::storage::ValueType::kString,
+      .value_type_ = lavik::storage::ValueType::kString,
   };
   auto baseline_key_fragment =
-      keylane::rdb::EncodeFileEntry(0, "redis-snapshot", baseline_value);
+      lavik::rdb::EncodeFileEntry(0, "redis-snapshot", baseline_value);
   ASSERT_TRUE(baseline_key_fragment.ok()) << baseline_key_fragment.status();
   encoder.Account(*baseline_key_fragment);
   rdb += *baseline_key_fragment;
   const std::string baseline_fragment =
-      keylane::rdb::EncodeFunctionLibraryEntry(baseline_library);
+      lavik::rdb::EncodeFunctionLibraryEntry(baseline_library);
   encoder.Account(baseline_fragment);
   rdb += baseline_fragment;
   rdb += encoder.Finish();
@@ -4870,7 +4851,7 @@ TEST(ListE2eTest, RedisPsyncFullSyncActivatesBeforeOnlineWrites) {
   std::uint16_t replica_port = FindFreePort();
   while (replica_port == source.port()) replica_port = FindFreePort();
   ServerProcess replica(
-      g_keylane_binary, replica_port, replica_data, replica_log, 1, {},
+      g_lavik_binary, replica_port, replica_data, replica_log, 1, {},
       {"--redis-replicaof", "127.0.0.1", std::to_string(source.port())});
   RespClient replica_client(replica_port);
 
@@ -4878,12 +4859,12 @@ TEST(ListE2eTest, RedisPsyncFullSyncActivatesBeforeOnlineWrites) {
   std::string info;
   do {
     info = replica_client.Command({"INFO", "replication"});
-    if (info.find("keylane_replication_state:online") != std::string::npos) {
+    if (info.find("lavik_replication_state:online") != std::string::npos) {
       break;
     }
     std::this_thread::sleep_for(10ms);
   } while (std::chrono::steady_clock::now() < online_deadline);
-  ASSERT_NE(info.find("keylane_replication_state:online"), std::string::npos);
+  ASSERT_NE(info.find("lavik_replication_state:online"), std::string::npos);
   EXPECT_EQ(replica_client.Command({"GET", "redis-snapshot"}),
             Bulk("snapshot-value"));
   EXPECT_EQ(replica_client.Command(
@@ -4901,11 +4882,11 @@ TEST(ListE2eTest, RedisPsyncFullSyncActivatesBeforeOnlineWrites) {
   replica.Stop();
 }
 
-#if !defined(NDEBUG) || KEYLANE_TEST_FAULTS_AVAILABLE
+#if !defined(NDEBUG) || LAVIK_TEST_FAULTS_AVAILABLE
 TEST(ListE2eTest, DemotionCancelsRedisExportWaitingForDatabaseGates) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-redis-export-demotion-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-redis-export-demotion-e2e-" +
                              std::to_string(::getpid());
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
@@ -4921,8 +4902,8 @@ TEST(ListE2eTest, DemotionCancelsRedisExportWaitingForDatabaseGates) {
   std::uint16_t port = FindFreePort();
   while (port == unavailable_source_port) port = FindFreePort();
   ServerProcess server(
-      g_keylane_binary, port, data_path, log_path, 2, {}, {},
-      {{"KEYLANE_REPLICATION_PAUSE_REDIS_EXPORT_BEFORE_GATES_MS", "1500"}});
+      g_lavik_binary, port, data_path, log_path, 2, {}, {},
+      {{"LAVIK_REPLICATION_PAUSE_REDIS_EXPORT_BEFORE_GATES_MS", "1500"}});
   auto export_request = std::async(std::launch::async, [port] {
     try {
       RespClient client(port);
@@ -4959,9 +4940,9 @@ TEST(ListE2eTest, DemotionCancelsRedisExportWaitingForDatabaseGates) {
 }
 
 TEST(ListE2eTest, DemotionCancelsNativeFullSyncHoldingDatabaseGates) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-native-fullsync-demotion-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-native-fullsync-demotion-e2e-" +
                              std::to_string(::getpid());
   const std::string source_data = prefix + "-source.data";
   const std::string target_data = prefix + "-target.data";
@@ -4988,10 +4969,9 @@ TEST(ListE2eTest, DemotionCancelsNativeFullSyncHoldingDatabaseGates) {
     unavailable_source_port = FindFreePort();
   }
   ServerProcess source(
-      g_keylane_binary, source_port, source_data, source_log, 2, {}, {},
-      {{"KEYLANE_REPLICATION_PAUSE_FULLSYNC_BEFORE_CATALOG_ACK_MS", "30000"}});
-  ServerProcess target(g_keylane_binary, target_port, target_data, target_log,
-                       2);
+      g_lavik_binary, source_port, source_data, source_log, 2, {}, {},
+      {{"LAVIK_REPLICATION_PAUSE_FULLSYNC_BEFORE_CATALOG_ACK_MS", "30000"}});
+  ServerProcess target(g_lavik_binary, target_port, target_data, target_log, 2);
   RespClient target_client(target_port);
   ASSERT_EQ(target_client.Command(
                 {"REPLICAOF", "127.0.0.1", std::to_string(source_port)}),
@@ -5023,9 +5003,9 @@ TEST(ListE2eTest, DemotionCancelsNativeFullSyncHoldingDatabaseGates) {
 }
 
 TEST(ListE2eTest, DemotionDrainsCatalogExecBeforeDisablingSourceHistory) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-catalog-exec-demotion-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-catalog-exec-demotion-e2e-" +
                              std::to_string(::getpid());
   const std::string source_data = prefix + "-source.data";
   const std::string target_data = prefix + "-target.data";
@@ -5052,10 +5032,9 @@ TEST(ListE2eTest, DemotionDrainsCatalogExecBeforeDisablingSourceHistory) {
     unavailable_source_port = FindFreePort();
   }
   ServerProcess source(
-      g_keylane_binary, source_port, source_data, source_log, 2, {}, {},
-      {{"KEYLANE_EXEC_PAUSE_BEFORE_CATALOG_REPLICATION_FENCE_MS", "1500"}});
-  ServerProcess target(g_keylane_binary, target_port, target_data, target_log,
-                       2);
+      g_lavik_binary, source_port, source_data, source_log, 2, {}, {},
+      {{"LAVIK_EXEC_PAUSE_BEFORE_CATALOG_REPLICATION_FENCE_MS", "1500"}});
+  ServerProcess target(g_lavik_binary, target_port, target_data, target_log, 2);
   RespClient target_client(target_port);
   ASSERT_EQ(target_client.Command(
                 {"REPLICAOF", "127.0.0.1", std::to_string(source_port)}),
@@ -5064,12 +5043,12 @@ TEST(ListE2eTest, DemotionDrainsCatalogExecBeforeDisablingSourceHistory) {
   std::string info;
   do {
     info = target_client.Command({"INFO", "replication"});
-    if (info.find("keylane_replication_state:online") != std::string::npos) {
+    if (info.find("lavik_replication_state:online") != std::string::npos) {
       break;
     }
     std::this_thread::sleep_for(10ms);
   } while (std::chrono::steady_clock::now() < online_deadline);
-  ASSERT_NE(info.find("keylane_replication_state:online"), std::string::npos);
+  ASSERT_NE(info.find("lavik_replication_state:online"), std::string::npos);
 
   const std::string key = KeyForWorker("catalog-demotion", 1, 2);
   constexpr std::string_view library =
@@ -5110,12 +5089,12 @@ TEST(ListE2eTest, DemotionDrainsCatalogExecBeforeDisablingSourceHistory) {
 #endif
 
 TEST(ListE2eTest, WriteDelayedAcrossRoleEpochIsRejected) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires a Debug or fault-instrumented server";
 #endif
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-role-write-admission-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-role-write-admission-e2e-" +
                              std::to_string(::getpid());
   const std::string target_data = prefix + "-target.data";
   const std::string target_log = prefix + "-target.log";
@@ -5131,8 +5110,8 @@ TEST(ListE2eTest, WriteDelayedAcrossRoleEpochIsRejected) {
   std::uint16_t target_port = FindFreePort();
   while (target_port == unavailable_source_port) target_port = FindFreePort();
   ServerProcess target(
-      g_keylane_binary, target_port, target_data, target_log, 1, {}, {},
-      {{"KEYLANE_COMMAND_PAUSE_BEFORE_DB_ADMISSION_MS", "3000"}});
+      g_lavik_binary, target_port, target_data, target_log, 1, {}, {},
+      {{"LAVIK_COMMAND_PAUSE_BEFORE_DB_ADMISSION_MS", "3000"}});
 
   auto write = std::async(std::launch::async, [target_port] {
     RespClient client(target_port);
@@ -5147,7 +5126,7 @@ TEST(ListE2eTest, WriteDelayedAcrossRoleEpochIsRejected) {
             "+OK");
   ASSERT_EQ(topology_client.Command({"REPLICAOF", "NO", "ONE"}), "+OK");
   EXPECT_NE(topology_client.Command({"INFO", "replication"})
-                .find("keylane_replication_state:master"),
+                .find("lavik_replication_state:master"),
             std::string::npos);
   ASSERT_EQ(write.wait_for(10s), std::future_status::ready);
   EXPECT_EQ(write.get(), "-TRYAGAIN replication role changed; retry command");
@@ -5156,12 +5135,12 @@ TEST(ListE2eTest, WriteDelayedAcrossRoleEpochIsRejected) {
 }
 
 TEST(ListE2eTest, SwitchingUpstreamLoadsDestructivelyAndNoOneRemainsFenced) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires a Debug or fault-instrumented server";
 #endif
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-replication-root-switch-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-replication-root-switch-e2e-" +
                              std::to_string(::getpid());
   const std::string first_data = prefix + "-first.data";
   const std::string second_data = prefix + "-second.data";
@@ -5190,12 +5169,12 @@ TEST(ListE2eTest, SwitchingUpstreamLoadsDestructivelyAndNoOneRemainsFenced) {
   while (replica_port == first_port || replica_port == second_port) {
     replica_port = FindFreePort();
   }
-  ServerProcess first(g_keylane_binary, first_port, first_data, first_log, 2);
+  ServerProcess first(g_lavik_binary, first_port, first_data, first_log, 2);
   ServerProcess second(
-      g_keylane_binary, second_port, second_data, second_log, 2, {}, {},
-      {{"KEYLANE_REPLICATION_PAUSE_FULLSYNC_AFTER_RESET_MS", "1200"}});
-  ServerProcess replica(g_keylane_binary, replica_port, replica_data,
-                        replica_log, 2);
+      g_lavik_binary, second_port, second_data, second_log, 2, {}, {},
+      {{"LAVIK_REPLICATION_PAUSE_FULLSYNC_AFTER_RESET_MS", "1200"}});
+  ServerProcess replica(g_lavik_binary, replica_port, replica_data, replica_log,
+                        2);
   RespClient first_client(first_port);
   RespClient second_client(second_port);
   RespClient replica_client(replica_port);
@@ -5210,7 +5189,7 @@ TEST(ListE2eTest, SwitchingUpstreamLoadsDestructivelyAndNoOneRemainsFenced) {
     const auto deadline = std::chrono::steady_clock::now() + 30s;
     do {
       const std::string info = replica_client.Command({"INFO", "replication"});
-      if (info.find("keylane_replication_state:online") != std::string::npos &&
+      if (info.find("lavik_replication_state:online") != std::string::npos &&
           info.find("master_port:" + std::to_string(upstream_port)) !=
               std::string::npos) {
         return true;
@@ -5232,12 +5211,12 @@ TEST(ListE2eTest, SwitchingUpstreamLoadsDestructivelyAndNoOneRemainsFenced) {
   std::string info;
   do {
     info = replica_client.Command({"INFO", "replication"});
-    if (info.find("keylane_connected_flows:2") != std::string::npos) break;
+    if (info.find("lavik_connected_flows:2") != std::string::npos) break;
     std::this_thread::sleep_for(10ms);
   } while (std::chrono::steady_clock::now() < loading_deadline);
-  ASSERT_NE(info.find("keylane_connected_flows:2"), std::string::npos);
-  EXPECT_NE(info.find("keylane_replication_state:syncing"), std::string::npos);
-  EXPECT_EQ(info.find("keylane_replication_state:online"), std::string::npos);
+  ASSERT_NE(info.find("lavik_connected_flows:2"), std::string::npos);
+  EXPECT_NE(info.find("lavik_replication_state:syncing"), std::string::npos);
+  EXPECT_EQ(info.find("lavik_replication_state:online"), std::string::npos);
   EXPECT_TRUE(
       replica_client.Command({"GET", "shared{root}"}).starts_with("-LOADING"));
   EXPECT_TRUE(replica_client.Command({"GET", "first-only{root}"})
@@ -5263,7 +5242,7 @@ TEST(ListE2eTest, SwitchingUpstreamLoadsDestructivelyAndNoOneRemainsFenced) {
   {
     RespClient native_probe(replica_port);
     EXPECT_TRUE(
-        native_probe.Command({"KLPSYNC", "1", "?", "?", "?", "?", "?", "?"})
+        native_probe.Command({"LVPSYNC", "1", "?", "?", "?", "?", "?", "?"})
             .starts_with("-LOADING"));
   }
   {
@@ -5287,9 +5266,9 @@ TEST(ListE2eTest, SwitchingUpstreamLoadsDestructivelyAndNoOneRemainsFenced) {
 }
 
 TEST(ListE2eTest, PublisherBackpressurePreservesHistoryAndReplica) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-replication-history-gap-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-replication-history-gap-e2e-" +
                              std::to_string(::getpid());
   const std::string source_data = prefix + "-source.data";
   const std::string replica_data = prefix + "-replica.data";
@@ -5309,11 +5288,10 @@ TEST(ListE2eTest, PublisherBackpressurePreservesHistoryAndReplica) {
   const std::uint16_t source_port = FindFreePort();
   std::uint16_t replica_port = FindFreePort();
   while (replica_port == source_port) replica_port = FindFreePort();
-  ServerProcess source(g_keylane_binary, source_port, source_data, source_log,
-                       2, {},
-                       {"--replication-publish-queue-mb-per-worker", "1"});
-  ServerProcess replica(g_keylane_binary, replica_port, replica_data,
-                        replica_log, 2);
+  ServerProcess source(g_lavik_binary, source_port, source_data, source_log, 2,
+                       {}, {"--replication-publish-queue-mb-per-worker", "1"});
+  ServerProcess replica(g_lavik_binary, replica_port, replica_data, replica_log,
+                        2);
   RespClient source_client(source_port);
   RespClient replica_client(replica_port);
   ASSERT_EQ(replica_client.Command(
@@ -5323,13 +5301,13 @@ TEST(ListE2eTest, PublisherBackpressurePreservesHistoryAndReplica) {
   std::string replica_info;
   do {
     replica_info = replica_client.Command({"INFO", "replication"});
-    if (replica_info.find("keylane_replication_state:online") !=
+    if (replica_info.find("lavik_replication_state:online") !=
         std::string::npos) {
       break;
     }
     std::this_thread::sleep_for(10ms);
   } while (std::chrono::steady_clock::now() < initial_deadline);
-  ASSERT_NE(replica_info.find("keylane_replication_state:online"),
+  ASSERT_NE(replica_info.find("lavik_replication_state:online"),
             std::string::npos);
   const auto replid_from = [](const std::string& info) {
     constexpr std::string_view marker = "master_replid:";
@@ -5353,14 +5331,14 @@ TEST(ListE2eTest, PublisherBackpressurePreservesHistoryAndReplica) {
   do {
     replica_info = replica_client.Command({"INFO", "replication"});
     replicated_length = replica_client.Command({"STRLEN", "history-gap{sync}"});
-    if (replica_info.find("keylane_replication_state:online") !=
+    if (replica_info.find("lavik_replication_state:online") !=
             std::string::npos &&
         replicated_length == ":" + std::to_string(large_value.size())) {
       break;
     }
     std::this_thread::sleep_for(10ms);
   } while (std::chrono::steady_clock::now() < recovered_deadline);
-  ASSERT_NE(replica_info.find("keylane_replication_state:online"),
+  ASSERT_NE(replica_info.find("lavik_replication_state:online"),
             std::string::npos);
   EXPECT_EQ(replid_from(replica_info), old_history);
   EXPECT_EQ(replicated_length, ":" + std::to_string(large_value.size()));
@@ -5373,9 +5351,9 @@ TEST(ListE2eTest, PublisherBackpressurePreservesHistoryAndReplica) {
 // worker the connection was assigned. Three source workers means most
 // connections do not own the key they write, which is the case being changed.
 TEST(ListE2eTest, SingleKeyWritesAreIdenticalWithAndWithoutAReplica) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-single-key-admission-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-single-key-admission-e2e-" +
                              std::to_string(::getpid());
   const std::string source_data = prefix + "-source.data";
   const std::string replica_data = prefix + "-replica.data";
@@ -5396,10 +5374,10 @@ TEST(ListE2eTest, SingleKeyWritesAreIdenticalWithAndWithoutAReplica) {
   std::uint16_t replica_port = FindFreePort();
   while (replica_port == source_port) replica_port = FindFreePort();
   constexpr unsigned kSourceThreads = 3;
-  ServerProcess source(g_keylane_binary, source_port, source_data, source_log,
+  ServerProcess source(g_lavik_binary, source_port, source_data, source_log,
                        kSourceThreads);
-  ServerProcess replica(g_keylane_binary, replica_port, replica_data,
-                        replica_log, 2);
+  ServerProcess replica(g_lavik_binary, replica_port, replica_data, replica_log,
+                        2);
 
   // Each entry gets a fresh key, so the reply is the same in either round.
   // XGROUP earns its place: it is the only single-key write whose key is not
@@ -5487,13 +5465,13 @@ TEST(ListE2eTest, SingleKeyWritesAreIdenticalWithAndWithoutAReplica) {
   std::string replication_info;
   do {
     replication_info = replica_client.Command({"INFO", "replication"});
-    if (replication_info.find("keylane_replication_state:online") !=
+    if (replication_info.find("lavik_replication_state:online") !=
         std::string::npos) {
       break;
     }
     std::this_thread::sleep_for(10ms);
   } while (std::chrono::steady_clock::now() < online_deadline);
-  ASSERT_NE(replication_info.find("keylane_replication_state:online"),
+  ASSERT_NE(replication_info.find("lavik_replication_state:online"),
             std::string::npos);
   ASSERT_EQ(replica_client.Command({"READONLY"}), "+OK");
 
@@ -5534,9 +5512,9 @@ TEST(ListE2eTest, SingleKeyWritesAreIdenticalWithAndWithoutAReplica) {
 // wait -- a value larger than the whole waterline, admitted only against an
 // empty queue -- is covered by PublisherBackpressurePreservesHistoryAndReplica.
 TEST(ListE2eTest, SingleKeyWritesKeepAdmissionAndOrderUnderATightWaterline) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-single-key-backpressure-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-single-key-backpressure-e2e-" +
                              std::to_string(::getpid());
   const std::string source_data = prefix + "-source.data";
   const std::string replica_data = prefix + "-replica.data";
@@ -5557,11 +5535,11 @@ TEST(ListE2eTest, SingleKeyWritesKeepAdmissionAndOrderUnderATightWaterline) {
   std::uint16_t replica_port = FindFreePort();
   while (replica_port == source_port) replica_port = FindFreePort();
   constexpr unsigned kSourceThreads = 3;
-  ServerProcess source(g_keylane_binary, source_port, source_data, source_log,
+  ServerProcess source(g_lavik_binary, source_port, source_data, source_log,
                        kSourceThreads, {},
                        {"--replication-publish-queue-mb-per-worker", "1"});
-  ServerProcess replica(g_keylane_binary, replica_port, replica_data,
-                        replica_log, 2);
+  ServerProcess replica(g_lavik_binary, replica_port, replica_data, replica_log,
+                        2);
   RespClient replica_client(replica_port);
   ASSERT_EQ(replica_client.Command(
                 {"REPLICAOF", "127.0.0.1", std::to_string(source_port)}),
@@ -5570,13 +5548,13 @@ TEST(ListE2eTest, SingleKeyWritesKeepAdmissionAndOrderUnderATightWaterline) {
   std::string replication_info;
   do {
     replication_info = replica_client.Command({"INFO", "replication"});
-    if (replication_info.find("keylane_replication_state:online") !=
+    if (replication_info.find("lavik_replication_state:online") !=
         std::string::npos) {
       break;
     }
     std::this_thread::sleep_for(10ms);
   } while (std::chrono::steady_clock::now() < online_deadline);
-  ASSERT_NE(replication_info.find("keylane_replication_state:online"),
+  ASSERT_NE(replication_info.find("lavik_replication_state:online"),
             std::string::npos);
   ASSERT_EQ(replica_client.Command({"READONLY"}), "+OK");
 
@@ -5652,11 +5630,11 @@ TEST(ListE2eTest, SingleKeyWritesKeepAdmissionAndOrderUnderATightWaterline) {
   source.Stop();
 }
 
-#if KEYLANE_ENABLE_CROSS_CORE_HOP_COUNT
+#if LAVIK_ENABLE_CROSS_CORE_HOP_COUNT
 // The rest of this file can only fence behaviour, and the collapse changes no
 // behaviour -- it removes two cross-core round trips per write, which is
 // latency, which nothing can assert. Configuring with
-// -DKEYLANE_ENABLE_CROSS_CORE_HOP_COUNT=ON counts the transfers instead, so
+// -DLAVIK_ENABLE_CROSS_CORE_HOP_COUNT=ON counts the transfers instead, so
 // the one-hop property has a regression fence and not just a benchmark.
 //
 // The claim being fenced is the issue's headline: attaching a replica must
@@ -5664,9 +5642,9 @@ TEST(ListE2eTest, SingleKeyWritesKeepAdmissionAndOrderUnderATightWaterline) {
 // run twice, once with no replica and once with one, and the two hop counts
 // must match. Before the collapse the second round cost three times the first.
 TEST(ListE2eTest, AttachingAReplicaAddsNoCrossCoreHopsToSingleKeyWrites) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-single-key-hops-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-single-key-hops-e2e-" +
                              std::to_string(::getpid());
   const std::string source_data = prefix + "-source.data";
   const std::string replica_data = prefix + "-replica.data";
@@ -5688,10 +5666,10 @@ TEST(ListE2eTest, AttachingAReplicaAddsNoCrossCoreHopsToSingleKeyWrites) {
   std::uint16_t replica_port = FindFreePort();
   while (replica_port == source_port) replica_port = FindFreePort();
   constexpr unsigned kSourceThreads = 3;
-  ServerProcess source(g_keylane_binary, source_port, source_data, source_log,
+  ServerProcess source(g_lavik_binary, source_port, source_data, source_log,
                        kSourceThreads);
-  ServerProcess replica(g_keylane_binary, replica_port, replica_data,
-                        replica_log, 2);
+  ServerProcess replica(g_lavik_binary, replica_port, replica_data, replica_log,
+                        2);
 
   // A single writer connection sits on exactly one worker, and the keys are
   // pinned one third to each of the three. Two thirds of the writes therefore
@@ -5753,13 +5731,13 @@ TEST(ListE2eTest, AttachingAReplicaAddsNoCrossCoreHopsToSingleKeyWrites) {
   std::string replication_info;
   do {
     replication_info = replica_client.Command({"INFO", "replication"});
-    if (replication_info.find("keylane_replication_state:online") !=
+    if (replication_info.find("lavik_replication_state:online") !=
         std::string::npos) {
       break;
     }
     std::this_thread::sleep_for(10ms);
   } while (std::chrono::steady_clock::now() < online_deadline);
-  ASSERT_NE(replication_info.find("keylane_replication_state:online"),
+  ASSERT_NE(replication_info.find("lavik_replication_state:online"),
             std::string::npos);
 
   const std::uint64_t replicated_hops = write_all("replicated");
@@ -5769,17 +5747,17 @@ TEST(ListE2eTest, AttachingAReplicaAddsNoCrossCoreHopsToSingleKeyWrites) {
   replica.Stop();
   source.Stop();
 }
-#endif  // KEYLANE_ENABLE_CROSS_CORE_HOP_COUNT
+#endif  // LAVIK_ENABLE_CROSS_CORE_HOP_COUNT
 
 // Covers asymmetric source/replica worker counts, dynamic replica admission,
 // a one-shot flow disconnect, backlog continuation, and FLUSHDB propagation.
 TEST(ListE2eTest, MultiReplicaWriteFlushAndReconnectFlow) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires a Debug or fault-instrumented server";
 #endif
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-multi-replica-e2e-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-multi-replica-e2e-" +
                              std::to_string(::getpid());
   const std::string source_data = prefix + "-source.data";
   const std::string first_data = prefix + "-first.data";
@@ -5814,16 +5792,16 @@ TEST(ListE2eTest, MultiReplicaWriteFlushAndReconnectFlow) {
     ASSERT_EQ(::close(fd), 0);
   }
 
-  ServerProcess source(g_keylane_binary, source_port, source_data, source_log,
-                       2, {}, {"--recv-buffers-per-worker", "1024"});
+  ServerProcess source(g_lavik_binary, source_port, source_data, source_log, 2,
+                       {}, {"--recv-buffers-per-worker", "1024"});
   RespClient source_before(source_port);
   ASSERT_EQ(source_before.Command({"SET", "startup", "ready"}), "+OK");
   ServerProcess first(
-      g_keylane_binary, first_port, first_data, first_log, 2, {},
+      g_lavik_binary, first_port, first_data, first_log, 2, {},
       {"--recv-buffers-per-worker", "1024"},
-      {{"KEYLANE_REPLICATION_DROP_FLOW_AFTER_COMMAND", "0"},
-       {"KEYLANE_REPLICATION_DROP_FLOW_AFTER_TRANSACTION_APPLY", "1"},
-       {"KEYLANE_REPLICATION_DROP_FLOW_AFTER_COMMAND_APPLY", "0"}},
+      {{"LAVIK_REPLICATION_DROP_FLOW_AFTER_COMMAND", "0"},
+       {"LAVIK_REPLICATION_DROP_FLOW_AFTER_TRANSACTION_APPLY", "1"},
+       {"LAVIK_REPLICATION_DROP_FLOW_AFTER_COMMAND_APPLY", "0"}},
       first_conf);
   RespClient source_client(source_port);
   RespClient first_client(first_port);
@@ -5832,13 +5810,13 @@ TEST(ListE2eTest, MultiReplicaWriteFlushAndReconnectFlow) {
   std::string first_info;
   do {
     first_info = first_client.Command({"INFO", "replication"});
-    if (first_info.find("keylane_replication_state:online") !=
+    if (first_info.find("lavik_replication_state:online") !=
         std::string::npos) {
       break;
     }
     std::this_thread::sleep_for(10ms);
   } while (std::chrono::steady_clock::now() < online_deadline);
-  ASSERT_NE(first_info.find("keylane_replication_state:online"),
+  ASSERT_NE(first_info.find("lavik_replication_state:online"),
             std::string::npos);
   const auto wait_value = [](RespClient& client, std::string_view key,
                              std::string_view expected) {
@@ -5853,8 +5831,8 @@ TEST(ListE2eTest, MultiReplicaWriteFlushAndReconnectFlow) {
   };
   ASSERT_TRUE(wait_value(first_client, "startup", "ready"));
 
-  ServerProcess second(g_keylane_binary, second_port, second_data, second_log,
-                       2, {}, {"--recv-buffers-per-worker", "1024"});
+  ServerProcess second(g_lavik_binary, second_port, second_data, second_log, 2,
+                       {}, {"--recv-buffers-per-worker", "1024"});
   RespClient second_client(second_port);
   ASSERT_EQ(second_client.Command({"READONLY"}), "+OK");
   ASSERT_EQ(second_client.Command(
@@ -5864,13 +5842,13 @@ TEST(ListE2eTest, MultiReplicaWriteFlushAndReconnectFlow) {
   std::string second_info;
   do {
     second_info = second_client.Command({"INFO", "replication"});
-    if (second_info.find("keylane_replication_state:online") !=
+    if (second_info.find("lavik_replication_state:online") !=
         std::string::npos) {
       break;
     }
     std::this_thread::sleep_for(10ms);
   } while (std::chrono::steady_clock::now() < second_online_deadline);
-  ASSERT_NE(second_info.find("keylane_replication_state:online"),
+  ASSERT_NE(second_info.find("lavik_replication_state:online"),
             std::string::npos);
   const std::string source_replication =
       source_client.Command({"INFO", "replication"});
@@ -5906,13 +5884,13 @@ TEST(ListE2eTest, MultiReplicaWriteFlushAndReconnectFlow) {
   const auto reconnected_deadline = std::chrono::steady_clock::now() + 20s;
   do {
     first_info = first_client.Command({"INFO", "replication"});
-    if (first_info.find("keylane_replication_state:online") !=
+    if (first_info.find("lavik_replication_state:online") !=
         std::string::npos) {
       break;
     }
     std::this_thread::sleep_for(10ms);
   } while (std::chrono::steady_clock::now() < reconnected_deadline);
-  ASSERT_NE(first_info.find("keylane_replication_state:online"),
+  ASSERT_NE(first_info.find("lavik_replication_state:online"),
             std::string::npos);
   EXPECT_EQ(first_client.Command({"GET", tx_counter_0}), Bulk("1"));
   EXPECT_EQ(first_client.Command({"GET", tx_counter_1}), Bulk("1"));
@@ -6191,9 +6169,9 @@ TEST(ListE2eTest, MultiReplicaWriteFlushAndReconnectFlow) {
 class LargeHashDurabilityE2eTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    ASSERT_FALSE(g_keylane_binary.empty());
+    ASSERT_FALSE(g_lavik_binary.empty());
     const std::string prefix =
-        keylane::test::TestDataPathPrefix() + "keylane-large-hash-durability-" +
+        lavik::test::TestDataPathPrefix() + "lavik-large-hash-durability-" +
         std::to_string(::getpid()) + "-" +
         ::testing::UnitTest::GetInstance()->current_test_info()->name();
     data_path_ = prefix + ".data";
@@ -6259,7 +6237,7 @@ class LargeHashDurabilityE2eTest : public ::testing::Test {
 };
 
 TEST_F(LargeHashDurabilityE2eTest, CrashDuringExtentWriteKeepsOldHashAndTtl) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires Debug or the explicitly test-instrumented module";
 #else
   // One field must itself exceed an inline group. Nine medium fields now
@@ -6268,7 +6246,7 @@ TEST_F(LargeHashDurabilityE2eTest, CrashDuringExtentWriteKeepsOldHashAndTtl) {
   const std::string old_value(9 * 1024 * 1024, 'a');
   const std::string new_value(9 * 1024 * 1024, 'z');
   {
-    ServerProcess server(g_keylane_binary, port_, data_path_, log_path_, 2);
+    ServerProcess server(g_lavik_binary, port_, data_path_, log_path_, 2);
     RespClient client(port_);
     ASSERT_EQ(client.Command(WriteCommand(old_value)), ":2");
     ASSERT_EQ(client.Command({"PEXPIRE", kKey, "3600000"}), ":1");
@@ -6279,7 +6257,7 @@ TEST_F(LargeHashDurabilityE2eTest, CrashDuringExtentWriteKeepsOldHashAndTtl) {
        {"extent-first-part-durable", "group-extents-durable-before-record"}) {
     SCOPED_TRACE(point);
     {
-      ServerProcess server(g_keylane_binary, port_, data_path_, log_path_, 2,
+      ServerProcess server(g_lavik_binary, port_, data_path_, log_path_, 2,
                            point);
       RespClient ready(port_);
       auto command = WriteCommand(new_value);
@@ -6292,7 +6270,7 @@ TEST_F(LargeHashDurabilityE2eTest, CrashDuringExtentWriteKeepsOldHashAndTtl) {
     }
     {
       // Change worker topology too; no runtime directory can survive exec.
-      ServerProcess server(g_keylane_binary, port_, data_path_, log_path_, 3);
+      ServerProcess server(g_lavik_binary, port_, data_path_, log_path_, 3);
       RespClient client(port_);
       Verify(client, old_value);
       EXPECT_EQ(client.Command({"HEXISTS", kKey, "new-field"}), ":0");
@@ -6305,7 +6283,7 @@ TEST_F(LargeHashDurabilityE2eTest, CrashDuringExtentWriteKeepsOldHashAndTtl) {
   }
   // The interrupted allocations must not accumulate into permanent disk
   // exhaustion. A new complete replacement still fits this bounded device.
-  ServerProcess server(g_keylane_binary, port_, data_path_, log_path_, 2);
+  ServerProcess server(g_lavik_binary, port_, data_path_, log_path_, 2);
   RespClient client(port_);
   ASSERT_EQ(client.Command(WriteCommand(new_value)), ":0");
   ASSERT_TRUE(WaitForDurability(client));
@@ -6318,7 +6296,7 @@ TEST_F(LargeHashDurabilityE2eTest,
        RepeatedExtentReplacementReclaimsBoundedStorage) {
   std::string value(1024 * 1024, 'a');
   {
-    ServerProcess server(g_keylane_binary, port_, data_path_, log_path_, 2);
+    ServerProcess server(g_lavik_binary, port_, data_path_, log_path_, 2);
     RespClient client(port_);
     // 20 complete 9 MiB rewrites exceed this 128 MiB device. Succeeding
     // requires retirement/reuse, not just retaining every old extent.
@@ -6338,7 +6316,7 @@ TEST_F(LargeHashDurabilityE2eTest,
     ASSERT_TRUE(WaitForDurability(client));
     server.Kill();
   }
-  ServerProcess server(g_keylane_binary, port_, data_path_, log_path_, 3);
+  ServerProcess server(g_lavik_binary, port_, data_path_, log_path_, 3);
   RespClient client(port_);
   EXPECT_EQ(client.Command({"HLEN", kKey}), ":1");
   EXPECT_EQ(client.Command({"HGET", kKey, "only-new-incarnation"}),
@@ -6348,7 +6326,7 @@ TEST_F(LargeHashDurabilityE2eTest,
 }
 
 void LargeHashDurabilityE2eTest::CheckGcCrash(std::string_view point) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   GTEST_SKIP() << "requires Debug or the explicitly test-instrumented module";
 #else
   const std::string value(1024 * 1024, 'g');
@@ -6356,7 +6334,7 @@ void LargeHashDurabilityE2eTest::CheckGcCrash(std::string_view point) {
   for (unsigned i = 0; i < 5; ++i)
     fillers.push_back("{large-hash-gc}:filler-" + std::to_string(i));
   {
-    ServerProcess server(g_keylane_binary, port_, data_path_, log_path_, 2);
+    ServerProcess server(g_lavik_binary, port_, data_path_, log_path_, 2);
     RespClient client(port_);
     ASSERT_EQ(client.Command(WriteCommand(value)), ":10");
     // Same hash slot puts the root beside filler payloads. Group children
@@ -6367,7 +6345,7 @@ void LargeHashDurabilityE2eTest::CheckGcCrash(std::string_view point) {
     server.Kill();
   }
   {
-    ServerProcess server(g_keylane_binary, port_, data_path_, log_path_, 2,
+    ServerProcess server(g_lavik_binary, port_, data_path_, log_path_, 2,
                          point);
     RespClient ready(port_);
     if (point == "hash-group-defrag-copy-staged") {
@@ -6385,7 +6363,7 @@ void LargeHashDurabilityE2eTest::CheckGcCrash(std::string_view point) {
     server.WaitForCrash();
     ASSERT_EQ(::close(fd), 0);
   }
-  ServerProcess server(g_keylane_binary, port_, data_path_, log_path_, 3);
+  ServerProcess server(g_lavik_binary, port_, data_path_, log_path_, 3);
   RespClient client(port_);
   Verify(client, value);
   server.Stop();
@@ -6402,13 +6380,13 @@ TEST_F(LargeHashDurabilityE2eTest,
 }
 
 void LargeHashDurabilityE2eTest::CheckOom(bool injected_storage_failure) {
-#if defined(NDEBUG) && !KEYLANE_TEST_FAULTS_AVAILABLE
+#if defined(NDEBUG) && !LAVIK_TEST_FAULTS_AVAILABLE
   if (injected_storage_failure)
     GTEST_SKIP() << "storage admission injection requires test faults";
 #endif
   const std::string value(1024 * 1024, 'o');
   {
-    ServerProcess server(g_keylane_binary, port_, data_path_, log_path_, 2);
+    ServerProcess server(g_lavik_binary, port_, data_path_, log_path_, 2);
     RespClient client(port_);
     ASSERT_EQ(client.Command(WriteCommand(value)), ":10");
     ASSERT_TRUE(WaitForDurability(client));
@@ -6423,10 +6401,10 @@ void LargeHashDurabilityE2eTest::CheckOom(bool injected_storage_failure) {
     const std::vector<std::pair<std::string, std::string>> environment =
         injected_storage_failure
             ? std::vector<std::pair<
-                  std::string, std::string>>{{"KEYLANE_FAIL_HASH_ADMISSION_KEY",
+                  std::string, std::string>>{{"LAVIK_FAIL_HASH_ADMISSION_KEY",
                                               std::string(kKey)}}
             : std::vector<std::pair<std::string, std::string>>{};
-    ServerProcess server(g_keylane_binary, port_, data_path_, log_path_, 2, {},
+    ServerProcess server(g_lavik_binary, port_, data_path_, log_path_, 2, {},
                          arguments, environment);
     RespClient client(port_);
     // Startup needs enough memory to reconstruct the durable side index.
@@ -6469,7 +6447,7 @@ void LargeHashDurabilityE2eTest::CheckOom(bool injected_storage_failure) {
     EXPECT_EQ(client.Command({"PING"}), "+PONG");
     server.Kill();
   }
-  ServerProcess server(g_keylane_binary, port_, data_path_, log_path_, 3);
+  ServerProcess server(g_lavik_binary, port_, data_path_, log_path_, 3);
   RespClient client(port_);
   Verify(client, value);
   EXPECT_EQ(client.Command({"HEXISTS", kKey, "new"}), ":0");
@@ -6491,7 +6469,7 @@ TEST_F(LargeHashDurabilityE2eTest,
   // cannot be made inline by splitting along field-hash boundaries.
   const std::string huge(9 * 1024 * 1024, 'v');
   {
-    ServerProcess server(g_keylane_binary, port_, data_path_, log_path_, 2);
+    ServerProcess server(g_lavik_binary, port_, data_path_, log_path_, 2);
     RespClient client(port_);
     ASSERT_EQ(client.Command({"HSET", kKey, "huge", huge, "small", "before"}),
               ":2");
@@ -6505,7 +6483,7 @@ TEST_F(LargeHashDurabilityE2eTest,
     server.Kill();
   }
   {
-    ServerProcess server(g_keylane_binary, port_, data_path_, log_path_, 3);
+    ServerProcess server(g_lavik_binary, port_, data_path_, log_path_, 3);
     RespClient client(port_);
     ASSERT_EQ(client.Command({"HGET", kKey, "huge"}), Bulk(huge));
     ASSERT_EQ(client.Command({"HGET", kKey, "small"}), Bulk("after"));
@@ -6517,7 +6495,7 @@ TEST_F(LargeHashDurabilityE2eTest,
     server.Kill();
   }
   {
-    ServerProcess server(g_keylane_binary, port_, data_path_, log_path_, 2);
+    ServerProcess server(g_lavik_binary, port_, data_path_, log_path_, 2);
     RespClient client(port_);
     ASSERT_EQ(client.Command({"HLEN", kKey}), ":2");
     ASSERT_EQ(client.Command({"HGET", kKey, "huge"}), "$-1");
@@ -6527,9 +6505,9 @@ TEST_F(LargeHashDurabilityE2eTest,
 }
 
 TEST(HashE2eTest, UpdatesTransactionsAndRecoversMonolithicValues) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-hash-e2e-" + std::to_string(::getpid());
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-hash-e2e-" + std::to_string(::getpid());
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
   FileCleanup data_cleanup(data_path);
@@ -6553,7 +6531,7 @@ TEST(HashE2eTest, UpdatesTransactionsAndRecoversMonolithicValues) {
 
   const std::uint16_t port = FindFreePort();
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 2);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 2);
     RespClient client(port);
     std::vector<std::string_view> hset{"HSET", "large-hash"};
     for (std::size_t i = 0; i < kFields; ++i) {
@@ -6656,7 +6634,7 @@ TEST(HashE2eTest, UpdatesTransactionsAndRecoversMonolithicValues) {
   }
 
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 3);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 3);
     RespClient client(port);
     EXPECT_EQ(client.Command({"HLEN", "large-hash"}), ":178");
     EXPECT_EQ(client.Command({"HGET", "large-hash", fields[20]}), "$-1");
@@ -6678,7 +6656,7 @@ TEST(HashE2eTest, UpdatesTransactionsAndRecoversMonolithicValues) {
   }
 
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 2);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 2);
     RespClient client(port);
     EXPECT_EQ(client.Command({"GET", "large-hash"}), Bulk("string-now"));
     EXPECT_TRUE(client.Command({"HGET", "large-hash", fields[0]})
@@ -6688,9 +6666,9 @@ TEST(HashE2eTest, UpdatesTransactionsAndRecoversMonolithicValues) {
 }
 
 TEST(SetE2eTest, ScanCursorDoesNotSkipAfterEarlierMembersAreDeleted) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-set-scan-stable-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-set-scan-stable-" +
                              std::to_string(::getpid());
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
@@ -6711,7 +6689,7 @@ TEST(SetE2eTest, ScanCursorDoesNotSkipAfterEarlierMembersAreDeleted) {
     sadd.push_back(members.back());
   }
   const std::uint16_t port = FindFreePort();
-  ServerProcess server(g_keylane_binary, port, data_path, log_path, 2);
+  ServerProcess server(g_lavik_binary, port, data_path, log_path, 2);
   RespClient client(port);
   ASSERT_EQ(client.Command(sadd), ":1000");
 
@@ -6739,9 +6717,9 @@ TEST(SetE2eTest, ScanCursorDoesNotSkipAfterEarlierMembersAreDeleted) {
 }
 
 TEST(SetE2eTest, Redis72CommandsTransactionsAndRecovery) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-set-e2e-" + std::to_string(::getpid());
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-set-e2e-" + std::to_string(::getpid());
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
   FileCleanup data_cleanup(data_path);
@@ -6762,7 +6740,7 @@ TEST(SetE2eTest, Redis72CommandsTransactionsAndRecovery) {
 
   const std::uint16_t port = FindFreePort();
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 4);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 4);
     RespClient client(port);
     EXPECT_EQ(client.Command({"SADD", "basic", "a", "b", "a", "c"}), ":3");
     EXPECT_EQ(client.Command({"SCARD", "basic"}), ":3");
@@ -6885,7 +6863,7 @@ TEST(SetE2eTest, Redis72CommandsTransactionsAndRecovery) {
   }
 
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 3);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 3);
     RespClient client(port);
     EXPECT_EQ(client.Command({"SCARD", "large-set"}), ":181");
     EXPECT_EQ(client.Command({"SISMEMBER", "large-set", members[20]}), ":0");
@@ -6903,7 +6881,7 @@ TEST(SetE2eTest, Redis72CommandsTransactionsAndRecovery) {
   }
 
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 2);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 2);
     RespClient client(port);
     EXPECT_EQ(client.Command({"GET", "large-set"}), Bulk("string-now"));
     EXPECT_TRUE(
@@ -6913,9 +6891,9 @@ TEST(SetE2eTest, Redis72CommandsTransactionsAndRecovery) {
 }
 
 TEST(HashE2eTest, ExpiredShieldedWinnerDoesNotResurrectOlderString) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-expired-shield-recovery-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-expired-shield-recovery-" +
                              std::to_string(::getpid());
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
@@ -6931,7 +6909,7 @@ TEST(HashE2eTest, ExpiredShieldedWinnerDoesNotResurrectOlderString) {
   const std::string old_value(3900 * 1024, 'o');
   const std::string new_value(3900 * 1024, 'n');
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 2);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 2);
     RespClient client(port);
     ASSERT_EQ(client.Command({"SET", "shielded", old_value, "PX", "600000"}),
               "+OK");
@@ -6947,7 +6925,7 @@ TEST(HashE2eTest, ExpiredShieldedWinnerDoesNotResurrectOlderString) {
   }
   std::this_thread::sleep_for(5200ms);
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 3);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 3);
     RespClient client(port);
     EXPECT_EQ(client.Command({"GET", "shielded"}), "$-1");
     EXPECT_EQ(client.Command({"GET", "unshielded"}), "$-1");
@@ -6975,8 +6953,8 @@ TEST(HashE2eTest, ExpiredShieldedWinnerDoesNotResurrectOlderString) {
     server.Kill();
   }
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 2, {}, {},
-                         {{"KEYLANE_RECOVERY_NOW_MS", "1"}});
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 2, {}, {},
+                         {{"LAVIK_RECOVERY_NOW_MS", "1"}});
     RespClient client(port);
     EXPECT_EQ(client.Command({"GET", "shielded"}), "$-1");
     EXPECT_EQ(client.Command({"GET", "unshielded"}), "$-1");
@@ -6986,9 +6964,9 @@ TEST(HashE2eTest, ExpiredShieldedWinnerDoesNotResurrectOlderString) {
 }
 
 TEST(CollectionE2eTest, MemoryLimitStillAllowsShrinkingCommands) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-memory-recovery-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-memory-recovery-" +
                              std::to_string(::getpid());
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
@@ -7002,7 +6980,7 @@ TEST(CollectionE2eTest, MemoryLimitStillAllowsShrinkingCommands) {
 
   const std::uint16_t port = FindFreePort();
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 2);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 2);
     RespClient client(port);
     EXPECT_EQ(client.Command({"RPUSH", "l", "a", "b"}), ":2");
     EXPECT_EQ(client.Command({"HSET", "h", "f", "v"}), ":1");
@@ -7025,7 +7003,7 @@ TEST(CollectionE2eTest, MemoryLimitStillAllowsShrinkingCommands) {
     server.Stop();
   }
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 2, {},
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 2, {},
                          {"--max-memory", "1"});
     RespClient client(port);
     std::this_thread::sleep_for(200ms);
@@ -7060,9 +7038,9 @@ TEST(CollectionE2eTest, ExecPartialWritesRollbackDurably) {
 #ifdef NDEBUG
   GTEST_SKIP() << "transaction write fault injection is debug-only";
 #else
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-exec-command-rollback-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-exec-command-rollback-" +
                              std::to_string(::getpid());
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
@@ -7076,8 +7054,8 @@ TEST(CollectionE2eTest, ExecPartialWritesRollbackDurably) {
 
   const std::uint16_t port = FindFreePort();
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 3, {}, {},
-                         {{"KEYLANE_FAIL_TX_WRITE", "exec-fail-dst"}});
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 3, {}, {},
+                         {{"LAVIK_FAIL_TX_WRITE", "exec-fail-dst"}});
     RespClient client(port);
     EXPECT_EQ(client.Command({"RPUSH", "exec-list-src", "source"}), ":1");
     EXPECT_EQ(client.Command({"RPUSH", "exec-fail-dst", "destination"}), ":1");
@@ -7112,7 +7090,7 @@ TEST(CollectionE2eTest, ExecPartialWritesRollbackDurably) {
     server.Kill();
   }
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 3);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 3);
     RespClient client(port);
     EXPECT_EQ(client.Command({"GET", "exec-before-list"}), Bulk("kept"));
     EXPECT_EQ(client.Command({"GET", "exec-after-list"}), Bulk("kept"));
@@ -7131,9 +7109,9 @@ TEST(CollectionE2eTest, ExecStoreReplacementRollbackDurably) {
 #ifdef NDEBUG
   GTEST_SKIP() << "transaction write fault injection is debug-only";
 #else
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-exec-store-rollback-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-exec-store-rollback-" +
                              std::to_string(::getpid());
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
@@ -7148,10 +7126,10 @@ TEST(CollectionE2eTest, ExecStoreReplacementRollbackDurably) {
   const std::uint16_t port = FindFreePort();
   const auto fault_environment =
       std::vector<std::pair<std::string, std::string>>{
-          {"KEYLANE_FAIL_TX_WRITE", "exec-store-dst"},
-          {"KEYLANE_FAIL_TX_WRITE_AFTER", "1"}};
+          {"LAVIK_FAIL_TX_WRITE", "exec-store-dst"},
+          {"LAVIK_FAIL_TX_WRITE_AFTER", "1"}};
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 3, {}, {},
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 3, {}, {},
                          fault_environment);
     RespClient client(port);
     EXPECT_EQ(client.Command({"SADD", "exec-store-source", "member"}), ":1");
@@ -7169,7 +7147,7 @@ TEST(CollectionE2eTest, ExecStoreReplacementRollbackDurably) {
     server.Kill();
   }
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 3, {}, {},
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 3, {}, {},
                          fault_environment);
     RespClient client(port);
     EXPECT_EQ(client.Command({"GET", "exec-before-set-store"}), Bulk("kept"));
@@ -7190,7 +7168,7 @@ TEST(CollectionE2eTest, ExecStoreReplacementRollbackDurably) {
     server.Kill();
   }
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 3);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 3);
     RespClient client(port);
     EXPECT_EQ(client.Command({"GET", "exec-before-set-store"}), Bulk("kept"));
     EXPECT_EQ(client.Command({"GET", "exec-before-zset-store"}), Bulk("kept"));
@@ -7201,9 +7179,9 @@ TEST(CollectionE2eTest, ExecStoreReplacementRollbackDurably) {
 }
 
 TEST(CollectionE2eTest, SortedSetGeoAndStreamCommandsRecover) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-compact-collections-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-compact-collections-" +
                              std::to_string(::getpid());
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
@@ -7217,7 +7195,7 @@ TEST(CollectionE2eTest, SortedSetGeoAndStreamCommandsRecover) {
 
   const std::uint16_t port = FindFreePort();
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 2);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 2);
     RespClient client(port);
     EXPECT_EQ(
         client.Command({"ZADD", "z", "1", "one", "2", "two", "1.5", "mid"}),
@@ -8249,7 +8227,7 @@ TEST(CollectionE2eTest, SortedSetGeoAndStreamCommandsRecover) {
     server.Stop();
   }
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 3);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 3);
     RespClient client(port);
     EXPECT_EQ(client.Command({"ZCARD", "zout"}), ":4");
     EXPECT_EQ(client.Command({"GET", "rename-persisted"}), Bulk("exec-value"));
@@ -8261,9 +8239,9 @@ TEST(CollectionE2eTest, SortedSetGeoAndStreamCommandsRecover) {
 }
 
 TEST(CollectionE2eTest, StringCommandsRecover) {
-  ASSERT_FALSE(g_keylane_binary.empty());
-  const std::string prefix = keylane::test::TestDataPathPrefix() +
-                             "keylane-string-commands-" +
+  ASSERT_FALSE(g_lavik_binary.empty());
+  const std::string prefix = lavik::test::TestDataPathPrefix() +
+                             "lavik-string-commands-" +
                              std::to_string(::getpid());
   const std::string data_path = prefix + ".data";
   const std::string log_path = prefix + ".log";
@@ -8283,7 +8261,7 @@ TEST(CollectionE2eTest, StringCommandsRecover) {
   const std::string bitmap_destination =
       KeyForWorker("bitmap-cross-destination", 1, 2);
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 2);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 2);
     RespClient client(port);
 
     EXPECT_EQ(client.Command({"APPEND", "append", "abc"}), ":3");
@@ -8529,7 +8507,7 @@ TEST(CollectionE2eTest, StringCommandsRecover) {
     server.Stop();
   }
   {
-    ServerProcess server(g_keylane_binary, port, data_path, log_path, 2);
+    ServerProcess server(g_lavik_binary, port, data_path, log_path, 2);
     RespClient client(port);
     EXPECT_EQ(client.Command({"GET", cross_a}), Bulk("abcXYZ"));
     EXPECT_EQ(client.Command({"GET", cross_b}), Bulk("123XYZ"));
@@ -8553,7 +8531,7 @@ TEST(CollectionE2eTest, StringCommandsRecover) {
 
 int main(int argc, char** argv) {
   if (argc >= 2) {
-    g_keylane_binary = argv[1];
+    g_lavik_binary = argv[1];
     for (int index = 1; index + 1 < argc; ++index) {
       argv[index] = argv[index + 1];
     }

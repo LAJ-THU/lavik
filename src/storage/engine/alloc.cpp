@@ -16,7 +16,7 @@
 
 #include "impl.h"
 
-namespace keylane::storage {
+namespace lavik::storage {
 
 std::size_t StorageEngine::Impl::DeviceIndexForBlock(
     std::uint64_t block_id) const noexcept {
@@ -773,4 +773,4 @@ Task<absl::StatusOr<ReservedBlock>> StorageEngine::Impl::AllocateBlock(
   }
 }
 
-}  // namespace keylane::storage
+}  // namespace lavik::storage

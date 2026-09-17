@@ -37,19 +37,19 @@
 #include "bycorf/runtime/cross_core.h"
 #include "bycorf/runtime/worker.h"
 #include "cluster_gate.h"
-#include "keylane/command_table.h"
-#include "keylane/glob.h"
-#include "keylane/memory.h"
-#include "keylane/random_sample.h"
-#include "keylane/redis_parse.h"
-#include "keylane/resp.h"
-#include "keylane/storage/detail/ordered_compact_codec.h"
-#include "keylane/tx/transaction.h"
+#include "lavik/command_table.h"
+#include "lavik/glob.h"
+#include "lavik/memory.h"
+#include "lavik/random_sample.h"
+#include "lavik/redis_parse.h"
+#include "lavik/resp.h"
+#include "lavik/storage/detail/ordered_compact_codec.h"
+#include "lavik/tx/transaction.h"
 
-namespace keylane {
+namespace lavik {
 namespace {
 
-constexpr std::string_view kMagic = "KZS1";
+constexpr std::string_view kMagic = "LZS1";
 constexpr double kGeoMinLat = -85.05112878;
 constexpr double kGeoMaxLat = 85.05112878;
 constexpr double kEarthRadiusMeters = 6372797.560856;
@@ -3659,4 +3659,4 @@ Task<CommandReply> ExecuteBlockingZSetCommand(const CommandRequest& request,
       unblock_error_reply, status_reply);
 }
 
-}  // namespace keylane
+}  // namespace lavik

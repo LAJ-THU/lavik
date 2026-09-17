@@ -248,7 +248,7 @@ RespClient Connect(std::uint16_t port) {
     ::close(fd);
     std::this_thread::sleep_for(10ms);
   }
-  Fail("timed out connecting to Keylane");
+  Fail("timed out connecting to Lavik");
 }
 
 RespClient ConnectReady(std::uint16_t port) {
@@ -264,7 +264,7 @@ RespClient ConnectReady(std::uint16_t port) {
     }
     std::this_thread::sleep_for(10ms);
   }
-  Fail("timed out waiting for Keylane readiness");
+  Fail("timed out waiting for Lavik readiness");
 }
 
 class ServerProcess {
@@ -289,28 +289,28 @@ class ServerProcess {
         ::close(log_fd);
       }
       if (!fail_tx_write.empty()) {
-        (void)::setenv("KEYLANE_FAIL_TX_WRITE",
+        (void)::setenv("LAVIK_FAIL_TX_WRITE",
                        std::string(fail_tx_write).c_str(), 1);
       }
       if (!tx_active_pause_ms.empty()) {
-        (void)::setenv("KEYLANE_TX_ACTIVE_BLOCK_PAUSE_MS",
+        (void)::setenv("LAVIK_TX_ACTIVE_BLOCK_PAUSE_MS",
                        std::string(tx_active_pause_ms).c_str(), 1);
       }
       if (!order_hold_ms.empty()) {
-        (void)::setenv("KEYLANE_REPLICATION_ORDER_HOLD_MS",
+        (void)::setenv("LAVIK_REPLICATION_ORDER_HOLD_MS",
                        std::string(order_hold_ms).c_str(), 1);
       }
       if (!standby_pause_ms.empty()) {
-        (void)::setenv("KEYLANE_STANDBY_PREFETCH_PAUSE_MS",
+        (void)::setenv("LAVIK_STANDBY_PREFETCH_PAUSE_MS",
                        std::string(standby_pause_ms).c_str(), 1);
       }
       if (!fail_replication_transaction_containing.empty()) {
         (void)::setenv(
-            "KEYLANE_FAIL_REPLICATION_TRANSACTION_CONTAINING_ONCE",
+            "LAVIK_FAIL_REPLICATION_TRANSACTION_CONTAINING_ONCE",
             std::string(fail_replication_transaction_containing).c_str(), 1);
       }
       if (fail_tx_cleaner_once) {
-        (void)::setenv("KEYLANE_FAIL_TX_CLEANER_ONCE", "1", 1);
+        (void)::setenv("LAVIK_FAIL_TX_CLEANER_ONCE", "1", 1);
       }
       std::vector<std::string> arguments{
           binary,
@@ -358,14 +358,14 @@ class ServerProcess {
       if (result == pid_) {
         pid_ = -1;
         if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-          Fail("Keylane exited unsuccessfully");
+          Fail("Lavik exited unsuccessfully");
         }
         return;
       }
       if (result < 0) Fail("waitpid failed");
       std::this_thread::sleep_for(10ms);
     }
-    Fail("Keylane did not stop");
+    Fail("Lavik did not stop");
   }
 
  private:
@@ -479,26 +479,26 @@ bool WaitForCleanerRetirement(RespClient& client, std::uint64_t baseline) {
 
 int main(int argc, char** argv) {
   if (argc != 2) {
-    std::cerr << "usage: multikey_e2e_test /path/to/keylane\n";
+    std::cerr << "usage: multikey_e2e_test /path/to/lavik\n";
     return 1;
   }
   const std::string suffix = std::to_string(::getpid());
   const std::string data_path =
-      keylane::test::TestDataPath("keylane-multikey-" + suffix + ".data");
+      lavik::test::TestDataPath("lavik-multikey-" + suffix + ".data");
   const std::string log_path =
-      keylane::test::TestDataPath("keylane-multikey-" + suffix + ".log");
-  const std::string source_data = keylane::test::TestDataPath(
-      "keylane-multikey-repl-source-" + suffix + ".data");
-  const std::string replica_data = keylane::test::TestDataPath(
-      "keylane-multikey-repl-replica-" + suffix + ".data");
-  const std::string gate_source_data = keylane::test::TestDataPath(
-      "keylane-multikey-gate-source-" + suffix + ".data");
-  const std::string gate_replica_data = keylane::test::TestDataPath(
-      "keylane-multikey-gate-replica-" + suffix + ".data");
-  const std::string standby_data = keylane::test::TestDataPath(
-      "keylane-multikey-standby-" + suffix + ".data");
+      lavik::test::TestDataPath("lavik-multikey-" + suffix + ".log");
+  const std::string source_data = lavik::test::TestDataPath(
+      "lavik-multikey-repl-source-" + suffix + ".data");
+  const std::string replica_data = lavik::test::TestDataPath(
+      "lavik-multikey-repl-replica-" + suffix + ".data");
+  const std::string gate_source_data = lavik::test::TestDataPath(
+      "lavik-multikey-gate-source-" + suffix + ".data");
+  const std::string gate_replica_data = lavik::test::TestDataPath(
+      "lavik-multikey-gate-replica-" + suffix + ".data");
+  const std::string standby_data =
+      lavik::test::TestDataPath("lavik-multikey-standby-" + suffix + ".data");
   const std::string gate_log_path =
-      keylane::test::TestDataPath("keylane-multikey-gate-" + suffix + ".log");
+      lavik::test::TestDataPath("lavik-multikey-gate-" + suffix + ".log");
   (void)::unlink(data_path.c_str());
   (void)::unlink(log_path.c_str());
   (void)::unlink(source_data.c_str());
@@ -1119,7 +1119,7 @@ int main(int argc, char** argv) {
            ":0", "FLUSHDB values after transaction generation retirement");
     generation_recovery_server.Stop();
 
-#if KEYLANE_TEST_FAULTS_AVAILABLE
+#if LAVIK_TEST_FAULTS_AVAILABLE
     // A failed transaction keeps its generation lease through rollback. Once
     // UNDO has restored every old value, dependency pins drop and the same
     // cleaner can retire the aborted tagged records safely.
@@ -1166,7 +1166,7 @@ int main(int argc, char** argv) {
         ":0", "UNDO TTL survives recovery");
     rollback_recovered_server.Stop();
 
-#if KEYLANE_TEST_FAULTS_AVAILABLE
+#if LAVIK_TEST_FAULTS_AVAILABLE
     // The first transaction holds the generation's allocation gate while the
     // test hook suspends physical allocation. A same-worker peer in that
     // generation must remain queued: completing early would mean rollover
@@ -1187,7 +1187,7 @@ int main(int argc, char** argv) {
     while (!allocation_marker_seen &&
            std::chrono::steady_clock::now() < allocation_marker_deadline) {
       allocation_marker_seen =
-          ReadFile(log_path).find("KEYLANE_TX_ACTIVE_BLOCK_PAUSE_MS pausing") !=
+          ReadFile(log_path).find("LAVIK_TX_ACTIVE_BLOCK_PAUSE_MS pausing") !=
           std::string::npos;
       if (!allocation_marker_seen) std::this_thread::sleep_for(20ms);
     }
@@ -1239,8 +1239,8 @@ int main(int argc, char** argv) {
     while (!standby_marker_seen &&
            std::chrono::steady_clock::now() < standby_marker_deadline) {
       standby_marker_seen =
-          ReadFile(log_path).find(
-              "KEYLANE_STANDBY_PREFETCH_PAUSE_MS pausing") != std::string::npos;
+          ReadFile(log_path).find("LAVIK_STANDBY_PREFETCH_PAUSE_MS pausing") !=
+          std::string::npos;
       if (!standby_marker_seen) std::this_thread::sleep_for(20ms);
     }
     if (!standby_marker_seen) Fail("standby prefetch pause did not engage");
@@ -1335,7 +1335,7 @@ int main(int argc, char** argv) {
       while (!online && std::chrono::steady_clock::now() < online_deadline) {
         online =
             replica_client.Command({"INFO", "replication"})
-                .find("keylane_replication_state:online") != std::string::npos;
+                .find("lavik_replication_state:online") != std::string::npos;
         if (!online) std::this_thread::sleep_for(20ms);
       }
       if (!online) Fail("replica did not come online for wide writes");
@@ -1578,7 +1578,7 @@ int main(int argc, char** argv) {
       Expect(source_client.Command({"SET", "wide-multikey:after", "ok"}), "+OK",
              "source write after the wide multi-key burst");
 
-#if KEYLANE_TEST_FAULTS_AVAILABLE
+#if LAVIK_TEST_FAULTS_AVAILABLE
       // Once a Function child has durably installed a catalog, losing any
       // participant's transaction marker makes the source history unsafe.
       // Inject that exact failure and require a top-level fail-closed EXEC;
@@ -1606,15 +1606,15 @@ int main(int argc, char** argv) {
       }
       RespClient fenced_source_client = Connect(source_port);
       Expect(fenced_source_client.Command({"GET", "bar"}),
-             "-LOADING Keylane is loading the dataset from the primary",
+             "-LOADING Lavik is loading the dataset from the primary",
              "process fence after catalog publication failure");
 #endif
     }
 
-#if KEYLANE_TEST_FAULTS_AVAILABLE
+#if LAVIK_TEST_FAULTS_AVAILABLE
     // Replication transaction order gate admission regression: with an ONLINE
     // replica, a cross-shard MSET acquires the global order gate while the
-    // test-only KEYLANE_REPLICATION_ORDER_HOLD_MS hook holds it for 10 s. A
+    // test-only LAVIK_REPLICATION_ORDER_HOLD_MS hook holds it for 10 s. A
     // same-shard hashtag MSET (proven single-participant via
     // kCmdKeyViewComplete) must skip the gate and finish well inside that
     // window; a second cross-shard MSET must keep waiting on the gate and
@@ -1641,7 +1641,7 @@ int main(int argc, char** argv) {
              std::chrono::steady_clock::now() < gate_online_deadline) {
         gate_online =
             gate_replica_client.Command({"INFO", "replication"})
-                .find("keylane_replication_state:online") != std::string::npos;
+                .find("lavik_replication_state:online") != std::string::npos;
         if (!gate_online) std::this_thread::sleep_for(20ms);
       }
       if (!gate_online) Fail("replica did not come online for the gate test");
@@ -1664,7 +1664,7 @@ int main(int argc, char** argv) {
       while (!marker_seen &&
              std::chrono::steady_clock::now() < marker_deadline) {
         marker_seen = ReadFile(gate_log_path)
-                          .find("KEYLANE_REPLICATION_ORDER_HOLD_MS holding") !=
+                          .find("LAVIK_REPLICATION_ORDER_HOLD_MS holding") !=
                       std::string::npos;
         if (!marker_seen) std::this_thread::sleep_for(20ms);
       }
@@ -1716,7 +1716,7 @@ int main(int argc, char** argv) {
     }
 #endif
   } catch (const std::exception& error) {
-    std::cerr << error.what() << "\n--- Keylane log ---\n"
+    std::cerr << error.what() << "\n--- Lavik log ---\n"
               << ReadFile(log_path) << "\n--- gate-test log ---\n"
               << ReadFile(gate_log_path) << std::flush;
     exit_code = 1;

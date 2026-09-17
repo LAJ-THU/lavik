@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/topology_store.h"
+#include "lavik/meta/topology_store.h"
 
 #include <algorithm>
 #include <set>
 
 #include "absl/strings/str_cat.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 
 // Field-cap re-validation at the store boundary (commands normally arrive
@@ -586,7 +586,7 @@ absl::Status MetaTopologyStore::SetTopologyEpoch(
 }
 
 absl::Status MetaTopologyStore::BeginGroupTerm(
-    const keylane::meta::BeginGroupTerm& command) {
+    const lavik::meta::BeginGroupTerm& command) {
   const auto it = groups_.find(command.group_id_);
   if (it == groups_.end()) return MetaDomainRejectError("unknown group");
   GroupState& group = it->second;
@@ -607,7 +607,7 @@ absl::Status MetaTopologyStore::BeginGroupTerm(
 }
 
 absl::Status MetaTopologyStore::ValidateActivate(
-    const keylane::meta::ActivateAuthority& command,
+    const lavik::meta::ActivateAuthority& command,
     std::optional<MetaFailoverActionId> action) const {
   if (action.has_value() && IsZero(*action))
     return MetaDomainRejectError("failover activation action id is zero");
@@ -627,7 +627,7 @@ absl::Status MetaTopologyStore::ValidateActivate(
 }
 
 absl::Status MetaTopologyStore::ActivateAuthority(
-    const keylane::meta::ActivateAuthority& command,
+    const lavik::meta::ActivateAuthority& command,
     std::optional<MetaFailoverActionId> action) {
   if (auto status = ValidateActivate(command, action); !status.ok())
     return status;
@@ -986,4 +986,4 @@ absl::StatusOr<MetaTopologyStore> MetaTopologyStore::Deserialize(
   return store;
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

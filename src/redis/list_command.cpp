@@ -35,14 +35,14 @@
 #include "bycorf/runtime/cross_core.h"
 #include "bycorf/runtime/worker.h"
 #include "cluster_gate.h"
-#include "keylane/command_table.h"
-#include "keylane/redis_parse.h"
-#include "keylane/resp.h"
-#include "keylane/storage/engine.h"
-#include "keylane/tx/transaction.h"
-#include "keylane/tx/tx_shard.h"
+#include "lavik/command_table.h"
+#include "lavik/redis_parse.h"
+#include "lavik/resp.h"
+#include "lavik/storage/engine.h"
+#include "lavik/tx/transaction.h"
+#include "lavik/tx/tx_shard.h"
 
-namespace keylane {
+namespace lavik {
 using namespace bycorf;
 
 namespace {
@@ -1066,4 +1066,4 @@ Task<CommandReply> ExecuteBlockingListCommand(const CommandRequest& request,
           request.kind_ == CommandKind::kBRPopLPush);
 }
 
-}  // namespace keylane
+}  // namespace lavik

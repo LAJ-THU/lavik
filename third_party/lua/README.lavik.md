@@ -1,0 +1,37 @@
+<!--
+Copyright (C) 2026 EloqData Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
+# Vendored Lua
+
+This directory is copied from Valkey 7.2.4 commit
+`d2c8a4b91e8c0e6aefd1f5bc0bf582cddbe046b7`:
+
+- `deps/lua/src/*.c` and `deps/lua/src/*.h`
+- `deps/lua/COPYRIGHT`
+- `src/solarisfixes.h`
+
+Lavik builds the Lua 5.1 core plus Valkey's cjson, cmsgpack, struct, and bit
+extensions. Lavik carries two local source adjustments:
+
+- `lua_cjson.c` includes the vendored `solarisfixes.h` beside it instead of
+  using Valkey's repository-relative path.
+- `lua_loadbytecode`/`luaL_loadbytecode` provide a protected, server-internal
+  loader for chunks produced by `lua_dump`. The normal Lua source loader stays
+  text-only, preserving Valkey's protection against client-supplied bytecode.
+
+To update Lua, replace these files as one unit from the chosen Valkey release,
+retain both local adjustments, and run the EVAL/EVALSHA, SCRIPT, and
+replication tests.

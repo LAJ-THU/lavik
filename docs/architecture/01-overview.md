@@ -18,9 +18,9 @@ limitations under the License.
 
 ## System context
 
-Keylane is a Linux C++23 server that accepts Redis/Valkey-compatible commands.
+Lavik is a Linux C++23 server that accepts Redis/Valkey-compatible commands.
 Connections start with RESP2 reply semantics and can negotiate RESP2 or RESP3
-with `HELLO`. Keylane persists the resulting logical data to local files, block
+with `HELLO`. Lavik persists the resulting logical data to local files, block
 devices, or SPDK NVMe namespaces. The process uses the Bycorf submodule for its
 thread-per-worker coroutine runtime, TCP/TLS transport, cross-core messaging,
 HTTP service, and storage I/O backends.
@@ -28,12 +28,12 @@ HTTP service, and storage I/O backends.
 The executable is one process with worker-affine state rather than a collection
 of networked services. Redis serving, metrics, replication, transaction
 coordination, the cluster data plane, and storage are composed in `RunServer`;
-Bycorf owns the worker and socket lifecycle underneath those Keylane modules.
+Bycorf owns the worker and socket lifecycle underneath those Lavik modules.
 
 Network and storage backends are independently selected at startup and remain
 fixed for the process lifetime, including storage preparation before workers
 start. The default build includes only Linux TCP and io_uring. The opt-in
-`KEYLANE_KERNEL_BYPASS` build includes DPDK and SPDK together; it does not
+`LAVIK_KERNEL_BYPASS` build includes DPDK and SPDK together; it does not
 activate them. Startup defaults remain Linux TCP and io_uring, including for
 the Meta control plane. Each worker owns one io_uring shared by kernel
 network/storage I/O, timers and wakeups; the DPDK adapter borrows that ring.
@@ -47,7 +47,7 @@ replication handoff, and cluster paths are outside the validation scope. See
 the [build guide](../operations/building-and-packaging.md#experimental-dpdk-networking)
 and Bycorf's [network architecture](../../bycorf/docs/architecture/networking.md).
 
-A separate `keylane-meta` executable runs the [Raft-backed meta control
+A separate `lavik-meta` executable runs the [Raft-backed meta control
 plane](08-meta-control-plane.md). It owns committed cluster metadata,
 leader-local observations, authenticated administration, and coordination
 plus process-lifetime Data-control sessions. Six durable stores share one Raft
@@ -58,11 +58,11 @@ addition/removal, and per-Group failover are recovered by the current leader,
 independent of an Admin client's connection or wait deadline. It links the
 pinned NuRaft submodule, whose native Asio service owns Raft peer communication;
 Bycorf owns the separate administrative and Data-node sessions. The Raft-free
-`keylane-ctl` operator client sends direct administrative commands; its
+`lavik-ctl` operator client sends direct administrative commands; its
 `cluster-status` command discovers the current Meta leader and reads one stable
 cluster-readiness cut through that surface; `failover` submits a durable
 controlled transition and `getop` follows its operator-visible outcome. NuRaft
-is linked only into `keylane-meta`: the data-plane executable, operator client, their supporting
+is linked only into `lavik-meta`: the data-plane executable, operator client, their supporting
 libraries, and their focused tests never see consensus code, and the build
 enforces that boundary at configure time.
 
@@ -85,11 +85,11 @@ Redis/Valkey clients, Sentinels, and replicas
 Prometheus scrapes a separate Bycorf HTTP service backed by worker and storage
 snapshots.
 
-keylane-meta Raft leader <-- framed control session --> Data NodeControl
+lavik-meta Raft leader <-- framed control session --> Data NodeControl
        committed view       full state / lease /        topology, authority,
                             directive / observation      failover/replication
 
-operator --> keylane-ctl cluster-status / failover / getop
+operator --> lavik-ctl cluster-status / failover / getop
                          |
                     Meta Admin seed --> current Meta leader
                       clusterhead           clusterstatus
@@ -99,7 +99,7 @@ operator --> keylane-ctl cluster-status / failover / getop
 
 | Component | Responsibility | Main interface |
 |---|---|---|
-| Process shell | Parse configuration, initialize logging and memory limits, compose modules, start services, and coordinate graceful shutdown | `app/keylane.cpp`, `keylane::RunServer` |
+| Process shell | Parse configuration, initialize logging and memory limits, compose modules, start services, and coordinate graceful shutdown | `app/lavik.cpp`, `lavik::RunServer` |
 | Bycorf runtime | Own worker threads, coroutines, cross-core submissions, TCP/TLS sessions, HTTP serving, and I/O backends | `bycorf::Server`, `bycorf::TcpService`, `bycorf::Worker`, `bycorf::SubmitTaskTo` |
 | Request and Redis serving | Parse commands, negotiate RESP reply semantics, retain connection state, run Lua and Pub/Sub, classify and dispatch commands, and encode or stream replies | `RedisService`, `DispatchCommand`, `ExecuteCommand` |
 | Transaction coordination | Serialize conflicting key access across workers and execute single- or multi-shard command hops | `tx::TxRuntime`, `tx::Transaction`, `tx::TxShard` |
@@ -255,10 +255,13 @@ cleanup as another durable phase.
   interrupted replacement is sufficient to reopen service.
 - Readiness follows recovery and optional import; shutdown drains admitted
   requests and every replication storage mutator before the final flush.
-- Before the first stable release, Keylane-owned durable and control formats
+- Before the first stable release, Lavik-owned durable and control formats
   use v1 with in-place schema replacement and no compatibility promise for
   earlier development layouts. Incompatible data directories must be recreated.
-  External standards such as Redis RESP/RDB retain their own versioning.
+  Lavik uses its own format signatures, `LAVIK.*` native commands and
+  `lavik://` principal URIs; earlier Keylane development identifiers are not
+  accepted as aliases. External standards such as Redis RESP/RDB retain their
+  own versioning.
 - Replication and full-sync queues use admission/backpressure. They must not
   silently drop an already accepted logical write.
 - Meta decisions derive from one committed view plus observations accepted by
@@ -288,18 +291,18 @@ cleanup as another durable phase.
 
 | Integration | Boundary |
 |---|---|
-| Bycorf | Pinned git submodule compiled into Keylane for runtime, network, TLS, cross-core, HTTP, io_uring, and optional SPDK support |
+| Bycorf | Pinned git submodule compiled into Lavik for runtime, network, TLS, cross-core, HTTP, io_uring, and optional SPDK support |
 | mimalloc | Pinned allocator submodule; the official global new/delete override serves ordinary C++ allocations, while retained storage calls mimalloc through explicitly accounted domains |
-| NuRaft | Pinned Raft consensus submodule linked only by `keylane-meta`; its native Asio service owns Raft peer sockets, timers, and TLS and uses the Asio headers shipped in the NuRaft source tree |
+| NuRaft | Pinned Raft consensus submodule linked only by `lavik-meta`; its native Asio service owns Raft peer sockets, timers, and TLS and uses the Asio headers shipped in the NuRaft source tree |
 | OpenSSL | TLS server/client contexts; release builds can link it statically |
 | Redis/Valkey clients | RESP2 by default; `HELLO 2`/`HELLO 3` selects connection-level reply semantics, including RESP3 maps, sets, booleans, doubles, nulls, and push frames where handlers expose them |
 | Redis Sentinel | Discovers topology through Redis-compatible `INFO`, `ROLE`, client metadata, and Pub/Sub connections; drives failover with `REPLICAOF`, `CONFIG REWRITE`, and client eviction, using `replica-priority` for candidate preference |
-| Keylane or Redis upstreams/downstreams | Native replication, Redis PSYNC following, and Redis-compatible export |
+| Lavik or Redis upstreams/downstreams | Native replication, Redis PSYNC following, and Redis-compatible export |
 | Local storage | Existing files, raw block devices, or `spdk://` namespaces supplied through repeated `--data-file` options |
 | RDB files | Startup import and Redis-compatible `SAVE`/`BGSAVE` output through filesystem paths |
 | Prometheus/Grafana | Plaintext HTTP `/metrics`; optional Compose deployment under `deploy/monitoring/` |
 
-No production service-manager unit, orchestration manifest for the Keylane
+No production service-manager unit, orchestration manifest for the Lavik
 process itself, or supported platform matrix is defined in this repository;
 those deployment boundaries remain unknown here.
 
@@ -308,17 +311,17 @@ those deployment boundaries remain unknown here.
 | Claim | Repository source |
 |---|---|
 | Language level, targets, dependencies, source units, and test entry points | `CMakeLists.txt` |
-| Meta control-plane composition, failover reconciler, and NuRaft layering boundary | `CMakeLists.txt`, `app/keylane_meta.cpp`, `include/keylane/meta/`, `src/meta/`, `.gitmodules` |
-| CLI/config parsing and top-level process entry | `app/keylane.cpp`, `include/keylane/config.h`, `src/config.cpp` |
-| Module construction, worker startup barriers, readiness, and shutdown ordering | `include/keylane/server.h`, `src/redis/server.cpp` |
+| Meta control-plane composition, failover reconciler, and NuRaft layering boundary | `CMakeLists.txt`, `app/lavik_meta.cpp`, `include/lavik/meta/`, `src/meta/`, `.gitmodules` |
+| CLI/config parsing and top-level process entry | `app/lavik.cpp`, `include/lavik/config.h`, `src/config.cpp` |
+| Module construction, worker startup barriers, readiness, and shutdown ordering | `include/lavik/server.h`, `src/redis/server.cpp` |
 | Bycorf runtime and service dependency | `.gitmodules`, `bycorf/include/bycorf/runtime/`, `bycorf/include/bycorf/net/`, `bycorf/src/` |
-| Request/session/command flow and negotiated RESP semantics | `include/keylane/resp.h`, `include/keylane/resp_version.h`, `include/keylane/session.h`, `include/keylane/command.h`, `src/redis/server.cpp`, `src/redis/resp.cpp` |
+| Request/session/command flow and negotiated RESP semantics | `include/lavik/resp.h`, `include/lavik/resp_version.h`, `include/lavik/session.h`, `include/lavik/command.h`, `src/redis/server.cpp`, `src/redis/resp.cpp` |
 | Lua scripts, Function catalog lifecycle, and their transaction boundary | `src/redis/lua_eval.h`, `src/redis/lua_eval.cpp`, `src/redis/function_catalog.h`, `src/redis/function_catalog.cpp`, `src/redis/command.cpp` |
-| Pub/Sub sessions, worker-local registries, fan-out, and bounded output | `include/keylane/pubsub.h`, `src/redis/pubsub.cpp`, `src/redis/server.cpp` |
-| Transaction boundary | `include/keylane/tx/`, `src/tx/` |
-| Storage boundary and focused lifecycle units | `include/keylane/storage/engine.h`, `include/keylane/storage/format.h`, `src/storage/engine/`, `src/storage/format.cpp` |
-| Replication manager, cluster failover/follow-owner adapters, protocol, Sentinel-visible role state, and log boundary | `include/keylane/replication.h`, `include/keylane/replication_command.h`, `src/replication/`, `src/storage/engine/replication_log.cpp`, `tests/cluster/replication_manager_integration_test.cpp`, `tests/sentinel_e2e_test.cpp` |
-| Cluster topology, authority, controlled mutation pause, node control, and Meta/Data session | `include/keylane/cluster/`, `src/cluster/`, `src/redis/cluster_gate.h`, `src/redis/command.cpp`, `src/redis/blocking_wait.cpp`, `src/redis/server.cpp` |
-| Memory accounting, slow log, command statistics, and Prometheus service | `include/keylane/memory.h`, `src/memory.cpp`, `include/keylane/metrics.h`, `src/metrics.cpp`, `include/keylane/slowlog.h`, `src/redis/slowlog.cpp` |
+| Pub/Sub sessions, worker-local registries, fan-out, and bounded output | `include/lavik/pubsub.h`, `src/redis/pubsub.cpp`, `src/redis/server.cpp` |
+| Transaction boundary | `include/lavik/tx/`, `src/tx/` |
+| Storage boundary and focused lifecycle units | `include/lavik/storage/engine.h`, `include/lavik/storage/format.h`, `src/storage/engine/`, `src/storage/format.cpp` |
+| Replication manager, cluster failover/follow-owner adapters, protocol, Sentinel-visible role state, and log boundary | `include/lavik/replication.h`, `include/lavik/replication_command.h`, `src/replication/`, `src/storage/engine/replication_log.cpp`, `tests/cluster/replication_manager_integration_test.cpp`, `tests/sentinel_e2e_test.cpp` |
+| Cluster topology, authority, controlled mutation pause, node control, and Meta/Data session | `include/lavik/cluster/`, `src/cluster/`, `src/redis/cluster_gate.h`, `src/redis/command.cpp`, `src/redis/blocking_wait.cpp`, `src/redis/server.cpp` |
+| Memory accounting, slow log, command statistics, and Prometheus service | `include/lavik/memory.h`, `src/memory.cpp`, `include/lavik/metrics.h`, `src/metrics.cpp`, `include/lavik/slowlog.h`, `src/redis/slowlog.cpp` |
 | Build, release, and package commands | `scripts/build_debug.sh`, `scripts/build_release.sh`, `scripts/package_release.sh`, `docs/operations/building-and-packaging.md` |
-| Keylane process deployment unit or orchestration manifest | Unknown; `deploy/` contains the monitoring stack, not the Keylane process definition |
+| Lavik process deployment unit or orchestration manifest | Unknown; `deploy/` contains the monitoring stack, not the Lavik process definition |

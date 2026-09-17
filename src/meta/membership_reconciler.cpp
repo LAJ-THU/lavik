@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/membership_reconciler.h"
+#include "lavik/meta/membership_reconciler.h"
 
 #include <algorithm>
 #include <atomic>
@@ -26,17 +26,17 @@
 #include "absl/strings/str_cat.h"
 #include "bycorf/io/storage.h"
 #include "bycorf/runtime/worker.h"
-#include "keylane/cluster/control_protocol.h"
-#include "keylane/fault_injection.h"
-#include "keylane/meta/identity_verifier.h"
-#include "keylane/meta/nuraft_state_mgr.h"
-#include "keylane/meta/proposal_executor.h"
-#include "keylane/meta/state_machine.h"
-#include "keylane/numeric_endpoint.h"
+#include "lavik/cluster/control_protocol.h"
+#include "lavik/fault_injection.h"
+#include "lavik/meta/identity_verifier.h"
+#include "lavik/meta/nuraft_state_mgr.h"
+#include "lavik/meta/proposal_executor.h"
+#include "lavik/meta/state_machine.h"
+#include "lavik/numeric_endpoint.h"
 #include "libnuraft/raft_server.hxx"
 #include "spdlog/spdlog.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 namespace {
 bool Terminal(const MetaOperationRecord& op) {
   return op.lifecycle_ == MetaOperationLifecycle::kCompleted ||
@@ -86,10 +86,10 @@ absl::StatusOr<MetaMembershipPeer> ReadPeer(MetaReader& r) {
       !ctl.ok() || !dc.ok() || !priority.ok() || !learner.ok() || !joining.ok())
     return Conflict("invalid membership peer encoding");
   if (*id == 0 || *id > INT32_MAX ||
-      *principal != absl::StrCat("keylane://meta/", *id) ||
-      !keylane::ParseNumericEndpoint(*endpoint) ||
-      !keylane::ParseNumericEndpoint(*data_control) ||
-      !keylane::ParseNumericEndpoint(*ctl))
+      *principal != absl::StrCat("lavik://meta/", *id) ||
+      !lavik::ParseNumericEndpoint(*endpoint) ||
+      !lavik::ParseNumericEndpoint(*data_control) ||
+      !lavik::ParseNumericEndpoint(*ctl))
     return Conflict("invalid membership peer identity");
   return MetaMembershipPeer{*id,
                             std::string(*endpoint),
@@ -475,14 +475,14 @@ bycorf::Task<absl::Status> MetaMembershipReconciler::Run(
         } else {
           bool paused = false;
           std::size_t active_binding_count = 0;
-          KEYLANE_FAULT_INJECT(
+          LAVIK_FAULT_INJECT(
               const auto bindings = view.identity().MetaMembers();
               active_binding_count = static_cast<std::size_t>(std::count_if(
                   bindings.begin(), bindings.end(),
                   [](const auto& binding) { return !binding.retired_; }));
-              paused = KEYLANE_FAULT_MATCHES(
-                  "KEYLANE_TEST_PAUSE_INITIAL_BINDINGS_AFTER",
-                  std::to_string(active_binding_count)););
+              paused =
+                  LAVIK_FAULT_MATCHES("LAVIK_TEST_PAUSE_INITIAL_BINDINGS_AFTER",
+                                      std::to_string(active_binding_count)););
           if (paused) {
             const std::string cut = absl::StrCat(
                 "initial-bindings-paused-after-", active_binding_count);
@@ -556,16 +556,15 @@ bycorf::Task<absl::Status> MetaMembershipReconciler::Run(
           last_cut = cut;
         }
         bool paused = false;
-        KEYLANE_FAULT_INJECT(
+        LAVIK_FAULT_INJECT(
             auto intent = DecodeMembershipIntent(op->intent_);
             paused =
                 intent.ok() &&
-                KEYLANE_FAULT_MATCHES("KEYLANE_TEST_PAUSE_MEMBERSHIP_PHASE",
-                                      cut) &&
-                KEYLANE_FAULT_MATCHES("KEYLANE_TEST_PAUSE_MEMBERSHIP_TARGET",
-                                      std::to_string(intent->target_.id_)) &&
-                KEYLANE_FAULT_MATCHES("KEYLANE_TEST_PAUSE_MEMBERSHIP_ACTION",
-                                      intent->add_ ? "add" : "remove"););
+                LAVIK_FAULT_MATCHES("LAVIK_TEST_PAUSE_MEMBERSHIP_PHASE", cut) &&
+                LAVIK_FAULT_MATCHES("LAVIK_TEST_PAUSE_MEMBERSHIP_TARGET",
+                                    std::to_string(intent->target_.id_)) &&
+                LAVIK_FAULT_MATCHES("LAVIK_TEST_PAUSE_MEMBERSHIP_ACTION",
+                                    intent->add_ ? "add" : "remove"););
         auto config = CaptureMembershipConfig(core->server_->get_config());
         if (!paused && core->server_->is_leader() &&
             core->server_->is_leader_alive() &&
@@ -682,4 +681,4 @@ bycorf::Task<absl::Status> MetaMembershipReconciler::Run(
   core->waiters_.clear();
   co_return absl::OkStatus();
 }
-}  // namespace keylane::meta
+}  // namespace lavik::meta

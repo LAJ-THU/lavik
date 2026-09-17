@@ -36,12 +36,12 @@
 #include <span>
 
 #include "absl/status/status.h"
-#include "keylane/cluster/authority.h"
-#include "keylane/cluster/topology.h"
-#include "keylane/command.h"
-#include "keylane/tx/transaction.h"
+#include "lavik/cluster/authority.h"
+#include "lavik/cluster/topology.h"
+#include "lavik/command.h"
+#include "lavik/tx/transaction.h"
 
-namespace keylane {
+namespace lavik {
 
 namespace storage {
 class MutationPrecondition;
@@ -113,4 +113,4 @@ CommandReply ClusterAuthorityChangedReply(std::span<const std::uint16_t> slots,
 absl::Status ClusterAuthorityChangedStatus();
 bool IsClusterAuthorityChanged(const absl::Status& status);
 
-}  // namespace keylane
+}  // namespace lavik

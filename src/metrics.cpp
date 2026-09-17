@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/metrics.h"
+#include "lavik/metrics.h"
 
 #include <algorithm>
 #include <array>
@@ -32,11 +32,11 @@
 #include "bycorf/runtime/cross_core.h"
 #include "bycorf/runtime/cycle_clock.h"
 #include "bycorf/runtime/worker.h"
-#include "keylane/command_table.h"
-#include "keylane/memory.h"
-#include "keylane/storage/engine.h"
+#include "lavik/command_table.h"
+#include "lavik/memory.h"
+#include "lavik/storage/engine.h"
 
-namespace keylane {
+namespace lavik {
 namespace {
 
 constexpr std::size_t ToIndex(CommandKind kind) noexcept {
@@ -405,10 +405,10 @@ bycorf::Task<absl::Status> RenderPrometheusMetrics(
   output.reserve(server_ready ? 32 * 1024 : 256);
   absl::StrAppend(
       &output,
-      "# HELP keylane_server_ready Whether storage recovery is complete and "
+      "# HELP lavik_server_ready Whether storage recovery is complete and "
       "Redis requests are being accepted.\n"
-      "# TYPE keylane_server_ready gauge\n"
-      "keylane_server_ready ",
+      "# TYPE lavik_server_ready gauge\n"
+      "lavik_server_ready ",
       server_ready ? 1 : 0, "\n");
   if (!server_ready) {
     co_return absl::OkStatus();
@@ -424,14 +424,14 @@ bycorf::Task<absl::Status> RenderPrometheusMetrics(
   const MemoryStats memory_metrics = GetMemoryStats();
   const std::uint64_t current_memory = memory_metrics.used_bytes_;
   absl::StrAppend(&output,
-                  "# HELP keylane_commands_total Completed Redis commands.\n"
-                  "# TYPE keylane_commands_total counter\n"
-                  "keylane_commands_total ",
+                  "# HELP lavik_commands_total Completed Redis commands.\n"
+                  "# TYPE lavik_commands_total counter\n"
+                  "lavik_commands_total ",
                   worker_metrics.TotalCalls(),
                   "\n"
-                  "# HELP keylane_command_calls_total Completed Redis commands "
+                  "# HELP lavik_command_calls_total Completed Redis commands "
                   "by command.\n"
-                  "# TYPE keylane_command_calls_total counter\n");
+                  "# TYPE lavik_command_calls_total counter\n");
   for (std::size_t index = 0; index < worker_metrics.commands_.size();
        ++index) {
     const CommandMetricTotals& command = worker_metrics.commands_[index];
@@ -440,14 +440,14 @@ bycorf::Task<absl::Status> RenderPrometheusMetrics(
     }
     const std::string_view name =
         CommandMetricName(static_cast<CommandKind>(index));
-    absl::StrAppend(&output, "keylane_command_calls_total{command=\"", name,
+    absl::StrAppend(&output, "lavik_command_calls_total{command=\"", name,
                     "\"} ", command.calls_, "\n");
   }
 
   output.append(
-      "# HELP keylane_command_duration_seconds Redis command execution "
+      "# HELP lavik_command_duration_seconds Redis command execution "
       "latency, excluding socket response writes.\n"
-      "# TYPE keylane_command_duration_seconds histogram\n");
+      "# TYPE lavik_command_duration_seconds histogram\n");
   for (std::size_t index = 0; index < worker_metrics.commands_.size();
        ++index) {
     const CommandMetricTotals& command = worker_metrics.commands_[index];
@@ -461,7 +461,7 @@ bycorf::Task<absl::Status> RenderPrometheusMetrics(
          ++bucket) {
       cumulative += command.latency_bins_[bucket];
       absl::StrAppend(
-          &output, "keylane_command_duration_seconds_bucket{command=\"", name,
+          &output, "lavik_command_duration_seconds_bucket{command=\"", name,
           "\",le=\"",
           SecondsFromMicroseconds(kCommandLatencyBucketUpperUs[bucket]), "\"} ",
           cumulative, "\n");
@@ -469,322 +469,320 @@ bycorf::Task<absl::Status> RenderPrometheusMetrics(
     cumulative += command.latency_bins_.back();
     const double latency_seconds = static_cast<double>(command.latency_ticks_) /
                                    worker_metrics.counter_frequency_;
-    absl::StrAppend(&output,
-                    "keylane_command_duration_seconds_bucket{command=\"", name,
-                    "\",le=\"+Inf\"} ", cumulative, "\n",
-                    "keylane_command_duration_seconds_sum{command=\"", name,
+    absl::StrAppend(&output, "lavik_command_duration_seconds_bucket{command=\"",
+                    name, "\",le=\"+Inf\"} ", cumulative, "\n",
+                    "lavik_command_duration_seconds_sum{command=\"", name,
                     "\"} ", latency_seconds, "\n",
-                    "keylane_command_duration_seconds_count{command=\"", name,
+                    "lavik_command_duration_seconds_count{command=\"", name,
                     "\"} ", command.calls_, "\n");
   }
 
   absl::StrAppend(
       &output,
-      "# HELP keylane_storage_io_operations_total Completed storage I/O "
+      "# HELP lavik_storage_io_operations_total Completed storage I/O "
       "operations.\n"
-      "# TYPE keylane_storage_io_operations_total counter\n"
-      "keylane_storage_io_operations_total{operation=\"read\"} ",
+      "# TYPE lavik_storage_io_operations_total counter\n"
+      "lavik_storage_io_operations_total{operation=\"read\"} ",
       worker_metrics.storage_reads_.operations_, "\n",
-      "keylane_storage_io_operations_total{operation=\"write\"} ",
+      "lavik_storage_io_operations_total{operation=\"write\"} ",
       worker_metrics.storage_writes_.operations_, "\n",
-      "keylane_storage_io_operations_total{operation=\"fdatasync\"} ",
+      "lavik_storage_io_operations_total{operation=\"fdatasync\"} ",
       worker_metrics.storage_fdatasyncs_.operations_, "\n",
-      "# HELP keylane_storage_io_bytes_total Bytes completed by storage "
+      "# HELP lavik_storage_io_bytes_total Bytes completed by storage "
       "reads and writes, or covered by successful fdatasync barriers.\n"
-      "# TYPE keylane_storage_io_bytes_total counter\n"
-      "keylane_storage_io_bytes_total{operation=\"read\"} ",
+      "# TYPE lavik_storage_io_bytes_total counter\n"
+      "lavik_storage_io_bytes_total{operation=\"read\"} ",
       worker_metrics.storage_reads_.bytes_, "\n",
-      "keylane_storage_io_bytes_total{operation=\"write\"} ",
+      "lavik_storage_io_bytes_total{operation=\"write\"} ",
       worker_metrics.storage_writes_.bytes_, "\n",
-      "keylane_storage_io_bytes_total{operation=\"fdatasync\"} ",
+      "lavik_storage_io_bytes_total{operation=\"fdatasync\"} ",
       worker_metrics.storage_fdatasyncs_.bytes_, "\n",
-      "# HELP keylane_connections Current TCP connections, including Redis "
+      "# HELP lavik_connections Current TCP connections, including Redis "
       "clients, metrics scrapes, and replication.\n"
-      "# TYPE keylane_connections gauge\n"
-      "keylane_connections ",
+      "# TYPE lavik_connections gauge\n"
+      "lavik_connections ",
       worker_metrics.connections_, "\n",
-      "# HELP keylane_connected_clients Current Redis client connections.\n"
-      "# TYPE keylane_connected_clients gauge\n"
-      "keylane_connected_clients ",
+      "# HELP lavik_connected_clients Current Redis client connections.\n"
+      "# TYPE lavik_connected_clients gauge\n"
+      "lavik_connected_clients ",
       worker_metrics.connected_clients_, "\n",
-      "# HELP keylane_blocked_clients Redis clients waiting in blocking "
+      "# HELP lavik_blocked_clients Redis clients waiting in blocking "
       "commands.\n"
-      "# TYPE keylane_blocked_clients gauge\n"
-      "keylane_blocked_clients ",
+      "# TYPE lavik_blocked_clients gauge\n"
+      "lavik_blocked_clients ",
       worker_metrics.blocked_clients_, "\n",
-      "# HELP keylane_replication_control_connections Current native "
+      "# HELP lavik_replication_control_connections Current native "
       "replication control connections.\n"
-      "# TYPE keylane_replication_control_connections gauge\n"
-      "keylane_replication_control_connections ",
+      "# TYPE lavik_replication_control_connections gauge\n"
+      "lavik_replication_control_connections ",
       worker_metrics.replication_control_connections_, "\n",
-      "# HELP keylane_replication_flow_connections Current native replication "
+      "# HELP lavik_replication_flow_connections Current native replication "
       "data-flow connections.\n"
-      "# TYPE keylane_replication_flow_connections gauge\n"
-      "keylane_replication_flow_connections ",
+      "# TYPE lavik_replication_flow_connections gauge\n"
+      "lavik_replication_flow_connections ",
       worker_metrics.replication_flow_connections_, "\n",
-      "# HELP keylane_cluster_control_connected Whether worker 0 currently "
+      "# HELP lavik_cluster_control_connected Whether worker 0 currently "
       "holds an accepted Meta control session.\n"
-      "# TYPE keylane_cluster_control_connected gauge\n"
-      "keylane_cluster_control_connected ",
+      "# TYPE lavik_cluster_control_connected gauge\n"
+      "lavik_cluster_control_connected ",
       control_metrics.connected_, "\n",
-      "# HELP keylane_cluster_control_reconnects_total Meta control reconnect "
+      "# HELP lavik_cluster_control_reconnects_total Meta control reconnect "
       "rounds after the initial attempt.\n"
-      "# TYPE keylane_cluster_control_reconnects_total counter\n"
-      "keylane_cluster_control_reconnects_total ",
+      "# TYPE lavik_cluster_control_reconnects_total counter\n"
+      "lavik_cluster_control_reconnects_total ",
       control_metrics.reconnects_, "\n",
-      "# HELP keylane_cluster_control_protocol_errors_total Control sessions "
+      "# HELP lavik_cluster_control_protocol_errors_total Control sessions "
       "closed for invalid framing or protocol state.\n"
-      "# TYPE keylane_cluster_control_protocol_errors_total counter\n"
-      "keylane_cluster_control_protocol_errors_total ",
+      "# TYPE lavik_cluster_control_protocol_errors_total counter\n"
+      "lavik_cluster_control_protocol_errors_total ",
       control_metrics.protocol_errors_, "\n",
-      "# HELP keylane_cluster_control_full_states_applied_total Complete Meta "
+      "# HELP lavik_cluster_control_full_states_applied_total Complete Meta "
       "projections installed by the data node.\n"
-      "# TYPE keylane_cluster_control_full_states_applied_total counter\n"
-      "keylane_cluster_control_full_states_applied_total ",
+      "# TYPE lavik_cluster_control_full_states_applied_total counter\n"
+      "lavik_cluster_control_full_states_applied_total ",
       control_metrics.full_states_applied_, "\n",
-      "# HELP keylane_cluster_control_lease_decisions_total Lease decisions "
+      "# HELP lavik_cluster_control_lease_decisions_total Lease decisions "
       "received from Meta.\n"
-      "# TYPE keylane_cluster_control_lease_decisions_total counter\n"
-      "keylane_cluster_control_lease_decisions_total{decision=\"granted\"} ",
+      "# TYPE lavik_cluster_control_lease_decisions_total counter\n"
+      "lavik_cluster_control_lease_decisions_total{decision=\"granted\"} ",
       control_metrics.lease_grants_, "\n",
-      "keylane_cluster_control_lease_decisions_total{decision=\"denied\"} ",
+      "lavik_cluster_control_lease_decisions_total{decision=\"denied\"} ",
       control_metrics.lease_denials_, "\n",
-      "# HELP keylane_cluster_control_lease_expirations_total Locally detected "
+      "# HELP lavik_cluster_control_lease_expirations_total Locally detected "
       "control lease expirations.\n"
-      "# TYPE keylane_cluster_control_lease_expirations_total counter\n"
-      "keylane_cluster_control_lease_expirations_total ",
+      "# TYPE lavik_cluster_control_lease_expirations_total counter\n"
+      "lavik_cluster_control_lease_expirations_total ",
       control_metrics.lease_expirations_, "\n",
-      "# HELP keylane_cluster_control_directive_results_total Data-side "
+      "# HELP lavik_cluster_control_directive_results_total Data-side "
       "directive execution results.\n"
-      "# TYPE keylane_cluster_control_directive_results_total counter\n"
-      "keylane_cluster_control_directive_results_total{result=\"success\"} ",
+      "# TYPE lavik_cluster_control_directive_results_total counter\n"
+      "lavik_cluster_control_directive_results_total{result=\"success\"} ",
       control_metrics.directive_successes_, "\n",
-      "keylane_cluster_control_directive_results_total{result=\"failure\"} ",
+      "lavik_cluster_control_directive_results_total{result=\"failure\"} ",
       control_metrics.directive_failures_, "\n",
-      "# HELP keylane_storage_defrag_runs_total Completed defrag attempts.\n"
-      "# TYPE keylane_storage_defrag_runs_total counter\n"
-      "keylane_storage_defrag_runs_total{result=\"success\"} ",
+      "# HELP lavik_storage_defrag_runs_total Completed defrag attempts.\n"
+      "# TYPE lavik_storage_defrag_runs_total counter\n"
+      "lavik_storage_defrag_runs_total{result=\"success\"} ",
       worker_metrics.defrag_successes_, "\n",
-      "keylane_storage_defrag_runs_total{result=\"resource_exhausted\"} ",
+      "lavik_storage_defrag_runs_total{result=\"resource_exhausted\"} ",
       worker_metrics.defrag_resource_exhausted_, "\n",
-      "keylane_storage_defrag_runs_total{result=\"error\"} ",
+      "lavik_storage_defrag_runs_total{result=\"error\"} ",
       worker_metrics.defrag_failures_, "\n",
-      "# HELP keylane_storage_defrag_active Currently running defrag jobs.\n"
-      "# TYPE keylane_storage_defrag_active gauge\n"
-      "keylane_storage_defrag_active ",
+      "# HELP lavik_storage_defrag_active Currently running defrag jobs.\n"
+      "# TYPE lavik_storage_defrag_active gauge\n"
+      "lavik_storage_defrag_active ",
       worker_metrics.active_defrags_, "\n",
-      "# HELP keylane_storage_defrag_pending Queued defrag jobs.\n"
-      "# TYPE keylane_storage_defrag_pending gauge\n"
-      "keylane_storage_defrag_pending ",
+      "# HELP lavik_storage_defrag_pending Queued defrag jobs.\n"
+      "# TYPE lavik_storage_defrag_pending gauge\n"
+      "lavik_storage_defrag_pending ",
       worker_metrics.pending_defrags_, "\n",
-      "# HELP keylane_storage_defrag_paused Whether relocation jobs are "
+      "# HELP lavik_storage_defrag_paused Whether relocation jobs are "
       "paused while candidates remain queued.\n"
-      "# TYPE keylane_storage_defrag_paused gauge\n"
-      "keylane_storage_defrag_paused ",
+      "# TYPE lavik_storage_defrag_paused gauge\n"
+      "lavik_storage_defrag_paused ",
       defrag.paused_ ? 1 : 0, "\n",
-      "# HELP keylane_storage_defrag_max_active_per_device Runtime maximum "
+      "# HELP lavik_storage_defrag_max_active_per_device Runtime maximum "
       "concurrent relocations per device.\n"
-      "# TYPE keylane_storage_defrag_max_active_per_device gauge\n"
-      "keylane_storage_defrag_max_active_per_device ",
+      "# TYPE lavik_storage_defrag_max_active_per_device gauge\n"
+      "lavik_storage_defrag_max_active_per_device ",
       defrag.max_active_per_device_, "\n",
-      "# HELP keylane_storage_defrag_block_sleep_seconds Runtime cooldown "
+      "# HELP lavik_storage_defrag_block_sleep_seconds Runtime cooldown "
       "after each relocated block.\n"
-      "# TYPE keylane_storage_defrag_block_sleep_seconds gauge\n"
-      "keylane_storage_defrag_block_sleep_seconds ",
+      "# TYPE lavik_storage_defrag_block_sleep_seconds gauge\n"
+      "lavik_storage_defrag_block_sleep_seconds ",
       static_cast<double>(defrag.block_sleep_ms_) / 1000.0, "\n",
-      "# HELP keylane_storage_defrag_record_sleep_seconds Runtime pause "
+      "# HELP lavik_storage_defrag_record_sleep_seconds Runtime pause "
       "after each record examined by defrag.\n"
-      "# TYPE keylane_storage_defrag_record_sleep_seconds gauge\n"
-      "keylane_storage_defrag_record_sleep_seconds ",
+      "# TYPE lavik_storage_defrag_record_sleep_seconds gauge\n"
+      "lavik_storage_defrag_record_sleep_seconds ",
       static_cast<double>(defrag.record_sleep_us_) / 1'000'000.0, "\n",
-      "# HELP keylane_memory_current_bytes Current process memory used for "
+      "# HELP lavik_memory_current_bytes Current process memory used for "
       "limit enforcement.\n"
-      "# TYPE keylane_memory_current_bytes gauge\n"
-      "keylane_memory_current_bytes ",
+      "# TYPE lavik_memory_current_bytes gauge\n"
+      "lavik_memory_current_bytes ",
       current_memory, "\n",
-      "# HELP keylane_memory_used_bytes Allocator usable bytes used for "
+      "# HELP lavik_memory_used_bytes Allocator usable bytes used for "
       "limit enforcement.\n"
-      "# TYPE keylane_memory_used_bytes gauge\n"
-      "keylane_memory_used_bytes ",
+      "# TYPE lavik_memory_used_bytes gauge\n"
+      "lavik_memory_used_bytes ",
       memory_metrics.used_bytes_, "\n",
-      "# HELP keylane_memory_rss_bytes Resident process memory.\n"
-      "# TYPE keylane_memory_rss_bytes gauge\n"
-      "keylane_memory_rss_bytes ",
+      "# HELP lavik_memory_rss_bytes Resident process memory.\n"
+      "# TYPE lavik_memory_rss_bytes gauge\n"
+      "lavik_memory_rss_bytes ",
       memory_metrics.rss_bytes_, "\n",
-      "# HELP keylane_memory_committed_bytes Memory committed by the "
+      "# HELP lavik_memory_committed_bytes Memory committed by the "
       "configured allocator.\n"
-      "# TYPE keylane_memory_committed_bytes gauge\n"
-      "keylane_memory_committed_bytes ",
+      "# TYPE lavik_memory_committed_bytes gauge\n"
+      "lavik_memory_committed_bytes ",
       memory_metrics.committed_bytes_, "\n",
-      "# HELP keylane_memory_reserved_bytes Address space reserved by the "
+      "# HELP lavik_memory_reserved_bytes Address space reserved by the "
       "configured allocator.\n"
-      "# TYPE keylane_memory_reserved_bytes gauge\n"
-      "keylane_memory_reserved_bytes ",
+      "# TYPE lavik_memory_reserved_bytes gauge\n"
+      "lavik_memory_reserved_bytes ",
       memory_metrics.reserved_bytes_, "\n",
-      "# HELP keylane_memory_max_bytes Configured process memory limit.\n"
-      "# TYPE keylane_memory_max_bytes gauge\n"
-      "keylane_memory_max_bytes ",
+      "# HELP lavik_memory_max_bytes Configured process memory limit.\n"
+      "# TYPE lavik_memory_max_bytes gauge\n"
+      "lavik_memory_max_bytes ",
       memory_metrics.max_bytes_, "\n",
-      "# HELP keylane_client_request_buffer_limit_bytes Effective ordinary "
+      "# HELP lavik_client_request_buffer_limit_bytes Effective ordinary "
       "client request-buffer limit.\n"
-      "# TYPE keylane_client_request_buffer_limit_bytes gauge\n"
-      "keylane_client_request_buffer_limit_bytes ",
+      "# TYPE lavik_client_request_buffer_limit_bytes gauge\n"
+      "lavik_client_request_buffer_limit_bytes ",
       memory_metrics.client_buffer_limit_bytes_, "\n",
-      "# HELP keylane_client_buffered_request_bytes Ordinary client request "
+      "# HELP lavik_client_buffered_request_bytes Ordinary client request "
       "bytes read but not yet retired.\n"
-      "# TYPE keylane_client_buffered_request_bytes gauge\n"
-      "keylane_client_buffered_request_bytes ",
+      "# TYPE lavik_client_buffered_request_bytes gauge\n"
+      "lavik_client_buffered_request_bytes ",
       memory_metrics.client_buffered_bytes_, "\n",
-      "# HELP keylane_fullsync_reserved_memory_bytes Memory headroom "
+      "# HELP lavik_fullsync_reserved_memory_bytes Memory headroom "
       "reserved for active full-sync coverage maps.\n"
-      "# TYPE keylane_fullsync_reserved_memory_bytes gauge\n"
-      "keylane_fullsync_reserved_memory_bytes ",
+      "# TYPE lavik_fullsync_reserved_memory_bytes gauge\n"
+      "lavik_fullsync_reserved_memory_bytes ",
       memory_metrics.fullsync_reserved_bytes_, "\n",
-      "# HELP keylane_memory_admission_pending_bytes Worker-local headroom "
+      "# HELP lavik_memory_admission_pending_bytes Worker-local headroom "
       "held while slow-path allocations become allocator-visible.\n"
-      "# TYPE keylane_memory_admission_pending_bytes gauge\n"
-      "keylane_memory_admission_pending_bytes ",
+      "# TYPE lavik_memory_admission_pending_bytes gauge\n"
+      "lavik_memory_admission_pending_bytes ",
       memory_metrics.admission_pending_bytes_, "\n",
-      "# HELP keylane_memory_rejected_commands_total Commands rejected by "
+      "# HELP lavik_memory_rejected_commands_total Commands rejected by "
       "the memory limit.\n"
-      "# TYPE keylane_memory_rejected_commands_total counter\n"
-      "keylane_memory_rejected_commands_total ",
+      "# TYPE lavik_memory_rejected_commands_total counter\n"
+      "lavik_memory_rejected_commands_total ",
       memory_metrics.rejected_commands_, "\n",
-      "# HELP keylane_storage_capacity_bytes Usable data capacity.\n"
-      "# TYPE keylane_storage_capacity_bytes gauge\n"
-      "# HELP keylane_storage_available_bytes Space available to foreground "
+      "# HELP lavik_storage_capacity_bytes Usable data capacity.\n"
+      "# TYPE lavik_storage_capacity_bytes gauge\n"
+      "# HELP lavik_storage_available_bytes Space available to foreground "
       "writes after preserving the defrag reserve.\n"
-      "# TYPE keylane_storage_available_bytes gauge\n"
-      "# HELP keylane_filesystem_available_bytes Space available on the data "
+      "# TYPE lavik_storage_available_bytes gauge\n"
+      "# HELP lavik_filesystem_available_bytes Space available on the data "
       "file's filesystem.\n"
-      "# TYPE keylane_filesystem_available_bytes gauge\n");
+      "# TYPE lavik_filesystem_available_bytes gauge\n");
   output.append(
-      "# HELP keylane_worker_retained_memory_bytes Retained bytes charged "
+      "# HELP lavik_worker_retained_memory_bytes Retained bytes charged "
       "to this worker's admission share.\n"
-      "# TYPE keylane_worker_retained_memory_bytes gauge\n"
-      "# HELP keylane_worker_memory_admission_pending_bytes Headroom held "
+      "# TYPE lavik_worker_retained_memory_bytes gauge\n"
+      "# HELP lavik_worker_memory_admission_pending_bytes Headroom held "
       "by this worker while retained allocations become visible.\n"
-      "# TYPE keylane_worker_memory_admission_pending_bytes gauge\n"
-      "# HELP keylane_worker_fullsync_reserved_memory_bytes Retained "
+      "# TYPE lavik_worker_memory_admission_pending_bytes gauge\n"
+      "# HELP lavik_worker_fullsync_reserved_memory_bytes Retained "
       "headroom reserved by this worker's active full-sync coverage maps.\n"
-      "# TYPE keylane_worker_fullsync_reserved_memory_bytes gauge\n"
-      "# HELP keylane_worker_client_buffered_request_bytes Client request "
+      "# TYPE lavik_worker_fullsync_reserved_memory_bytes gauge\n"
+      "# HELP lavik_worker_client_buffered_request_bytes Client request "
       "bytes currently charged to this worker's separate buffer quota.\n"
-      "# TYPE keylane_worker_client_buffered_request_bytes gauge\n"
-      "# HELP keylane_worker_memory_limit_bytes Retained-memory admission "
+      "# TYPE lavik_worker_client_buffered_request_bytes gauge\n"
+      "# HELP lavik_worker_memory_limit_bytes Retained-memory admission "
       "limit assigned to this worker.\n"
-      "# TYPE keylane_worker_memory_limit_bytes gauge\n");
+      "# TYPE lavik_worker_memory_limit_bytes gauge\n");
   const unsigned memory_workers = MemoryAccountingWorkerCount();
   for (unsigned worker = 0; worker < memory_workers; ++worker) {
     const WorkerMemoryStats memory = GetWorkerMemoryStats(worker);
-    absl::StrAppend(&output, "keylane_worker_retained_memory_bytes{worker=\"",
+    absl::StrAppend(&output, "lavik_worker_retained_memory_bytes{worker=\"",
                     worker, "\"} ", memory.retained_bytes_, "\n",
-                    "keylane_worker_memory_admission_pending_bytes{worker=\"",
+                    "lavik_worker_memory_admission_pending_bytes{worker=\"",
                     worker, "\"} ", memory.admission_pending_bytes_, "\n",
-                    "keylane_worker_fullsync_reserved_memory_bytes{worker=\"",
+                    "lavik_worker_fullsync_reserved_memory_bytes{worker=\"",
                     worker, "\"} ", memory.fullsync_reserved_bytes_, "\n",
-                    "keylane_worker_client_buffered_request_bytes{worker=\"",
+                    "lavik_worker_client_buffered_request_bytes{worker=\"",
                     worker, "\"} ", memory.client_buffered_bytes_, "\n",
-                    "keylane_worker_memory_limit_bytes{worker=\"", worker,
-                    "\"} ", memory.retained_limit_bytes_, "\n");
+                    "lavik_worker_memory_limit_bytes{worker=\"", worker, "\"} ",
+                    memory.retained_limit_bytes_, "\n");
   }
   output.append(
-      "# HELP keylane_replication_backlog_bytes Allocated shared in-memory "
+      "# HELP lavik_replication_backlog_bytes Allocated shared in-memory "
       "replication backlog bytes.\n"
-      "# TYPE keylane_replication_backlog_bytes gauge\n"
-      "# HELP keylane_replication_backlog_capacity_bytes Configured shared "
+      "# TYPE lavik_replication_backlog_bytes gauge\n"
+      "# HELP lavik_replication_backlog_capacity_bytes Configured shared "
       "in-memory replication backlog capacity.\n"
-      "# TYPE keylane_replication_backlog_capacity_bytes gauge\n"
-      "# HELP keylane_replication_backlog_chunks Allocated 8 MiB replication "
+      "# TYPE lavik_replication_backlog_capacity_bytes gauge\n"
+      "# HELP lavik_replication_backlog_chunks Allocated 8 MiB replication "
       "backlog chunks.\n"
-      "# TYPE keylane_replication_backlog_chunks gauge\n"
-      "# HELP keylane_replication_backlog_floor_lsn Oldest retained flow LSN.\n"
-      "# TYPE keylane_replication_backlog_floor_lsn gauge\n"
-      "# HELP keylane_replication_backlog_tail_lsn Newest published flow LSN.\n"
-      "# TYPE keylane_replication_backlog_tail_lsn gauge\n"
-      "# HELP keylane_replication_backlog_pinned_cursors Live replica ACK "
+      "# TYPE lavik_replication_backlog_chunks gauge\n"
+      "# HELP lavik_replication_backlog_floor_lsn Oldest retained flow LSN.\n"
+      "# TYPE lavik_replication_backlog_floor_lsn gauge\n"
+      "# HELP lavik_replication_backlog_tail_lsn Newest published flow LSN.\n"
+      "# TYPE lavik_replication_backlog_tail_lsn gauge\n"
+      "# HELP lavik_replication_backlog_pinned_cursors Live replica ACK "
       "coverage claims.\n"
-      "# TYPE keylane_replication_backlog_pinned_cursors gauge\n"
-      "# HELP keylane_replication_backlog_active Whether this worker's shared "
+      "# TYPE lavik_replication_backlog_pinned_cursors gauge\n"
+      "# HELP lavik_replication_backlog_active Whether this worker's shared "
       "replication history is active.\n"
-      "# TYPE keylane_replication_backlog_active gauge\n"
-      "# HELP keylane_replication_backlog_coverage_revocations_total Lagging "
+      "# TYPE lavik_replication_backlog_active gauge\n"
+      "# HELP lavik_replication_backlog_coverage_revocations_total Lagging "
       "coverage claims revoked at the hard cap when backpressure is disabled.\n"
-      "# TYPE keylane_replication_backlog_coverage_revocations_total counter\n"
-      "# HELP keylane_replication_backlog_backpressure_waits_total Backlog "
+      "# TYPE lavik_replication_backlog_coverage_revocations_total counter\n"
+      "# HELP lavik_replication_backlog_backpressure_waits_total Backlog "
       "capacity conflicts that waited for retained cursor progress.\n"
-      "# TYPE keylane_replication_backlog_backpressure_waits_total counter\n"
-      "# HELP keylane_replication_backlog_backpressured Whether this worker "
+      "# TYPE lavik_replication_backlog_backpressure_waits_total counter\n"
+      "# HELP lavik_replication_backlog_backpressured Whether this worker "
       "is currently waiting for retained cursor progress.\n"
-      "# TYPE keylane_replication_backlog_backpressured gauge\n"
-      "# HELP keylane_replication_publish_queue_bytes Commands staged before "
+      "# TYPE lavik_replication_backlog_backpressured gauge\n"
+      "# HELP lavik_replication_publish_queue_bytes Commands staged before "
       "the shared backlog.\n"
-      "# TYPE keylane_replication_publish_queue_bytes gauge\n"
-      "# HELP keylane_replication_publish_queue_capacity_bytes Configured "
+      "# TYPE lavik_replication_publish_queue_bytes gauge\n"
+      "# HELP lavik_replication_publish_queue_capacity_bytes Configured "
       "publisher staging capacity.\n"
-      "# TYPE keylane_replication_publish_queue_capacity_bytes gauge\n"
-      "# HELP keylane_fullsync_publish_queue_bytes Commands awaiting durable "
+      "# TYPE lavik_replication_publish_queue_capacity_bytes gauge\n"
+      "# HELP lavik_fullsync_publish_queue_bytes Commands awaiting durable "
       "target ACK in active full-sync sessions.\n"
-      "# TYPE keylane_fullsync_publish_queue_bytes gauge\n"
-      "# HELP keylane_fullsync_publish_queue_admitted_bytes Bytes reserved by "
+      "# TYPE lavik_fullsync_publish_queue_bytes gauge\n"
+      "# HELP lavik_fullsync_publish_queue_admitted_bytes Bytes reserved by "
       "writes that have not finished publication.\n"
-      "# TYPE keylane_fullsync_publish_queue_admitted_bytes gauge\n"
-      "# HELP keylane_fullsync_publish_queue_capacity_bytes Aggregate "
+      "# TYPE lavik_fullsync_publish_queue_admitted_bytes gauge\n"
+      "# HELP lavik_fullsync_publish_queue_capacity_bytes Aggregate "
       "configured capacity of active full-sync session queues.\n"
-      "# TYPE keylane_fullsync_publish_queue_capacity_bytes gauge\n"
-      "# HELP keylane_fullsync_sessions Active full-sync sessions on this "
+      "# TYPE lavik_fullsync_publish_queue_capacity_bytes gauge\n"
+      "# HELP lavik_fullsync_sessions Active full-sync sessions on this "
       "worker.\n"
-      "# TYPE keylane_fullsync_sessions gauge\n"
-      "# HELP keylane_fullsync_publish_queue_backpressure_waits_total Writes "
+      "# TYPE lavik_fullsync_sessions gauge\n"
+      "# HELP lavik_fullsync_publish_queue_backpressure_waits_total Writes "
       "that waited for full-sync queue credit.\n"
-      "# TYPE keylane_fullsync_publish_queue_backpressure_waits_total "
+      "# TYPE lavik_fullsync_publish_queue_backpressure_waits_total "
       "counter\n");
   for (const storage::StorageReplicationLogMetrics& log :
        storage_metrics.replication_logs_) {
     const std::string labels = absl::StrCat("worker=\"", log.worker_id_, "\"");
     absl::StrAppend(
-        &output, "keylane_replication_backlog_bytes{", labels, "} ",
+        &output, "lavik_replication_backlog_bytes{", labels, "} ",
         log.chunk_count_ * storage::kStorageBlockBytes, "\n",
-        "keylane_replication_backlog_capacity_bytes{", labels, "} ",
-        log.capacity_bytes_, "\n", "keylane_replication_backlog_chunks{",
-        labels, "} ", log.chunk_count_, "\n",
-        "keylane_replication_backlog_floor_lsn{", labels, "} ", log.floor_lsn_,
-        "\n", "keylane_replication_backlog_tail_lsn{", labels, "} ",
-        log.tail_lsn_, "\n", "keylane_replication_backlog_pinned_cursors{",
-        labels, "} ", log.pinned_cursors_, "\n",
-        "keylane_replication_backlog_active{", labels, "} ",
-        log.active_ ? 1 : 0, "\n",
-        "keylane_replication_backlog_coverage_revocations_total{", labels, "} ",
+        "lavik_replication_backlog_capacity_bytes{", labels, "} ",
+        log.capacity_bytes_, "\n", "lavik_replication_backlog_chunks{", labels,
+        "} ", log.chunk_count_, "\n", "lavik_replication_backlog_floor_lsn{",
+        labels, "} ", log.floor_lsn_, "\n",
+        "lavik_replication_backlog_tail_lsn{", labels, "} ", log.tail_lsn_,
+        "\n", "lavik_replication_backlog_pinned_cursors{", labels, "} ",
+        log.pinned_cursors_, "\n", "lavik_replication_backlog_active{", labels,
+        "} ", log.active_ ? 1 : 0, "\n",
+        "lavik_replication_backlog_coverage_revocations_total{", labels, "} ",
         log.coverage_revocations_, "\n",
-        "keylane_replication_backlog_backpressure_waits_total{", labels, "} ",
+        "lavik_replication_backlog_backpressure_waits_total{", labels, "} ",
         log.backpressure_waits_, "\n",
-        "keylane_replication_backlog_backpressured{", labels, "} ",
+        "lavik_replication_backlog_backpressured{", labels, "} ",
         log.backpressured_ ? 1 : 0, "\n",
-        "keylane_replication_publish_queue_bytes{", labels, "} ",
+        "lavik_replication_publish_queue_bytes{", labels, "} ",
         log.publish_queue_bytes_, "\n",
-        "keylane_replication_publish_queue_capacity_bytes{", labels, "} ",
+        "lavik_replication_publish_queue_capacity_bytes{", labels, "} ",
         log.publish_queue_capacity_bytes_, "\n",
-        "keylane_fullsync_publish_queue_bytes{", labels, "} ",
+        "lavik_fullsync_publish_queue_bytes{", labels, "} ",
         log.fullsync_publish_queue_bytes_, "\n",
-        "keylane_fullsync_publish_queue_admitted_bytes{", labels, "} ",
+        "lavik_fullsync_publish_queue_admitted_bytes{", labels, "} ",
         log.fullsync_publisher_admitted_bytes_, "\n",
-        "keylane_fullsync_publish_queue_capacity_bytes{", labels, "} ",
+        "lavik_fullsync_publish_queue_capacity_bytes{", labels, "} ",
         log.fullsync_publish_queue_capacity_bytes_, "\n",
-        "keylane_fullsync_sessions{", labels, "} ", log.fullsync_session_count_,
-        "\n", "keylane_fullsync_publish_queue_backpressure_waits_total{",
-        labels, "} ", log.fullsync_backpressure_waits_, "\n");
+        "lavik_fullsync_sessions{", labels, "} ", log.fullsync_session_count_,
+        "\n", "lavik_fullsync_publish_queue_backpressure_waits_total{", labels,
+        "} ", log.fullsync_backpressure_waits_, "\n");
   }
   for (const storage::StorageDeviceMetrics& device : storage_metrics.devices_) {
     std::string labels =
         absl::StrCat("device=\"", device.device_id_, "\",path=\"");
     AppendEscapedLabel(device.path_, &labels);
     labels.append("\"");
-    absl::StrAppend(&output, "keylane_storage_capacity_bytes{", labels, "} ",
+    absl::StrAppend(&output, "lavik_storage_capacity_bytes{", labels, "} ",
                     device.capacity_bytes_, "\n",
-                    "keylane_storage_available_bytes{", labels, "} ",
+                    "lavik_storage_available_bytes{", labels, "} ",
                     device.available_bytes_, "\n");
     if (device.filesystem_available_bytes_.has_value()) {
-      absl::StrAppend(&output, "keylane_filesystem_available_bytes{", labels,
+      absl::StrAppend(&output, "lavik_filesystem_available_bytes{", labels,
                       "} ", *device.filesystem_available_bytes_, "\n");
     }
   }
@@ -807,4 +805,4 @@ std::unique_ptr<bycorf::Service> CreateMetricsService(
   return service;
 }
 
-}  // namespace keylane
+}  // namespace lavik

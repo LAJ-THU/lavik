@@ -22,19 +22,19 @@
 
 #include "absl/strings/str_cat.h"
 #include "gtest/gtest.h"
-#include "keylane/cluster/control_protocol.h"
-#include "keylane/meta/cluster_create.h"
-#include "keylane/meta/commands.h"
-#include "keylane/meta/failover.h"
-#include "keylane/meta/hash.h"
-#include "keylane/meta/state_apply.h"
+#include "lavik/cluster/control_protocol.h"
+#include "lavik/meta/cluster_create.h"
+#include "lavik/meta/commands.h"
+#include "lavik/meta/failover.h"
+#include "lavik/meta/hash.h"
+#include "lavik/meta/state_apply.h"
 #include "meta_topology_test_access.h"
 
 namespace {
 
-namespace meta = keylane::meta;
+namespace meta = lavik::meta;
 
-constexpr std::string_view kActor = "keylane://operator/failover-test";
+constexpr std::string_view kActor = "lavik://operator/failover-test";
 constexpr std::string_view kTime = "2026-09-13T00:00:00Z";
 constexpr std::string_view kAutomaticPreemptionReason =
     "preempted by automatic uncontrolled failover";
@@ -145,7 +145,7 @@ void PopulateActivatedGroup(ActivatedGroupFixture& fixture,
   meta::RegisterNode node;
   node.request_id_ = Filled<16>(0x04);
   node.node_id_ = fixture.owner;
-  node.principal_ = absl::StrCat("keylane://node/", fixture.owner);
+  node.principal_ = absl::StrCat("lavik://node/", fixture.owner);
   node.endpoints_ = {"tcp://127.0.0.1:6379"};
   node.role_ = meta::MetaNodeRole::kPrimary;
   ExpectAccepted(fixture.stores, first_index, meta::MetaCommand{node});
@@ -248,7 +248,7 @@ meta::MetaOperationId InstallCurrentAuthorityDirective(
   directive.group_id_ = "g1";
   directive.group_term_ = 1;
   directive.kind_ = std::string(meta::kMetaDirectiveRebuild);
-  directive.payload_ = *keylane::cluster::control::EncodeRebuildRequest({3});
+  directive.payload_ = *lavik::cluster::control::EncodeRebuildRequest({3});
 
   meta::TransitionOperationPhase phase;
   phase.operation_id_ = submit.operation_id_;
@@ -265,7 +265,7 @@ void InstallUncontrolledPostStateDirectly(ActivatedGroupFixture& fixture,
   begin_term.expected_term_ = 1;
   begin_term.new_term_ = 2;
   ASSERT_TRUE(fixture.stores.topology_.BeginGroupTerm(begin_term).ok());
-  ASSERT_TRUE(keylane::meta::MetaTopologyTestAccess::SetGroupTerm(
+  ASSERT_TRUE(lavik::meta::MetaTopologyTestAccess::SetGroupTerm(
                   fixture.stores.topology_, "g1", 2)
                   .ok());
 
@@ -656,7 +656,7 @@ TEST(MetaFailoverTransitionApply,
      BeginUncontrolledRejectsTransitionWithoutFencing) {
   ActivatedGroupFixture fixture = MakeActivatedGroup();
   const meta::BeginUncontrolledFailover begin = MakeBeginUncontrolled(fixture);
-  ASSERT_TRUE(keylane::meta::MetaTopologyTestAccess::SetGroupTerm(
+  ASSERT_TRUE(lavik::meta::MetaTopologyTestAccess::SetGroupTerm(
                   fixture.stores.topology_, "g1", 2)
                   .ok());
   meta::MetaFailoverTransition partial;

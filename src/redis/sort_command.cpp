@@ -34,14 +34,14 @@
 #include "absl/strings/str_cat.h"
 #include "blocking_wait.h"
 #include "cluster_gate.h"
-#include "keylane/redis_parse.h"
-#include "keylane/resp.h"
-#include "keylane/storage/engine.h"
-#include "keylane/storage/format.h"
-#include "keylane/tx/transaction.h"
+#include "lavik/redis_parse.h"
+#include "lavik/resp.h"
+#include "lavik/storage/engine.h"
+#include "lavik/storage/format.h"
+#include "lavik/tx/transaction.h"
 #include "zset_command.h"
 
-namespace keylane {
+namespace lavik {
 using namespace bycorf;
 
 namespace {
@@ -739,4 +739,4 @@ Task<std::string> ExecuteSortCommandLocked(
   co_return EncodeInteger(product->stored_values_.size());
 }
 
-}  // namespace keylane
+}  // namespace lavik

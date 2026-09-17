@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/command.h"
+#include "lavik/command.h"
 
 #include <sys/socket.h>
 
@@ -57,30 +57,30 @@
 #include "cluster_gate.h"
 #include "function_catalog.h"
 #include "hash_command.h"
-#include "keylane/cluster/authority.h"
-#include "keylane/cluster/runtime.h"
-#include "keylane/command_table.h"
-#include "keylane/config.h"
-#include "keylane/expiration.h"
-#include "keylane/fault_injection.h"
-#include "keylane/glob.h"
-#include "keylane/memory.h"
-#include "keylane/metrics.h"
-#include "keylane/monitor.h"
-#include "keylane/pubsub.h"
-#include "keylane/random_sample.h"
-#include "keylane/rdb.h"
-#include "keylane/redis_parse.h"
-#include "keylane/replication.h"
-#include "keylane/replication_command.h"
-#include "keylane/resp.h"
-#include "keylane/session.h"
-#include "keylane/slowlog.h"
-#include "keylane/storage/engine.h"
-#include "keylane/storage/format.h"
-#include "keylane/tx/transaction.h"
-#include "keylane/tx/tx_shard.h"
-#include "keylane/version.h"
+#include "lavik/cluster/authority.h"
+#include "lavik/cluster/runtime.h"
+#include "lavik/command_table.h"
+#include "lavik/config.h"
+#include "lavik/expiration.h"
+#include "lavik/fault_injection.h"
+#include "lavik/glob.h"
+#include "lavik/memory.h"
+#include "lavik/metrics.h"
+#include "lavik/monitor.h"
+#include "lavik/pubsub.h"
+#include "lavik/random_sample.h"
+#include "lavik/rdb.h"
+#include "lavik/redis_parse.h"
+#include "lavik/replication.h"
+#include "lavik/replication_command.h"
+#include "lavik/resp.h"
+#include "lavik/session.h"
+#include "lavik/slowlog.h"
+#include "lavik/storage/engine.h"
+#include "lavik/storage/format.h"
+#include "lavik/tx/transaction.h"
+#include "lavik/tx/tx_shard.h"
+#include "lavik/version.h"
 #include "list_command.h"
 #include "lua_eval.h"
 #include "set_command.h"
@@ -90,7 +90,7 @@
 #include "string_command.h"
 #include "zset_command.h"
 
-namespace keylane {
+namespace lavik {
 using namespace bycorf;
 
 namespace {
@@ -2301,7 +2301,7 @@ bool TryBeginDbOperation(std::uint8_t db_id) noexcept {
   return false;
 }
 
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
 // InitStorage resolves this before worker threads start. Fault-enabled writes
 // use the cached pointer instead of getenv or a function-local static guard;
 // ordinary Release builds omit both the hook and its coroutine call sites.
@@ -2737,7 +2737,7 @@ Task<absl::Status> BeginReplicationTransactionOrder(
     ReplicationTransactionOrderGuard* guard) {
   co_await g_replication_transaction_order.Acquire(*ThisWorker().self_);
   guard->Activate();
-  KEYLANE_FAULT_INJECT(
+  LAVIK_FAULT_INJECT(
       // Test-only hold for the order-gate e2e: once per process, keep the
       // freshly acquired gate for the configured span and log a marker the
       // fixture polls, so the test observes gate admission behaviour instead of
@@ -2746,7 +2746,7 @@ Task<absl::Status> BeginReplicationTransactionOrder(
       // deterministically.
       static std::atomic<bool> order_hold_claimed = false;
       const char* order_hold_text =
-          std::getenv("KEYLANE_REPLICATION_ORDER_HOLD_MS");
+          std::getenv("LAVIK_REPLICATION_ORDER_HOLD_MS");
       bool expected_order_hold = false;
       if (order_hold_text != nullptr &&
           order_hold_claimed.compare_exchange_strong(
@@ -2755,7 +2755,7 @@ Task<absl::Status> BeginReplicationTransactionOrder(
         const unsigned long hold_ms = std::strtoul(order_hold_text, &end, 10);
         if (end != order_hold_text && *end == '\0' && hold_ms != 0) {
           spdlog::warn(
-              "KEYLANE_REPLICATION_ORDER_HOLD_MS holding the replication order "
+              "LAVIK_REPLICATION_ORDER_HOLD_MS holding the replication order "
               "gate for {} ms",
               hold_ms);
           absl::Status held = co_await bycorf::SleepFor(
@@ -3292,7 +3292,7 @@ Task<CommandReply> ExecuteKeys(const CommandRequest& request,
   }
   // The shared fault-injection pause makes the admission-to-exclusive-gate
   // generation race deterministic in fault-enabled integration coverage.
-  KEYLANE_FAULT_INJECT(
+  LAVIK_FAULT_INJECT(
       absl::Status paused = co_await MaybePauseBeforeCommandDbAdmission();
       if (!paused.ok()) {
         co_return BuiltReply(reply_builder.AppendError(
@@ -3645,11 +3645,11 @@ Task<absl::StatusOr<std::string>> NextNegativeRandomChunk(
   co_return EncodeRandomStreamChunk(*state);
 }
 
-#if KEYLANE_FAULTS_ENABLED
+#if LAVIK_FAULTS_ENABLED
 void MaybeFailRandomStreamBuild(const CommandRequest& request,
                                 std::string_view stage) {
-  if (KEYLANE_FAULT_MATCHES("KEYLANE_FAIL_RANDOM_STREAM_STAGE", stage))
-    KEYLANE_FAULT_BAD_ALLOC("KEYLANE_FAIL_RANDOM_STREAM_KEY", request.args_[1]);
+  if (LAVIK_FAULT_MATCHES("LAVIK_FAIL_RANDOM_STREAM_STAGE", stage))
+    LAVIK_FAULT_BAD_ALLOC("LAVIK_FAIL_RANDOM_STREAM_KEY", request.args_[1]);
 }
 #endif
 
@@ -3693,12 +3693,12 @@ Task<CommandReply> ExecuteNegativeRandomStream(
 
     std::uint64_t reply_elements = state->remaining_;
     if (state->options_.with_values_) reply_elements *= 2;
-    KEYLANE_FAULT_INJECT(MaybeFailRandomStreamBuild(request, "before-source"););
+    LAVIK_FAULT_INJECT(MaybeFailRandomStreamBuild(request, "before-source"););
     auto chunks = std::make_unique<ReplyChunkSource>(
         [state]() { return NextNegativeRandomChunk(state); });
     CommandReply reply =
         BuiltReply(reply_builder.AppendArrayHeader(reply_elements));
-    KEYLANE_FAULT_INJECT(MaybeFailRandomStreamBuild(request, "after-header"););
+    LAVIK_FAULT_INJECT(MaybeFailRandomStreamBuild(request, "after-header"););
     reply.chunks_ = std::move(chunks);
     co_return reply;
   } catch (const std::bad_alloc&) {
@@ -3771,10 +3771,10 @@ PrepareTransactionalNegativeRandomStreamLocked(
     const std::uint64_t elements =
         options.with_values_ ? options.count_ * 2 : options.count_;
     OwnedStreamReply reply;
-    KEYLANE_FAULT_INJECT(MaybeFailRandomStreamBuild(request, "before-source"););
+    LAVIK_FAULT_INJECT(MaybeFailRandomStreamBuild(request, "before-source"););
     reply.chunks_ = [state]() { return NextTransactionalRandomChunk(state); };
     reply.encoded_ = "*" + std::to_string(elements) + "\r\n";
-    KEYLANE_FAULT_INJECT(MaybeFailRandomStreamBuild(request, "after-header"););
+    LAVIK_FAULT_INJECT(MaybeFailRandomStreamBuild(request, "after-header"););
     co_return reply;
   } catch (const std::bad_alloc&) {
     RecordMemoryRejection();
@@ -4573,7 +4573,7 @@ std::string CommandUsecPerCall(const CommandMetricTotals& command,
   return absl::StrCat(rounded / 100, ".", fraction < 10 ? "0" : "", fraction);
 }
 
-// INFO: Redis-shaped sections built from what keylane actually tracks. The
+// INFO: Redis-shaped sections built from what lavik actually tracks. The
 // Transactions section surfaces the VLL scheduler counters.
 Task<CommandReply> ExecuteInfo(const CommandRequest& request,
                                ReplyBuilder& reply_builder) {
@@ -4602,7 +4602,7 @@ Task<CommandReply> ExecuteInfo(const CommandRequest& request,
                             std::chrono::steady_clock::now() - g_server_start)
                             .count();
     info += "# Server\r\n";
-    info += "keylane_version:" + std::string(kVersion) + "\r\n";
+    info += "lavik_version:" + std::string(kVersion) + "\r\n";
     // Redis reports redis_mode in the Server section (server.c); cluster
     // clients and operators read it together with the # Cluster section.
     info += std::string("redis_mode:") +
@@ -4754,7 +4754,7 @@ Task<CommandReply> ExecuteInfo(const CommandRequest& request,
             std::to_string(durability.tx_commits_pending_) + "\r\n";
     info += std::string("storage_durability_pending:") +
             (durability.pending() ? "1\r\n\r\n" : "0\r\n\r\n");
-#if KEYLANE_ENABLE_CROSS_CORE_HOP_COUNT
+#if LAVIK_ENABLE_CROSS_CORE_HOP_COUNT
     std::uint64_t command_cross_core_hops = 0;
     for (unsigned worker = 0; worker < g_server_threads; ++worker) {
       command_cross_core_hops += co_await SubmitTo(
@@ -4789,23 +4789,23 @@ Task<CommandReply> ExecuteInfo(const CommandRequest& request,
         std::string(replication.role_ == ReplicationRole::kMaster ? "master"
                                                                   : "slave") +
         "\r\n";
-    info += "keylane_replication_state:" +
+    info += "lavik_replication_state:" +
             std::string(ReplicationRoleName(replication.role_)) + "\r\n";
-    info += std::string("keylane_replication_failed_stopped:") +
+    info += std::string("lavik_replication_failed_stopped:") +
             (replication.failed_stopped_ ? "1\r\n" : "0\r\n");
-    info += "keylane_replication_role_epoch:" +
+    info += "lavik_replication_role_epoch:" +
             std::to_string(replication.role_epoch_) + "\r\n";
-    info += "keylane_replication_group_id:" + replication.group_id_ + "\r\n";
-    info += "keylane_replication_boot_id:" + replication.boot_id_ + "\r\n";
-    info += "keylane_replica_incarnation:" + replication.replica_incarnation_ +
+    info += "lavik_replication_group_id:" + replication.group_id_ + "\r\n";
+    info += "lavik_replication_boot_id:" + replication.boot_id_ + "\r\n";
+    info += "lavik_replica_incarnation:" + replication.replica_incarnation_ +
             "\r\n";
     auto catalog_operation = co_await AcquireFunctionCatalogOperation();
     const storage::CatalogDurabilityToken catalog_token =
         GlobalFunctionCatalog().durability_token();
     catalog_operation.reset();
-    info += "keylane_function_catalog_generation:" +
+    info += "lavik_function_catalog_generation:" +
             std::to_string(catalog_token.catalog_generation_) + "\r\n";
-    info += "keylane_function_catalog_crc64:" +
+    info += "lavik_function_catalog_crc64:" +
             std::to_string(catalog_token.dump_crc64_) + "\r\n";
     info += "master_replid:" +
             (replication.upstream_history_id_.has_value()
@@ -4858,21 +4858,21 @@ Task<CommandReply> ExecuteInfo(const CommandRequest& request,
           "slave_priority:" + std::to_string(replication.replica_priority_) +
           "\r\n";
       info += "replica_announced:1\r\n";
-      info += "keylane_source_workers:" +
+      info += "lavik_source_workers:" +
               std::to_string(replication.source_worker_count_) + "\r\n";
-      info += "keylane_connected_flows:" +
+      info += "lavik_connected_flows:" +
               std::to_string(replication.connected_flows_) + "\r\n";
       if (!replication.redis_sources_.empty()) {
-        info += std::string("keylane_redis_cluster:") +
+        info += std::string("lavik_redis_cluster:") +
                 (replication.redis_cluster_ ? "1\r\n" : "0\r\n");
-        info += std::string("keylane_redis_topology_fault:") +
+        info += std::string("lavik_redis_topology_fault:") +
                 (replication.redis_topology_fault_ ? "1\r\n" : "0\r\n");
-        info += "keylane_redis_sources:" +
+        info += "lavik_redis_sources:" +
                 std::to_string(replication.redis_sources_.size()) + "\r\n";
         for (std::size_t index = 0; index < replication.redis_sources_.size();
              ++index) {
           const RedisSourceStatus& source = replication.redis_sources_[index];
-          info += "keylane_redis_source" + std::to_string(index) +
+          info += "lavik_redis_source" + std::to_string(index) +
                   ":node=" + source.node_id_ +
                   ",host=" + source.upstream_.host_ +
                   ",port=" + std::to_string(source.upstream_.port_) +
@@ -8808,7 +8808,7 @@ Task<CommandReply> ExecuteWatch(ConnectionContext& ctx,
   // cross-worker registration and liveness read: a replacement that starts
   // later must dirty the completed registrations, while a replacement that
   // won first is detected before this request installs any new ones.
-  KEYLANE_FAULT_INJECT(
+  LAVIK_FAULT_INJECT(
       absl::Status paused = co_await MaybePauseBeforeCommandDbAdmission();
       if (!paused.ok()) {
         co_return BuiltReply(reply_builder.AppendError(
@@ -8949,7 +8949,7 @@ bool IsSentinelManagementCommand(const CommandRequest& command) {
 }
 
 // Redis Sentinel sends role change, config persistence, and client eviction as
-// one MULTI/EXEC. Keylane preserves their order and per-command replies, but
+// one MULTI/EXEC. Lavik preserves their order and per-command replies, but
 // deliberately does not stop ordinary work on other workers between them; the
 // role transition itself supplies the storage admission boundary.
 Task<CommandReply> ExecuteSentinelManagementExec(
@@ -9698,9 +9698,9 @@ Task<CommandReply> ExecuteExecBody(
         co_return absl::FailedPreconditionError(
             "catalog transaction publisher admission was already released");
       }
-      KEYLANE_FAULT_INJECT(
+      LAVIK_FAULT_INJECT(
           if (const char* configured = std::getenv(
-                  "KEYLANE_EXEC_PAUSE_BEFORE_CATALOG_REPLICATION_FENCE_MS");
+                  "LAVIK_EXEC_PAUSE_BEFORE_CATALOG_REPLICATION_FENCE_MS");
               configured != nullptr) {
             std::uint64_t pause_ms = 0;
             const std::size_t length = std::strlen(configured);
@@ -10184,11 +10184,11 @@ Task<CommandReply> ExecuteExecBody(
            partition_id, effects = std::move(effects),
            fullsync_projection = std::move(fullsync_projection),
            exec_admission]() mutable {
-            KEYLANE_FAULT_INJECT(
+            LAVIK_FAULT_INJECT(
                 static std::atomic<bool> reject_ephemeral_once = false;
                 if (event_kind == storage::ReplicationEventKind::kEphemeral &&
                     std::getenv(
-                        "KEYLANE_EXEC_REJECT_EPHEMERAL_FINAL_RECHECK_ONCE") !=
+                        "LAVIK_EXEC_REJECT_EPHEMERAL_FINAL_RECHECK_ONCE") !=
                         nullptr &&
                     !reject_ephemeral_once.exchange(
                         true, std::memory_order_acq_rel)) {
@@ -10513,8 +10513,8 @@ bool RequestSpansMultipleShards(const CommandRequest& request) {
 void InitStorage(storage::StorageEngine* engine,
                  ReplicationManager* replication) {
   // Fault-enabled test processes set the immutable hook before workers launch.
-  KEYLANE_FAULT_INJECT(g_command_pause_before_db_admission = std::getenv(
-                           "KEYLANE_COMMAND_PAUSE_BEFORE_DB_ADMISSION_MS"););
+  LAVIK_FAULT_INJECT(g_command_pause_before_db_admission = std::getenv(
+                         "LAVIK_COMMAND_PAUSE_BEFORE_DB_ADMISSION_MS"););
   g_storage = engine;
   InitFunctionCatalog(engine);
   InitBlockingWaitStorage(engine);
@@ -11534,7 +11534,7 @@ Task<CommandReply> ExecuteClient(ConnectionContext& ctx,
 
 // ---- Cluster owner-side re-check definitions (declared in cluster_gate.h) --
 //
-// These are keylane-scope (not file-local) because the per-type multi-key
+// These are lavik-scope (not file-local) because the per-type multi-key
 // executors (set/zset/list/sort/string) inject the same validator into their
 // own transactions. EmitClusterDecision stays file-local above; the functions
 // below call it across the namespace boundary within this translation unit.
@@ -11686,8 +11686,8 @@ const char* CommandServingGenerationError(
     return nullptr;
   }
   return g_replication->is_loading()
-             ? "LOADING Keylane is loading the dataset from the primary"
-             : "TRYAGAIN Keylane dataset changed while the command was queued "
+             ? "LOADING Lavik is loading the dataset from the primary"
+             : "TRYAGAIN Lavik dataset changed while the command was queued "
                "or blocked";
 }
 
@@ -11744,7 +11744,7 @@ Task<CommandReply> DispatchCommandImpl(ConnectionContext& ctx,
     // performs the independent topology/authority admission.
     if (!LoadingAllowedCommand(request)) {
       co_return BuiltReply(reply_builder.AppendError(
-          "LOADING Keylane is loading the dataset from the primary"));
+          "LOADING Lavik is loading the dataset from the primary"));
     }
   }
   if (cluster::ClusterEnabled()) {
@@ -12047,15 +12047,14 @@ Task<CommandReply> ExecuteCommandBody(
                                    request.kind_ == CommandKind::kCopy;
   std::optional<DbOperationGuard> db_guard;
   if (uses_db && !manages_own_db_gate) {
-    KEYLANE_FAULT_INJECT(
-        if (!replication_origin &&
-            (cmd_flags & (kCmdWrite | kCmdDynamicWrite)) != 0) {
-          absl::Status paused = co_await MaybePauseBeforeCommandDbAdmission();
-          if (!paused.ok()) {
-            co_return BuiltReply(reply_builder.AppendError(absl::StrCat(
-                "ERR database admission failed: ", paused.message())));
-          }
-        });
+    LAVIK_FAULT_INJECT(if (!replication_origin &&
+                           (cmd_flags & (kCmdWrite | kCmdDynamicWrite)) != 0) {
+      absl::Status paused = co_await MaybePauseBeforeCommandDbAdmission();
+      if (!paused.ok()) {
+        co_return BuiltReply(reply_builder.AppendError(
+            absl::StrCat("ERR database admission failed: ", paused.message())));
+      }
+    });
     while (!TryBeginDbOperation(request.db_id_)) {
       absl::Status waited = co_await bycorf::SleepFor(
           *ThisWorker().self_, std::chrono::milliseconds(1));
@@ -12436,7 +12435,7 @@ Task<CommandReply> ExecuteCommandBody(
         const unsigned target =
             routed ? request.RoutedPartitionId() % g_storage->worker_count()
                    : ShardForKey(args[1]);
-#if KEYLANE_ENABLE_READ_LATENCY_TRACE
+#if LAVIK_ENABLE_READ_LATENCY_TRACE
         if (request.kind_ == CommandKind::kGet) {
           ReadLatencyTrace trace;
           trace.request_start_ns_ = ReadTraceNowNanos();
@@ -12463,7 +12462,7 @@ Task<CommandReply> ExecuteCommandBody(
           co_return reply;
         }
 #endif
-#if KEYLANE_ENABLE_SET_LATENCY_TRACE
+#if LAVIK_ENABLE_SET_LATENCY_TRACE
         if (request.kind_ == CommandKind::kSet) {
           // A source SET is already on the key owner by the time it gets
           // here, so remote_ reads false. Read route-out as unmeasured, not
@@ -12965,4 +12964,4 @@ Task<absl::Status> ApplyRedisReplicatedTransaction(
   co_return absl::OkStatus();
 }
 
-}  // namespace keylane
+}  // namespace lavik

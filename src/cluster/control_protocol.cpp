@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/cluster/control_protocol.h"
+#include "lavik/cluster/control_protocol.h"
 
 #include <sys/random.h>
 
@@ -37,7 +37,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 
-namespace keylane::cluster::control {
+namespace lavik::cluster::control {
 namespace {
 
 constexpr std::size_t kFrameCrcOffset = 24;
@@ -45,7 +45,7 @@ constexpr std::size_t kTransferChunkEnvelopeBytes = 16 + 8 + 4;
 constexpr std::size_t kMaxTransferChunkBytes =
     kMaxFramePayloadBytes - kTransferChunkEnvelopeBytes;
 constexpr std::uint16_t kDirectiveBodySchemaVersion = 1;
-constexpr std::string_view kRebuildRequestMagic = "KLRR";
+constexpr std::string_view kRebuildRequestMagic = "LVRR";
 
 // Protocol-v1 heartbeat role tags are exhaustive. Unknown tags fail closed so
 // adding a role requires an explicit codec update on both peers.
@@ -3469,4 +3469,4 @@ absl::Status ApplyNodeControlUpdate(NodeControlState& state,
   return absl::OkStatus();
 }
 
-}  // namespace keylane::cluster::control
+}  // namespace lavik::cluster::control

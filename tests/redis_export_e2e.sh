@@ -15,7 +15,7 @@
 
 set -euo pipefail
 
-keylane_bin=$1
+lavik_bin=$1
 redis_server=$2
 redis_cli=$3
 extra_args=()
@@ -24,21 +24,21 @@ case ${4:-} in
   backpressure) extra_args+=(--redis-export-backpressure) ;;
   *) echo "unknown test mode: $4" >&2; exit 2 ;;
 esac
-case_template=${KEYLANE_TEST_DATA_DIR:-/tmp}/keylane-redis-export-e2e-XXXXXX
+case_template=${LAVIK_TEST_DATA_DIR:-/tmp}/lavik-redis-export-e2e-XXXXXX
 case_dir=$(mktemp -d "${case_template}")
-keylane_pid=
+lavik_pid=
 redis_pid=
 
 cleanup() {
   status=$?
   if ((status != 0)); then
-    tail -100 "${case_dir}/keylane.log" >&2 2>/dev/null || true
+    tail -100 "${case_dir}/lavik.log" >&2 2>/dev/null || true
     tail -100 "${case_dir}/redis.log" >&2 2>/dev/null || true
   fi
   [[ -z ${redis_pid} ]] || kill "${redis_pid}" 2>/dev/null || true
-  [[ -z ${keylane_pid} ]] || kill "${keylane_pid}" 2>/dev/null || true
+  [[ -z ${lavik_pid} ]] || kill "${lavik_pid}" 2>/dev/null || true
   [[ -z ${redis_pid} ]] || wait "${redis_pid}" 2>/dev/null || true
-  [[ -z ${keylane_pid} ]] || wait "${keylane_pid}" 2>/dev/null || true
+  [[ -z ${lavik_pid} ]] || wait "${lavik_pid}" 2>/dev/null || true
   if [[ ${case_dir} == "${case_template%XXXXXX}"* ]]; then
     rm -rf -- "${case_dir}"
   fi
@@ -56,41 +56,41 @@ for sock in sockets:
     print(sock.getsockname()[1])
 PY
 )
-keylane_port=${ports[0]}
+lavik_port=${ports[0]}
 redis_port=${ports[1]}
 
-fallocate -l 256M "${case_dir}/keylane.data"
-"${keylane_bin}" --logtostderr --port "${keylane_port}" --threads 4 --no-pin-workers \
+fallocate -l 256M "${case_dir}/lavik.data"
+"${lavik_bin}" --logtostderr --port "${lavik_port}" --threads 4 --no-pin-workers \
   --recv-buffers-per-worker 0 --max-memory 4294967296 \
-  --data-file "${case_dir}/keylane.data" \
+  --data-file "${case_dir}/lavik.data" \
   "${extra_args[@]}" \
-  >"${case_dir}/keylane.log" 2>&1 &
-keylane_pid=$!
+  >"${case_dir}/lavik.log" 2>&1 &
+lavik_pid=$!
 "${redis_server}" --port "${redis_port}" --save '' --appendonly no \
   --dir "${case_dir}" --daemonize no >"${case_dir}/redis.log" 2>&1 &
 redis_pid=$!
 
 for _ in {1..600}; do
-  "${redis_cli}" -p "${keylane_port}" ping >/dev/null 2>&1 && \
+  "${redis_cli}" -p "${lavik_port}" ping >/dev/null 2>&1 && \
     "${redis_cli}" -p "${redis_port}" ping >/dev/null 2>&1 && break
   sleep 0.05
 done
-[[ $("${redis_cli}" -p "${keylane_port}" ping) == PONG ]]
+[[ $("${redis_cli}" -p "${lavik_port}" ping) == PONG ]]
 [[ $("${redis_cli}" -p "${redis_port}" ping) == PONG ]]
 
-"${redis_cli}" -p "${keylane_port}" set baseline one >/dev/null
-"${redis_cli}" -p "${keylane_port}" hset hash field value >/dev/null
-"${redis_cli}" -p "${keylane_port}" rpush list a b c >/dev/null
-"${redis_cli}" -p "${keylane_port}" sadd set x y >/dev/null
-"${redis_cli}" -p "${keylane_port}" zadd zset 1 one 2 two >/dev/null
-"${redis_cli}" -p "${keylane_port}" -n 1 set db-one before >/dev/null
+"${redis_cli}" -p "${lavik_port}" set baseline one >/dev/null
+"${redis_cli}" -p "${lavik_port}" hset hash field value >/dev/null
+"${redis_cli}" -p "${lavik_port}" rpush list a b c >/dev/null
+"${redis_cli}" -p "${lavik_port}" sadd set x y >/dev/null
+"${redis_cli}" -p "${lavik_port}" zadd zset 1 one 2 two >/dev/null
+"${redis_cli}" -p "${lavik_port}" -n 1 set db-one before >/dev/null
 # Force the snapshot scan through its asynchronous out-of-index-key path.
 external_key=$(printf '%05000d' 0)
-"${redis_cli}" -p "${keylane_port}" set "${external_key}" external >/dev/null
+"${redis_cli}" -p "${lavik_port}" set "${external_key}" external >/dev/null
 fullsync_function=$'#!lua name=redis_export_fullsync\nredis.register_function{function_name="redis_export_fullsync_value", callback=function(keys, args) return args[1] end, flags={"no-writes"}}'
-[[ $("${redis_cli}" -p "${keylane_port}" function load "${fullsync_function}") == redis_export_fullsync ]]
+[[ $("${redis_cli}" -p "${lavik_port}" function load "${fullsync_function}") == redis_export_fullsync ]]
 "${redis_cli}" -p "${redis_port}" replicaof 127.0.0.1 \
-  "${keylane_port}" >/dev/null
+  "${lavik_port}" >/dev/null
 
 for _ in {1..600}; do
   "${redis_cli}" -p "${redis_port}" info replication 2>/dev/null | \
@@ -108,10 +108,10 @@ done
 [[ $("${redis_cli}" -p "${redis_port}" get "${external_key}") == external ]]
 [[ $("${redis_cli}" -p "${redis_port}" fcall_ro redis_export_fullsync_value 0 baseline) == baseline ]]
 
-"${redis_cli}" -p "${keylane_port}" set online two >/dev/null
-"${redis_cli}" -p "${keylane_port}" mset tx-a A tx-b B >/dev/null
+"${redis_cli}" -p "${lavik_port}" set online two >/dev/null
+"${redis_cli}" -p "${lavik_port}" mset tx-a A tx-b B >/dev/null
 incremental_function=$'#!lua name=redis_export_incremental\nredis.register_function{function_name="redis_export_incremental_value", callback=function(keys, args) return args[1] end, flags={"no-writes"}}'
-[[ $("${redis_cli}" -p "${keylane_port}" function load "${incremental_function}") == redis_export_incremental ]]
+[[ $("${redis_cli}" -p "${lavik_port}" function load "${incremental_function}") == redis_export_incremental ]]
 for _ in {1..200}; do
   [[ $("${redis_cli}" -p "${redis_port}" get online 2>/dev/null || true) == \
      two ]] && \
@@ -129,7 +129,7 @@ done
 [[ $("${redis_cli}" -p "${redis_port}" fcall_ro redis_export_incremental_value 0 incremental) == incremental ]]
 
 printf 'MULTI\nSET {a}exec first\nSET {b}exec second\nEXEC\n' | \
-  "${redis_cli}" -p "${keylane_port}" >/dev/null
+  "${redis_cli}" -p "${lavik_port}" >/dev/null
 for _ in {1..200}; do
   [[ $("${redis_cli}" -p "${redis_port}" mget '{a}exec' '{b}exec' | \
     tr '\n' ' ') == 'first second ' ]] && break
@@ -138,12 +138,12 @@ done
 [[ $("${redis_cli}" -p "${redis_port}" mget '{a}exec' '{b}exec' | \
   tr '\n' ' ') == 'first second ' ]]
 
-# A Keylane-only replacement must export standard Redis commands atomically,
+# A Lavik-only replacement must export standard Redis commands atomically,
 # including source absolute TTL. Redis itself must never see the extension.
-"${redis_cli}" -p "${keylane_port}" hset replace-hash old value retained old >/dev/null
-"${redis_cli}" -p "${keylane_port}" expire replace-hash 3600 >/dev/null
-replace_expiry=$("${redis_cli}" -p "${keylane_port}" pexpiretime replace-hash)
-[[ $("${redis_cli}" -p "${keylane_port}" KEYLANE.HREPLACE replace-hash only new) == OK ]]
+"${redis_cli}" -p "${lavik_port}" hset replace-hash old value retained old >/dev/null
+"${redis_cli}" -p "${lavik_port}" expire replace-hash 3600 >/dev/null
+replace_expiry=$("${redis_cli}" -p "${lavik_port}" pexpiretime replace-hash)
+[[ $("${redis_cli}" -p "${lavik_port}" LAVIK.HREPLACE replace-hash only new) == OK ]]
 for _ in {1..200}; do
   [[ $("${redis_cli}" -p "${redis_port}" hget replace-hash only) == new ]] && break
   sleep 0.05
@@ -151,8 +151,8 @@ done
 [[ $("${redis_cli}" -p "${redis_port}" hget replace-hash only) == new ]]
 [[ $("${redis_cli}" -p "${redis_port}" hlen replace-hash) == 1 ]]
 [[ $("${redis_cli}" -p "${redis_port}" pexpiretime replace-hash) == "$replace_expiry" ]]
-printf 'MULTI\nKEYLANE.HREPLACE replace-hash final image\nHMSET replace-hash tail value\nEXEC\n' | \
-  "${redis_cli}" -p "${keylane_port}" >/dev/null
+printf 'MULTI\nLAVIK.HREPLACE replace-hash final image\nHMSET replace-hash tail value\nEXEC\n' | \
+  "${redis_cli}" -p "${lavik_port}" >/dev/null
 for _ in {1..200}; do
   [[ $("${redis_cli}" -p "${redis_port}" hget replace-hash tail) == value ]] && break
   sleep 0.05
@@ -166,7 +166,7 @@ done
 sleep 3
 "${redis_cli}" -p "${redis_port}" info replication | tr -d '\r' | \
   grep -q '^master_link_status:up$'
-"${redis_cli}" -p "${keylane_port}" flushdb >/dev/null
+"${redis_cli}" -p "${lavik_port}" flushdb >/dev/null
 for _ in {1..200}; do
   [[ $("${redis_cli}" -p "${redis_port}" dbsize) == 0 ]] && break
   sleep 0.05
@@ -177,4 +177,4 @@ done
 [[ $("${redis_cli}" -p "${redis_port}" get detached) == writable ]]
 # Ordinary RDB streaming, online replication, ACKs, and an intentional detach
 # must never be reported as an online-write backlog overrun.
-! grep -q 'Redis replica fell behind online writes' "${case_dir}/keylane.log"
+! grep -q 'Redis replica fell behind online writes' "${case_dir}/lavik.log"

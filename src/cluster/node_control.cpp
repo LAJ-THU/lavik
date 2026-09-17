@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/cluster/node_control.h"
+#include "lavik/cluster/node_control.h"
 
 #include <algorithm>
 #include <array>
@@ -38,7 +38,7 @@
 #include "bycorf/io/storage.h"
 #include "bycorf/runtime/worker.h"
 
-namespace keylane::cluster {
+namespace lavik::cluster {
 namespace {
 
 // Bycorf's relative sleep uses CLOCK_MONOTONIC, which pauses across host
@@ -2082,4 +2082,4 @@ NodeControlInstaller::LoseStorageReadinessTransition() {
   co_return *storage_loss_result_;
 }
 
-}  // namespace keylane::cluster
+}  // namespace lavik::cluster

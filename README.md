@@ -16,11 +16,13 @@ limitations under the License.
 
 <div align="center">
 
-# Keylane
+# Lavik
+
+The canonical repository is [eloqdata/lavik](https://github.com/eloqdata/lavik).
 
 ### Redis-class performance. NVMe-scale capacity.
 
-Keylane is built around a simple idea: use high-performance NVMe instead of
+Lavik is built around a simple idea: use high-performance NVMe instead of
 DRAM for the data capacity tier, then optimize every layer of the I/O path
 until disk-resident workloads reach performance territory once reserved for
 in-memory services.
@@ -32,22 +34,22 @@ in-memory services.
 [![Linux](https://img.shields.io/badge/Linux-x86__64%20%7C%20aarch64-FCC624?style=for-the-badge&logo=linux&logoColor=black)](docs/operations/building-and-packaging.md)
 [![NVMe](https://img.shields.io/badge/Storage-io__uring%20%7C%20SPDK-5C2D91?style=for-the-badge)](docs/architecture/04-storage-and-recovery.md)
 
-[![Star Keylane](https://img.shields.io/github/stars/thweetkomputer/keylane?style=for-the-badge&logo=github&label=Star%20Keylane&color=gold)](https://github.com/thweetkomputer/keylane/stargazers)
+[![Star Lavik](https://img.shields.io/github/stars/eloqdata/lavik?style=for-the-badge&logo=github&label=Star%20Lavik&color=gold)](https://github.com/eloqdata/lavik/stargazers)
 
 </div>
 
-Keylane is a Linux C++23 key-value server that speaks RESP2 and RESP3. It keeps
+Lavik is a Linux C++23 key-value server that speaks RESP2 and RESP3. It keeps
 a compact top-level key index in DRAM while storing data on existing files, raw
 block devices, or SPDK NVMe namespaces. Capacity therefore scales primarily
 with storage instead of requiring the complete dataset to remain in memory as
 it does with Redis.
 
-Keylane is designed for low-latency access to hundreds of millions of keys,
+Lavik is designed for low-latency access to hundreds of millions of keys,
 online space reclamation, and compatibility with existing Redis clients and
 operational tooling.
 
 > [!IMPORTANT]
-> Keylane implements a broad Redis-compatible surface, but it is not a claim of
+> Lavik implements a broad Redis-compatible surface, but it is not a claim of
 > complete Redis command or operational compatibility. Review the
 > [current architecture](docs/architecture/README.md) and test your workload
 > before adopting it.
@@ -64,7 +66,7 @@ operational tooling.
   commands, `MULTI`/`EXEC`, `WATCH`, and declared-key Lua/Function calls.
 - **Crash-consistent storage.** Checksummed append-only records, A/B metadata,
   transaction commit records, parallel recovery, TTL, and online defragmentation.
-- **Replication and migration.** Native Keylane replication, Redis PSYNC
+- **Replication and migration.** Native Lavik replication, Redis PSYNC
   following/export, Redis Sentinel integration, and Redis-compatible RDB
   import/export.
 - **Operational visibility.** Prometheus metrics, Redis `INFO`, `SLOWLOG`,
@@ -73,7 +75,7 @@ operational tooling.
 
 ## Architecture
 
-Keylane is a single-process, layered system. Mutable state is partitioned by
+Lavik is a single-process, layered system. Mutable state is partitioned by
 worker, the complete top-level key index stays in memory, and record data is
 placed on high-performance storage.
 
@@ -134,14 +136,14 @@ sudo apt-get install -y build-essential cmake git libssl-dev
 ### Build from source
 
 ```bash
-git clone https://github.com/thweetkomputer/keylane.git
-cd keylane
+git clone https://github.com/eloqdata/lavik.git
+cd lavik
 git submodule update --init bycorf third_party/mimalloc third_party/nuraft
 git -C third_party/nuraft submodule update --init asio
 git -C bycorf submodule update --init third_party/liburing third_party/abseil
 
 ./scripts/build_release.sh
-sudo install -m 0755 build/keylane /usr/local/bin/keylane
+sudo install -m 0755 build/lavik /usr/local/bin/lavik
 ```
 
 These commands initialize the default build's dependencies. DPDK/SPDK
@@ -161,16 +163,16 @@ for compiler, sanitizer, CPU-target, and packaging details.
 ### Optional kernel bypass build
 
 The default build includes kernel networking and io_uring storage only;
-`keylane-meta` and ordinary Keylane deployments need no DPDK/SPDK dependencies.
+`lavik-meta` and ordinary Lavik deployments need no DPDK/SPDK dependencies.
 For DPDK networking or userspace NVMe access, install the bypass dependencies
 described in the build guide and enable both capabilities with:
 
 ```bash
 cmake -S . -B build-bypass \
   -DCMAKE_BUILD_TYPE=Release \
-  -DKEYLANE_ENABLE_OPT=ON \
-  -DKEYLANE_KERNEL_BYPASS=ON
-cmake --build build-bypass --target keylane -j"$(nproc)"
+  -DLAVIK_ENABLE_OPT=ON \
+  -DLAVIK_KERNEL_BYPASS=ON
+cmake --build build-bypass --target lavik -j"$(nproc)"
 ```
 
 Select `--storage=spdk` at startup; compiling support alone keeps io_uring as
@@ -183,20 +185,20 @@ memory, and deployment-specific CPU/IRQ planning.
 
 ## Quick Start
 
-Keylane never creates, extends, or truncates a storage path. For a throwaway
+Lavik never creates, extends, or truncates a storage path. For a throwaway
 local instance, first provision a file and then start the server:
 
 ```bash
-mkdir -p /tmp/keylane-quickstart
-fallocate -l 1G /tmp/keylane-quickstart/keylane.data
+mkdir -p /tmp/lavik-quickstart
+fallocate -l 1G /tmp/lavik-quickstart/lavik.data
 
-./build/keylane \
-  --data-file /tmp/keylane-quickstart/keylane.data
+./build/lavik \
+  --data-file /tmp/lavik-quickstart/lavik.data
 ```
 
-By default, Keylane listens on `127.0.0.1:6379`, uses every CPU in its inherited
+By default, Lavik listens on `127.0.0.1:6379`, uses every CPU in its inherited
 affinity mask, and pins one worker to each CPU. It configures 256 MiB of storage
-buffers per worker and writes logs to `./logs/keylane.log`. Use `taskset` or the
+buffers per worker and writes logs to `./logs/lavik.log`. Use `taskset` or the
 corresponding command-line options when the process should use fewer resources.
 Production settings should be sized and benchmarked for the host and workload.
 
@@ -206,11 +208,11 @@ In another terminal, use any Redis-compatible client:
 redis-cli PING
 # PONG
 
-redis-cli SET greeting "hello from Keylane"
+redis-cli SET greeting "hello from Lavik"
 # OK
 
 redis-cli GET greeting
-# "hello from Keylane"
+# "hello from Lavik"
 
 redis-cli HSET user:42 name Ada language C++
 redis-cli HGETALL user:42
@@ -233,33 +235,33 @@ For production storage:
 Read [Multi-Device Storage](docs/operations/multi-device-storage.md) before
 using raw devices or expanding an existing storage set.
 
-Run `keylane --help` for all command-line options. Keylane also accepts a
+Run `lavik --help` for all command-line options. Lavik also accepts a
 Redis-style configuration file as its first argument.
 
 ## Benchmark
 
-The [Keylane–Aerospike YCSB report](perf_reports/ycsb-rerun-2026-09-13/README.md)
+The [Keylane–Aerospike YCSB report (before the Lavik rename)](perf_reports/ycsb-rerun-2026-09-13/README.md)
 records a fresh 100-million-record dataset for each database, ten 128-byte
 fields per record, and 256 YCSB threads. It includes the server/client hardware,
 database settings, QPS, and p99/p99.9/p99.99 latency for A/B/C/D at 100K ops/s
 and without a rate limit, with raw evidence and an offline verification script.
 
 Aerospike uses server performance defaults and the host's original CPU and
-IRQ policy. Keylane uses 12 pinned workers with housekeeping and NIC IRQs on
+IRQ policy. Lavik uses 12 pinned workers with housekeeping and NIC IRQs on
 the remaining four logical CPUs. The report compares these explicitly chosen
 deployments, which have different CPU allocations and database settings.
 
 ## Durability and compatibility notes
 
 - An ordinary successful write is not a synchronous `fsync` durability fence.
-  Keylane batches data and header flushes; graceful shutdown drains them. Read
+  Lavik batches data and header flushes; graceful shutdown drains them. Read
   the [storage architecture](docs/architecture/04-storage-and-recovery.md)
   before selecting failure semantics for a deployment.
 - Native and Redis replication continuation cursors are process-local. A
   restart can require a new full synchronization.
 - Raw block and SPDK paths are destructive deployment boundaries: verify
   device identity and exclusive ownership before use.
-- The current repository does not ship a Keylane systemd unit or an
+- The current repository does not ship a Lavik systemd unit or an
   orchestration manifest. The deployment layer owns service supervision,
   persistent path provisioning, and resource isolation.
 
@@ -270,7 +272,7 @@ deployments, which have different CPU allocations and database settings.
 ctest --test-dir build_debug --output-on-failure
 
 # Vendored Valkey data-structure compatibility suites
-KEYLANE_BIN="$PWD/build_debug/keylane" tests/valkey/run-keylane
+LAVIK_BIN="$PWD/build_debug/lavik" tests/valkey/run-lavik
 ```
 
 Useful references:
@@ -286,12 +288,18 @@ Useful references:
 
 <div align="center">
 
-### Help Keylane grow
+### Help Lavik grow
 
-If Keylane looks useful, please
-**[star the project on GitHub](https://github.com/thweetkomputer/keylane)**.
+If Lavik looks useful, please
+**[star the project on GitHub](https://github.com/eloqdata/lavik)**.
 It helps more Redis users and storage engineers discover the project.
 
-[![Star Keylane on GitHub](https://img.shields.io/github/stars/thweetkomputer/keylane?style=for-the-badge&logo=github&label=Give%20Keylane%20a%20Star&color=gold)](https://github.com/thweetkomputer/keylane)
+[![Star Lavik on GitHub](https://img.shields.io/github/stars/eloqdata/lavik?style=for-the-badge&logo=github&label=Give%20Lavik%20a%20Star&color=gold)](https://github.com/eloqdata/lavik)
 
 </div>
+
+## License
+
+EloqData-authored code is licensed under [Apache-2.0](LICENSE).
+Third-party components retain their original copyright notices and licenses;
+see [NOTICE](NOTICE) and the notices in each dependency.

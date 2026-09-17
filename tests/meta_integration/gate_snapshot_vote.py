@@ -20,7 +20,7 @@ retained WAL, an entirely compacted WAL, and after reopening that snapshot.
 Inspect internal election decisions as well as public status: an invalid
 leader can stall before it reaches the public leader callback.
 
-Usage: gate_snapshot_vote.py /path/to/keylane-meta [workdir]
+Usage: gate_snapshot_vote.py /path/to/lavik-meta [workdir]
 """
 
 import os

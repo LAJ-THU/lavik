@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/meta/observation_store.h"
+#include "lavik/meta/observation_store.h"
 
 #include <algorithm>
 #include <array>
@@ -29,9 +29,9 @@
 #include <variant>
 #include <vector>
 
-#include "keylane/meta/encoding.h"
+#include "lavik/meta/encoding.h"
 
-namespace keylane::meta {
+namespace lavik::meta {
 
 namespace {
 
@@ -260,7 +260,6 @@ struct MetaObservationStore::Impl {
     const auto it = usage_by_node_.find(std::string(node_id));
     return it == usage_by_node_.end() ? 0 : it->second.retained_bytes_;
   }
-
 
   absl::Status CheckByteBudget(const MetaObservation& observation,
                                const MetaObservation* replaced,
@@ -1610,4 +1609,4 @@ std::uint64_t MetaObservationStore::retained_bytes_for_node(
   return impl_->NodeRetainedBytes(node_id);
 }
 
-}  // namespace keylane::meta
+}  // namespace lavik::meta

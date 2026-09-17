@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/cluster/meta_control.h"
+#include "lavik/cluster/meta_control.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -24,15 +24,15 @@
 #include "../src/redis/cluster_command.h"
 #include "absl/cleanup/cleanup.h"
 #include "gtest/gtest.h"
-#include "keylane/cluster/control_protocol.h"
-#include "keylane/cluster/runtime.h"
-#include "keylane/replication_group.h"
-#include "keylane/resp.h"
+#include "lavik/cluster/control_protocol.h"
+#include "lavik/cluster/runtime.h"
+#include "lavik/replication_group.h"
+#include "lavik/resp.h"
 
 namespace {
 
-namespace cluster = keylane::cluster;
-namespace control = keylane::cluster::control;
+namespace cluster = lavik::cluster;
+namespace control = lavik::cluster::control;
 
 constexpr char kNode1[] = "1111111111111111111111111111111111111111";
 constexpr char kNode2[] = "2222222222222222222222222222222222222222";
@@ -61,7 +61,7 @@ control::FullDesiredState DesiredState() {
       .partition_replication_epoch = 13,
       .steady_replication_enabled = true,
   }};
-  auto manifest = keylane::PopulationManifest::Create({});
+  auto manifest = lavik::PopulationManifest::Create({});
   EXPECT_TRUE(manifest.ok()) << manifest.status();
   if (manifest.ok()) {
     desired.groups[0].manifest_digest = manifest->id().bytes_;
@@ -191,11 +191,11 @@ TEST(MetaControlMapperTest,
   desired.groups.push_back({.group_id = "empty-group", .group_term = 13});
 
   const auto command = [](std::string subcommand) {
-    keylane::CommandRequest request;
-    request.kind_ = keylane::CommandKind::kCluster;
+    lavik::CommandRequest request;
+    request.kind_ = lavik::CommandKind::kCluster;
     request.args_ = {"CLUSTER", std::move(subcommand)};
-    keylane::ReplyBuilder reply;
-    auto task = keylane::ExecuteClusterModeCommand(request, reply);
+    lavik::ReplyBuilder reply;
+    auto task = lavik::ExecuteClusterModeCommand(request, reply);
     auto handle = std::move(task).ReleaseHandle();
     handle.resume();
     EXPECT_TRUE(handle.done());

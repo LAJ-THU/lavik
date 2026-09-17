@@ -38,11 +38,11 @@
 #include <vector>
 
 #include "gtest/gtest.h"
-#include "keylane/storage/format.h"
+#include "lavik/storage/format.h"
 #include "support/test_data_path.h"
 
 namespace grouped_e2e {
-using namespace keylane::storage;
+using namespace lavik::storage;
 using namespace std::chrono_literals;
 inline std::string server_binary;
 
@@ -54,8 +54,8 @@ class PrivateDisk {
  public:
   explicit PrivateDisk(
       std::uint64_t bytes = 64 * kStorageBlockBytes,
-      std::filesystem::path directory = keylane::test::TestDataDirectory()) {
-    path_ = (directory / "keylane-grouped-write-XXXXXX").string();
+      std::filesystem::path directory = lavik::test::TestDataDirectory()) {
+    path_ = (directory / "lavik-grouped-write-XXXXXX").string();
     const int fd = ::mkstemp(path_.data());
     Check(fd >= 0, "mkstemp failed");
     Check(bytes <= INT64_MAX, "private disk size exceeds off_t");
@@ -226,19 +226,18 @@ class Server {
     pid_ = ::fork();
     Check(pid_ >= 0, "fork failed");
     if (pid_ == 0) {
-      ::unsetenv("KEYLANE_CRASH_POINT");
-      ::unsetenv("KEYLANE_FAIL_GROUP_AUX_KEY");
-      ::unsetenv("KEYLANE_FAIL_GROUP_BATCH_KEY");
+      ::unsetenv("LAVIK_CRASH_POINT");
+      ::unsetenv("LAVIK_FAIL_GROUP_AUX_KEY");
+      ::unsetenv("LAVIK_FAIL_GROUP_BATCH_KEY");
       if (pause_handoff) {
-        ::setenv("KEYLANE_REPLICATION_PAUSE_FULLSYNC_AFTER_HANDOFF_MS", "6000",
+        ::setenv("LAVIK_REPLICATION_PAUSE_FULLSYNC_AFTER_HANDOFF_MS", "6000",
                  1);
       }
       if (!crash.empty())
-        ::setenv("KEYLANE_CRASH_POINT", std::string(crash).c_str(), 1);
+        ::setenv("LAVIK_CRASH_POINT", std::string(crash).c_str(), 1);
       if (!fail_aux.empty()) {
-        ::setenv("KEYLANE_FAIL_GROUP_AUX_KEY", std::string(fail_aux).c_str(),
-                 1);
-        ::setenv("KEYLANE_FAIL_GROUP_AUX_NTH",
+        ::setenv("LAVIK_FAIL_GROUP_AUX_KEY", std::string(fail_aux).c_str(), 1);
+        ::setenv("LAVIK_FAIL_GROUP_AUX_NTH",
                  std::to_string(fail_aux_nth).c_str(), 1);
       }
       const int log = ::open(log_.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0600);

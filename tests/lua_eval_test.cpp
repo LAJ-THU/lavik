@@ -26,10 +26,10 @@ namespace {
 class LuaCatalogReset {
  public:
   ~LuaCatalogReset() {
-    keylane::AbortStagedLuaFunctionCatalogLocally();
+    lavik::AbortStagedLuaFunctionCatalogLocally();
     const std::vector<std::string> empty;
-    if (keylane::StageCompleteLuaFunctionCatalogLocally(empty).ok()) {
-      keylane::CommitStagedLuaFunctionCatalogLocally();
+    if (lavik::StageCompleteLuaFunctionCatalogLocally(empty).ok()) {
+      lavik::CommitStagedLuaFunctionCatalogLocally();
     }
   }
 };
@@ -42,14 +42,14 @@ TEST(LuaEvalTest, CatalogSwapKeepsSuspendedExecutionRuntimeAlive) {
       "callback=function(keys, args) return redis.call('PING') end, "
       "flags={'no-writes'}}"};
   ASSERT_TRUE(
-      keylane::StageCompleteLuaFunctionCatalogLocally(first_catalog).ok());
-  keylane::CommitStagedLuaFunctionCatalogLocally();
+      lavik::StageCompleteLuaFunctionCatalogLocally(first_catalog).ok());
+  lavik::CommitStagedLuaFunctionCatalogLocally();
 
   const std::vector<std::string> no_arguments;
-  auto old_execution = keylane::LuaExecution::CreateFunction(
+  auto old_execution = lavik::LuaExecution::CreateFunction(
       "runtime_owner_value", no_arguments, no_arguments);
   ASSERT_TRUE(old_execution.ok());
-  keylane::LuaExecutionStep old_step = (*old_execution)->Start(false);
+  lavik::LuaExecutionStep old_step = (*old_execution)->Start(false);
   ASSERT_TRUE(old_step.call_.has_value());
   EXPECT_EQ(old_step.call_->args_, (std::vector<std::string>{"PING"}));
 
@@ -59,18 +59,17 @@ TEST(LuaEvalTest, CatalogSwapKeepsSuspendedExecutionRuntimeAlive) {
       "callback=function(keys, args) return 'new' end, "
       "flags={'no-writes'}}"};
   ASSERT_TRUE(
-      keylane::StageCompleteLuaFunctionCatalogLocally(replacement_catalog)
-          .ok());
-  keylane::CommitStagedLuaFunctionCatalogLocally();
+      lavik::StageCompleteLuaFunctionCatalogLocally(replacement_catalog).ok());
+  lavik::CommitStagedLuaFunctionCatalogLocally();
 
   old_step = (*old_execution)->Resume("+PONG\r\n");
   EXPECT_FALSE(old_step.call_.has_value());
   EXPECT_EQ(old_step.reply_, "+PONG\r\n");
 
-  auto new_execution = keylane::LuaExecution::CreateFunction(
+  auto new_execution = lavik::LuaExecution::CreateFunction(
       "runtime_owner_value", no_arguments, no_arguments);
   ASSERT_TRUE(new_execution.ok());
-  const keylane::LuaExecutionStep new_step = (*new_execution)->Start(false);
+  const lavik::LuaExecutionStep new_step = (*new_execution)->Start(false);
   EXPECT_FALSE(new_step.call_.has_value());
   EXPECT_EQ(new_step.reply_, "$3\r\nnew\r\n");
 }

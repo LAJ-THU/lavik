@@ -29,15 +29,15 @@
 #include "absl/strings/str_cat.h"
 #include "bycorf/runtime/cross_core.h"
 #include "cluster_gate.h"
-#include "keylane/expiration.h"
-#include "keylane/memory.h"
-#include "keylane/redis_parse.h"
-#include "keylane/resp.h"
-#include "keylane/storage/format.h"
-#include "keylane/tx/transaction.h"
-#include "keylane/tx/tx_shard.h"
+#include "lavik/expiration.h"
+#include "lavik/memory.h"
+#include "lavik/redis_parse.h"
+#include "lavik/resp.h"
+#include "lavik/storage/format.h"
+#include "lavik/tx/transaction.h"
+#include "lavik/tx/tx_shard.h"
 
-namespace keylane {
+namespace lavik {
 
 namespace {
 
@@ -1639,4 +1639,4 @@ bycorf::Task<std::string> ExecuteLcsLocked(
       : EncodeError(absl::StrCat("ERR ", result.status().message()));
 }
 
-}  // namespace keylane
+}  // namespace lavik

@@ -23,7 +23,7 @@ the transition between a complete hidden candidate and the catalog visible to
 all workers. `LuaWorkerRuntime` owns each worker's compiled Lua closures and
 registry. Storage owns the crash-durable dump and its local durability token;
 replication continues to carry the original Redis Function command rather than
-a storage identity or a Keylane-specific catalog transition.
+a storage identity or a Lavik-specific catalog transition.
 
 The public module operations stage a complete target, snapshot its canonical
 `FUNCTION DUMP`, make that dump durable, swap the worker runtimes and global
@@ -154,7 +154,7 @@ root codec and unknown-version rejection.
 | Module API, guard, hidden staging, durable-before-visible commit, and startup recovery | `src/redis/function_catalog.h`, `src/redis/function_catalog.cpp` |
 | Worker runtime staging and non-failing swap | `src/redis/lua_eval.h`, `src/redis/lua_eval.cpp` |
 | Redis commands, replication admission/publication, strict replay, and RDB installation | `src/redis/command.cpp`, `src/redis/server.cpp` |
-| Existing dump and FUNCTION2 codecs | `include/keylane/rdb.h`, `src/redis/rdb.cpp` |
-| System-state root, manifest, catalog token, full-sync invalidation, and promotion base | `include/keylane/storage/format.h`, `include/keylane/storage/engine.h`, `src/storage/engine/system_state.cpp` |
+| Existing dump and FUNCTION2 codecs | `include/lavik/rdb.h`, `src/redis/rdb.cpp` |
+| System-state root, manifest, catalog token, full-sync invalidation, and promotion base | `include/lavik/storage/format.h`, `include/lavik/storage/engine.h`, `src/storage/engine/system_state.cpp` |
 | Native full-sync catalog transfer and online event handling | `src/replication/replication.cpp`, `src/storage/engine/replication_log.cpp` |
 | Format, runtime lifetime, and restart verification | `tests/storage_format_test.cpp`, `tests/lua_eval_test.cpp`, `tests/multi_exec_e2e_test.cpp`, `tests/list_e2e_test.cpp`, `tests/rdb_test.cpp` |

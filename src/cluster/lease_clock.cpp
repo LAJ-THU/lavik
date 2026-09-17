@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "keylane/cluster/lease_clock.h"
+#include "lavik/cluster/lease_clock.h"
 
 #include <time.h>
 
@@ -25,7 +25,7 @@
 #error "finite cluster leases require Linux CLOCK_BOOTTIME"
 #endif
 
-namespace keylane::cluster {
+namespace lavik::cluster {
 
 LeaseTime LeaseClockNow() noexcept {
   timespec now{};
@@ -37,8 +37,8 @@ LeaseTime LeaseClockNow() noexcept {
   }
   const auto seconds = std::chrono::seconds(now.tv_sec);
   const auto nanoseconds = std::chrono::nanoseconds(now.tv_nsec);
-  return LeaseTime(std::chrono::duration_cast<LeaseDuration>(seconds +
-                                                             nanoseconds));
+  return LeaseTime(
+      std::chrono::duration_cast<LeaseDuration>(seconds + nanoseconds));
 }
 
-}  // namespace keylane::cluster
+}  // namespace lavik::cluster

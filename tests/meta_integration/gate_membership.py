@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Integration gate: membership-change semantics for keylane-meta.
+"""Integration gate: membership-change semantics for lavik-meta.
 
 One cluster under a continuous propose load; serial phases:
 
@@ -33,7 +33,7 @@ One cluster under a continuous propose load; serial phases:
    case handled by the background driver's leadership handoff.
 6. Full committed-history check on the surviving members, clean teardown.
 
-Usage: gate_membership.py /path/to/keylane-meta [workdir]
+Usage: gate_membership.py /path/to/lavik-meta [workdir]
 """
 
 import os

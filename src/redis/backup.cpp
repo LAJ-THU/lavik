@@ -38,15 +38,15 @@
 #include "bycorf/runtime/cross_core.h"
 #include "bycorf/runtime/sync.h"
 #include "bycorf/runtime/worker.h"
-#include "keylane/memory.h"
-#include "keylane/metrics.h"
-#include "keylane/rdb.h"
-#include "keylane/rdb_collection.h"
-#include "keylane/resp.h"
+#include "lavik/memory.h"
+#include "lavik/metrics.h"
+#include "lavik/rdb.h"
+#include "lavik/rdb_collection.h"
+#include "lavik/resp.h"
 #include "lua_eval.h"
 #include "spdlog/spdlog.h"
 
-namespace keylane {
+namespace lavik {
 namespace {
 
 class RdbOutputQueue {
@@ -628,4 +628,4 @@ void WaitForRdbBackupDrained() noexcept {
   }
 }
 
-}  // namespace keylane
+}  // namespace lavik

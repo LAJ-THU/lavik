@@ -18,7 +18,7 @@ limitations under the License.
 
 ## Responsibility and boundary
 
-The storage subsystem owns Keylane's in-memory top-level key indexes and its
+The storage subsystem owns Lavik's in-memory top-level key indexes and its
 primary durable representation. It routes keys to worker-owned logical
 partitions, appends immutable record versions, serves staged or disk-backed
 reads, reconstructs indexes and physical accounting at startup, and reclaims
@@ -210,11 +210,11 @@ those flags and key length; total record length is derived from header and
 payload length. Neither derived length is stored. The decoded `RecordHeader`
 is a runtime view rather than a persisted C++ object representation.
 
-The compact Stream payload uses the current `KXS1` layout, including persisted
+The compact Stream payload uses the current `LXS1` layout, including persisted
 macro-node entry counts that preserve approximate-trim boundaries across
 restart and RDB export/import. It does not reconstruct those boundaries from
 current settings or accept earlier development layouts without node counts.
-Keylane-owned storage schemas remain at v1 while unreleased; incompatible
+Lavik-owned storage schemas remain at v1 while unreleased; incompatible
 development media is recreated, not migrated. Redis RDB versions follow the
 external Redis format independently.
 
@@ -477,7 +477,7 @@ capacity from the current worker's memory share. Incremental expansion likewise
 prepares its destination capacity before removing source entries. Admission or
 index-capacity failure returns `ResourceExhausted` without publishing a record
 that cannot enter the index; an admission rejection during expansion leaves
-both tables searchable and the maintenance step retryable. Keylane does not
+both tables searchable and the maintenance step retryable. Lavik does not
 turn a physical allocator failure into a command or recovery status: an actual
 `std::bad_alloc` remains unhandled and terminates the process. This keeps
 recoverable capacity policy separate from a process that can no longer uphold
@@ -972,26 +972,26 @@ current source code are authoritative for present storage behavior.
 
 | Claim | Repository source |
 |---|---|
-| Public lifecycle, routing, typed operations, locked transaction contract, snapshots, epochs, maintenance, and durability interfaces | `include/keylane/storage/engine.h` |
+| Public lifecycle, routing, typed operations, locked transaction contract, snapshots, epochs, maintenance, and durability interfaces | `include/lavik/storage/engine.h` |
 | Worker, partition, block, append-stream, allocator, recovery, and background-maintenance state | `src/storage/engine/impl.h` |
-| Runtime index representation, shared entry arena, runtime key digests, and asynchronous entry-identity validation | `include/keylane/storage/scan_hash_map.h`, `include/keylane/storage/format.h`, `src/storage/format.cpp`, `src/storage/engine/impl.h`, `src/storage/engine/write.cpp`, `src/storage/engine/flush.cpp` |
+| Runtime index representation, shared entry arena, runtime key digests, and asynchronous entry-identity validation | `include/lavik/storage/scan_hash_map.h`, `include/lavik/storage/format.h`, `src/storage/format.cpp`, `src/storage/engine/impl.h`, `src/storage/engine/write.cpp`, `src/storage/engine/flush.cpp` |
 | Compact and grouped Hash/Set serving, group identity and object side index | `src/storage/engine/hash_tree.cpp`, `src/storage/engine/hash_codec.cpp`, `src/storage/engine/grouped_hash.cpp`, `src/storage/engine/grouped_object_index.cpp`, [Grouped collections](09-grouped-collections.md) |
-| Compact physical index representation shared by user-key and group-location indexes | `include/keylane/storage/detail/record_index.h` |
-| Persistent constants, device and block IDs, A/B metadata pages, record and extent layouts, and checksums | `include/keylane/storage/format.h`, `src/storage/format.cpp` |
+| Compact physical index representation shared by user-key and group-location indexes | `include/lavik/storage/detail/record_index.h` |
+| Persistent constants, device and block IDs, A/B metadata pages, record and extent layouts, and checksums | `include/lavik/storage/format.h`, `src/storage/format.cpp` |
 | Checkpoint serialization, bitmap validation, generation publication and consumption, fallback, and block retirement | `src/storage/engine/checkpoint.cpp`, `src/storage/engine/flush.cpp`, `src/storage/engine/init.cpp`, `src/storage/engine/recovery.cpp` |
-| System-state manifest, catalog COW extents, full-sync fence, population token, and promotion base | `src/storage/engine/system_state.cpp`, `include/keylane/storage/engine.h` |
-| Aligned buffer ownership, registered-I/O fallback, oversized reads, and cross-worker lease return | `include/keylane/storage/buffer_pool.h`, `src/storage/buffer_pool.cpp` |
+| System-state manifest, catalog COW extents, full-sync fence, population token, and promotion base | `src/storage/engine/system_state.cpp`, `include/lavik/storage/engine.h` |
+| Aligned buffer ownership, registered-I/O fallback, oversized reads, and cross-worker lease return | `include/lavik/storage/buffer_pool.h`, `src/storage/buffer_pool.cpp` |
 | Storage-path probing, device-set validation and expansion, controller/qpair affinity, metadata load, worker initialization and native-thread finalization, recovery barriers, and shutdown flush | `src/storage/engine/init.cpp`, `src/storage/engine/device_affinity.h`, `src/storage/engine/impl.h` |
 | Device-owner allocation, bitmap activation and cold-free retirement, epoch mirroring, reserves, and allocator fail-stop behavior | `src/storage/engine/alloc.cpp` |
 | Parallel scans, block reassignment, epoch filtering, transaction decision collection, winner selection, and recovery accounting | `src/storage/engine/recovery.cpp`, `src/storage/engine/init.cpp` |
-| Append streams, mutation precondition, extent construction, WATCH/index publication, replacement accounting, transaction fences, commit batching and backpressure, commit decisions, caller wait policy, and rollback | `include/keylane/storage/engine.h`, `src/storage/engine/write.cpp`, `src/storage/engine/hash_tree.cpp`, `src/redis/command.cpp`, `src/redis/list_command.cpp`, `src/redis/sort_command.cpp` |
-| Worker-sharded retained-memory admission and ownership, detached-index reclaim, client-buffer quotas, full-sync reservations, and RDB snapshot admission failure | `include/keylane/memory.h`, `src/memory.cpp`, `include/keylane/storage/scan_hash_map.h`, `src/storage/engine/replication.cpp`, `src/storage/engine/backup.cpp` |
-| Staged and disk reads, bounded BatchGet waves, validation, pins, relocation retry, external-value assembly, and disk-backed reply leases | `src/storage/engine/read.cpp`, `include/keylane/storage/engine.h` |
+| Append streams, mutation precondition, extent construction, WATCH/index publication, replacement accounting, transaction fences, commit batching and backpressure, commit decisions, caller wait policy, and rollback | `include/lavik/storage/engine.h`, `src/storage/engine/write.cpp`, `src/storage/engine/hash_tree.cpp`, `src/redis/command.cpp`, `src/redis/list_command.cpp`, `src/redis/sort_command.cpp` |
+| Worker-sharded retained-memory admission and ownership, detached-index reclaim, client-buffer quotas, full-sync reservations, and RDB snapshot admission failure | `include/lavik/memory.h`, `src/memory.cpp`, `include/lavik/storage/scan_hash_map.h`, `src/storage/engine/replication.cpp`, `src/storage/engine/backup.cpp` |
+| Staged and disk reads, bounded BatchGet waves, validation, pins, relocation retry, external-value assembly, and disk-backed reply leases | `src/storage/engine/read.cpp`, `include/lavik/storage/engine.h` |
 | Periodic flush snapshots, data-before-header ordering, alternating header commits, dirty-tail ordering, and retirement settlement | `src/storage/engine/flush.cpp` |
 | Extent reclaim, defrag candidate selection, relocation durability fences, source retirement, and pacing | `src/storage/engine/defrag.cpp` |
-| Lazy and active expiration, permanent and finite authority capabilities, nestable quiescence, durable tombstones, and the full-device escape valve | `include/keylane/storage/engine.h`, `src/storage/engine/expire.cpp`, `src/cluster/node_control.cpp`, `src/replication/replication.cpp` |
-| Tombstone and shielding mark/sweep/reap lifecycle, startup authority check, internal replica quiescence, and runtime role limitation | `include/keylane/storage/engine.h`, `src/storage/engine/tomb_raider.cpp`, `src/storage/engine/init.cpp`, `src/replication/replication.cpp` |
+| Lazy and active expiration, permanent and finite authority capabilities, nestable quiescence, durable tombstones, and the full-device escape valve | `include/lavik/storage/engine.h`, `src/storage/engine/expire.cpp`, `src/cluster/node_control.cpp`, `src/replication/replication.cpp` |
+| Tombstone and shielding mark/sweep/reap lifecycle, startup authority check, internal replica quiescence, and runtime role limitation | `include/lavik/storage/engine.h`, `src/storage/engine/tomb_raider.cpp`, `src/storage/engine/init.cpp`, `src/replication/replication.cpp` |
 | Durable database and replica-partition epoch advance, bounded index detach, replica reset/promotion/abort, and detached-index reclaim | `src/storage/engine/flush_db.cpp`, `src/storage/engine/replication.cpp` |
-| Transaction-generation rotation, promotion, readiness, and cold retirement | `src/storage/engine/tx_cleaner.cpp`, `include/keylane/storage/tx_cleaner.h` |
-| Device, durability, recovery, storage-I/O, Defrag, Tomb Raider, and transaction-cleaner observability | `include/keylane/storage/engine.h`, `src/storage/engine/metrics.cpp`, `src/storage/engine/recovery.cpp`, `src/metrics.cpp` |
+| Transaction-generation rotation, promotion, readiness, and cold retirement | `src/storage/engine/tx_cleaner.cpp`, `include/lavik/storage/tx_cleaner.h` |
+| Device, durability, recovery, storage-I/O, Defrag, Tomb Raider, and transaction-cleaner observability | `include/lavik/storage/engine.h`, `src/storage/engine/metrics.cpp`, `src/storage/engine/recovery.cpp`, `src/metrics.cpp` |
 | Format, capacity, catalog recovery, crash-window, expiration, reclamation, transaction-cleaner, and buffer-pool verification | `tests/storage_format_test.cpp`, `tests/storage_capacity_test.cpp`, `tests/multi_exec_e2e_test.cpp`, `tests/extent_recovery_e2e_test.cpp`, `tests/flushdb_reclaim_e2e_test.cpp`, `tests/ttl_e2e_test.cpp`, `tests/tomb_raider_e2e_test.cpp`, `tests/multikey_e2e_test.cpp`, `tests/atomicity_stress_e2e_test.cpp`, `tests/list_e2e_test.cpp`, `tests/tx_cleaner_test.cpp`, `tests/buffer_pool_test.cpp` |

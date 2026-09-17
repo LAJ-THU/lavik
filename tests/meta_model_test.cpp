@@ -34,18 +34,18 @@
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_cat.h"
 #include "gtest/gtest.h"
-#include "keylane/cluster/control_protocol.h"
-#include "keylane/meta/cluster_create.h"
-#include "keylane/meta/commands.h"
-#include "keylane/meta/control_projector.h"
-#include "keylane/meta/encoding.h"
-#include "keylane/meta/hash.h"
-#include "keylane/meta/state_apply.h"
+#include "lavik/cluster/control_protocol.h"
+#include "lavik/meta/cluster_create.h"
+#include "lavik/meta/commands.h"
+#include "lavik/meta/control_projector.h"
+#include "lavik/meta/encoding.h"
+#include "lavik/meta/hash.h"
+#include "lavik/meta/state_apply.h"
 
 namespace {
 
-using keylane::meta::MetaReader;
-using keylane::meta::MetaWriter;
+using lavik::meta::MetaReader;
+using lavik::meta::MetaWriter;
 
 // ---------------------------------------------------------------------------
 // Encoding primitives: fixed-width little-endian integers, fixed bytes,
@@ -254,15 +254,15 @@ TEST(MetaModelEncoding, FixedArrayRoundTrip) {
   for (std::size_t i = 0; i < id.size(); ++i)
     id[i] = static_cast<std::uint8_t>(i);
   MetaWriter w;
-  keylane::meta::WriteFixedArray(w, id);
+  lavik::meta::WriteFixedArray(w, id);
 
   MetaReader r(w.buffer());
-  auto back = keylane::meta::ReadFixedArray<16>(r);
+  auto back = lavik::meta::ReadFixedArray<16>(r);
   ASSERT_TRUE(back.ok()) << back.status();
   EXPECT_EQ(*back, id);
   EXPECT_TRUE(r.Finish().ok());
   MetaReader short_r(std::string_view("\x00\x01", 2));
-  EXPECT_FALSE(keylane::meta::ReadFixedArray<16>(short_r).ok());
+  EXPECT_FALSE(lavik::meta::ReadFixedArray<16>(short_r).ok());
 }
 
 // ---------------------------------------------------------------------------
@@ -271,8 +271,8 @@ TEST(MetaModelEncoding, FixedArrayRoundTrip) {
 // ---------------------------------------------------------------------------
 
 TEST(MetaModelEncoding, FailureClassesAreDistinguishable) {
-  using keylane::meta::MetaFailureClass;
-  using keylane::meta::MetaFailureClassOf;
+  using lavik::meta::MetaFailureClass;
+  using lavik::meta::MetaFailureClassOf;
 
   // Decode-path failures (produced by MetaReader) classify as fail-stop.
   MetaReader r(std::string_view("\x00", 1));
@@ -282,12 +282,12 @@ TEST(MetaModelEncoding, FailureClassesAreDistinguishable) {
             MetaFailureClass::kFailStop);
   EXPECT_EQ(truncated.status().code(), absl::StatusCode::kInvalidArgument);
 
-  EXPECT_EQ(MetaFailureClassOf(keylane::meta::MetaFailStopError("x")),
+  EXPECT_EQ(MetaFailureClassOf(lavik::meta::MetaFailStopError("x")),
             MetaFailureClass::kFailStop);
 
   // Domain rejections (apply/propose validation) classify
   // separately: log index consumed, audit record written, state unchanged.
-  const absl::Status domain = keylane::meta::MetaDomainRejectError("cas");
+  const absl::Status domain = lavik::meta::MetaDomainRejectError("cas");
   EXPECT_EQ(MetaFailureClassOf(domain), MetaFailureClass::kDomainReject);
   EXPECT_EQ(domain.code(), absl::StatusCode::kFailedPrecondition);
 }
@@ -296,10 +296,10 @@ TEST(MetaModelEncoding, FailureClassesAreDistinguishable) {
 // Command envelope: u16 schema_version | u16 command tag | request_id | body.
 // ---------------------------------------------------------------------------
 
-using keylane::meta::DecodeMetaCommand;
-using keylane::meta::EncodeMetaCommand;
-using keylane::meta::MetaCommand;
-using keylane::meta::MetaRequestId;
+using lavik::meta::DecodeMetaCommand;
+using lavik::meta::EncodeMetaCommand;
+using lavik::meta::MetaCommand;
+using lavik::meta::MetaRequestId;
 
 MetaRequestId MakeRequestId(std::uint8_t seed) {
   MetaRequestId id{};
@@ -322,8 +322,8 @@ void ExpectDecodeFailStop(std::string_view bytes) {
   const auto decoded = DecodeMetaCommand(bytes);
   ASSERT_FALSE(decoded.ok())
       << "decoded unexpectedly: " << bytes.size() << " bytes";
-  EXPECT_EQ(keylane::meta::MetaFailureClassOf(decoded.status()),
-            keylane::meta::MetaFailureClass::kFailStop);
+  EXPECT_EQ(lavik::meta::MetaFailureClassOf(decoded.status()),
+            lavik::meta::MetaFailureClass::kFailStop);
 }
 
 template <typename T>
@@ -336,10 +336,10 @@ void ExpectRoundTrip(const T& cmd) {
 }
 
 void ExpectRecordDecodeFailStop(std::string_view bytes) {
-  const auto decoded = keylane::meta::DecodeMetaGroupRecord(bytes);
+  const auto decoded = lavik::meta::DecodeMetaGroupRecord(bytes);
   ASSERT_FALSE(decoded.ok());
-  EXPECT_EQ(keylane::meta::MetaFailureClassOf(decoded.status()),
-            keylane::meta::MetaFailureClass::kFailStop);
+  EXPECT_EQ(lavik::meta::MetaFailureClassOf(decoded.status()),
+            lavik::meta::MetaFailureClass::kFailStop);
 }
 
 // Encode-side cap violations are proposal-validation failures (domain
@@ -347,29 +347,29 @@ void ExpectRecordDecodeFailStop(std::string_view bytes) {
 void ExpectEncodeDomainReject(const MetaCommand& cmd) {
   const auto encoded = EncodeMetaCommand(cmd);
   ASSERT_FALSE(encoded.ok()) << "encoded unexpectedly";
-  EXPECT_EQ(keylane::meta::MetaFailureClassOf(encoded.status()),
-            keylane::meta::MetaFailureClass::kDomainReject);
+  EXPECT_EQ(lavik::meta::MetaFailureClassOf(encoded.status()),
+            lavik::meta::MetaFailureClass::kDomainReject);
 }
 
-keylane::meta::RegisterNode MakeRegisterNode() {
-  keylane::meta::RegisterNode cmd;
+lavik::meta::RegisterNode MakeRegisterNode() {
+  lavik::meta::RegisterNode cmd;
   cmd.request_id_ = MakeRequestId(0x10);
   cmd.node_id_ = "0123456789abcdef0123456789abcdef01234567";  // 40 hex
-  cmd.principal_ = "keylane://node/0123456789abcdef0123456789abcdef01234567";
+  cmd.principal_ = "lavik://node/0123456789abcdef0123456789abcdef01234567";
   cmd.endpoints_ = {"10.0.0.1:7000", "10.0.0.1:17000"};
 
-  cmd.role_ = keylane::meta::MetaNodeRole::kReplica;
+  cmd.role_ = lavik::meta::MetaNodeRole::kReplica;
   return cmd;
 }
 
 TEST(MetaModelCommands, RegisterNodeRoundTrip) {
-  const keylane::meta::RegisterNode cmd = MakeRegisterNode();
+  const lavik::meta::RegisterNode cmd = MakeRegisterNode();
   const std::string bytes = MustEncode(cmd);
 
   const auto decoded = DecodeMetaCommand(bytes);
   ASSERT_TRUE(decoded.ok()) << decoded.status();
-  ASSERT_TRUE(std::holds_alternative<keylane::meta::RegisterNode>(*decoded));
-  EXPECT_EQ(std::get<keylane::meta::RegisterNode>(*decoded), cmd);
+  ASSERT_TRUE(std::holds_alternative<lavik::meta::RegisterNode>(*decoded));
+  EXPECT_EQ(std::get<lavik::meta::RegisterNode>(*decoded), cmd);
 }
 
 TEST(MetaModelCommands, EnvelopeStartsWithFormatVersionThenTag) {
@@ -379,9 +379,9 @@ TEST(MetaModelCommands, EnvelopeStartsWithFormatVersionThenTag) {
   const std::uint16_t version = static_cast<std::uint16_t>(p[0] | (p[1] << 8));
   const std::uint16_t tag = static_cast<std::uint16_t>(p[2] | (p[3] << 8));
   EXPECT_EQ(version, 1);
-  EXPECT_EQ(version, keylane::meta::kMetaCommandFormatVersion);
+  EXPECT_EQ(version, lavik::meta::kMetaCommandFormatVersion);
   EXPECT_EQ(tag, static_cast<std::uint16_t>(
-                     keylane::meta::MetaCommandTag::kRegisterNode));
+                     lavik::meta::MetaCommandTag::kRegisterNode));
 }
 
 TEST(MetaModelCommands, UnknownFormatVersionFails) {
@@ -422,51 +422,51 @@ TEST(MetaModelCommands, ActorContextRoundTripsOnTheWire) {
   // into audit/journal. Unforgeability is the entry layer's property: only
   // trusted ctl/coordinator entries construct commands, and the ctl protocol
   // never accepts actor fields from external callers.
-  keylane::meta::RegisterNode cmd = MakeRegisterNode();
-  cmd.actor_.principal_ = "keylane://operator/alice";
+  lavik::meta::RegisterNode cmd = MakeRegisterNode();
+  cmd.actor_.principal_ = "lavik://operator/alice";
   cmd.actor_.readable_time_ = "2026-09-04T01:02:03Z";
 
   const std::string bytes = MustEncode(cmd);
-  EXPECT_NE(bytes.find("keylane://operator/alice"), std::string::npos);
+  EXPECT_NE(bytes.find("lavik://operator/alice"), std::string::npos);
   EXPECT_NE(bytes.find("2026-09-04T01:02:03Z"), std::string::npos);
 
   const auto decoded = DecodeMetaCommand(bytes);
   ASSERT_TRUE(decoded.ok()) << decoded.status();
   // Equality covers the actor fields: they survive the round trip verbatim.
-  EXPECT_EQ(std::get<keylane::meta::RegisterNode>(*decoded), cmd);
+  EXPECT_EQ(std::get<lavik::meta::RegisterNode>(*decoded), cmd);
 }
 
 TEST(MetaModelCommands, ActorFieldCapsEnforced) {
   // Encode side: an over-cap actor field is a proposal-validation failure.
-  keylane::meta::RegisterNode cmd = MakeRegisterNode();
+  lavik::meta::RegisterNode cmd = MakeRegisterNode();
   cmd.actor_.principal_ =
-      std::string(keylane::meta::kMaxMetaPrincipalBytes + 1, 'p');
+      std::string(lavik::meta::kMaxMetaPrincipalBytes + 1, 'p');
   ExpectEncodeDomainReject(cmd);
-  cmd.actor_.principal_ = "keylane://operator/alice";
+  cmd.actor_.principal_ = "lavik://operator/alice";
   cmd.actor_.readable_time_ =
-      std::string(keylane::meta::kMaxMetaActorReadableTimeBytes + 1, 't');
+      std::string(lavik::meta::kMaxMetaActorReadableTimeBytes + 1, 't');
   ExpectEncodeDomainReject(cmd);
 
   // Decode side: an over-cap actor length prefix on the wire is fail-stop.
   // Hand-built RegisterNode header: version | tag | request_id | actor...
   {
-    keylane::meta::MetaWriter w;
-    w.WriteU16(keylane::meta::kMetaCommandFormatVersion);
-    w.WriteU16(static_cast<std::uint16_t>(
-        keylane::meta::MetaCommandTag::kRegisterNode));
-    w.WriteRaw(std::string(16, '\0'));                      // request_id
-    w.WriteU32(keylane::meta::kMaxMetaPrincipalBytes + 1);  // actor prefix
+    lavik::meta::MetaWriter w;
+    w.WriteU16(lavik::meta::kMetaCommandFormatVersion);
+    w.WriteU16(
+        static_cast<std::uint16_t>(lavik::meta::MetaCommandTag::kRegisterNode));
+    w.WriteRaw(std::string(16, '\0'));                    // request_id
+    w.WriteU32(lavik::meta::kMaxMetaPrincipalBytes + 1);  // actor prefix
     ExpectDecodeFailStop(w.buffer());
   }
   {
-    keylane::meta::MetaWriter w;
-    w.WriteU16(keylane::meta::kMetaCommandFormatVersion);
-    w.WriteU16(static_cast<std::uint16_t>(
-        keylane::meta::MetaCommandTag::kRegisterNode));
+    lavik::meta::MetaWriter w;
+    w.WriteU16(lavik::meta::kMetaCommandFormatVersion);
+    w.WriteU16(
+        static_cast<std::uint16_t>(lavik::meta::MetaCommandTag::kRegisterNode));
     w.WriteRaw(std::string(16, '\0'));
-    w.WriteString("keylane://operator/alice");
+    w.WriteString("lavik://operator/alice");
     // readable_time prefix over its cap.
-    w.WriteU32(keylane::meta::kMaxMetaActorReadableTimeBytes + 1);
+    w.WriteU32(lavik::meta::kMaxMetaActorReadableTimeBytes + 1);
     ExpectDecodeFailStop(w.buffer());
   }
 }
@@ -477,13 +477,13 @@ TEST(MetaModelCommands, DecodeRejectsMissingActorFields) {
   // node_id length prefix is consumed as the actor principal prefix and the
   // decode runs out of bytes. (Every proper prefix already fails via
   // TruncatedCommandFails; this names the actor-position case explicitly.)
-  keylane::meta::MetaWriter w;
-  w.WriteU16(keylane::meta::kMetaCommandFormatVersion);
+  lavik::meta::MetaWriter w;
+  w.WriteU16(lavik::meta::kMetaCommandFormatVersion);
   w.WriteU16(
-      static_cast<std::uint16_t>(keylane::meta::MetaCommandTag::kRegisterNode));
+      static_cast<std::uint16_t>(lavik::meta::MetaCommandTag::kRegisterNode));
   w.WriteRaw(std::string(16, '\0'));  // request_id
   w.WriteString(MakeRegisterNode().node_id_);
-  w.WriteString("keylane://node/x");
+  w.WriteString("lavik://node/x");
   w.WriteU32(0);  // empty endpoints
   w.WriteU64(0x5);
   w.WriteU8(1);
@@ -495,7 +495,7 @@ TEST(MetaModelCommands, DecodeRejectsMissingActorFields) {
 // ---------------------------------------------------------------------------
 
 TEST(MetaModelCommands, UpdateNodeRoundTrip) {
-  keylane::meta::UpdateNode cmd;
+  lavik::meta::UpdateNode cmd;
   cmd.request_id_ = MakeRequestId(0x20);
   cmd.node_id_ = "0123456789abcdef0123456789abcdef01234567";
   cmd.expected_revision_ = 41;
@@ -510,10 +510,10 @@ TEST(MetaModelCommands, UpdateNodeRoundTrip) {
 // dependent, so the requires-expression can fail softly.)
 template <typename T>
 concept HasPrincipalField = requires(T t) { t.principal_; };
-static_assert(!HasPrincipalField<keylane::meta::UpdateNode>);
+static_assert(!HasPrincipalField<lavik::meta::UpdateNode>);
 
 TEST(MetaModelCommands, RetireNodeRoundTrip) {
-  keylane::meta::RetireNode cmd;
+  lavik::meta::RetireNode cmd;
   cmd.request_id_ = MakeRequestId(0x21);
   cmd.node_id_ = "0123456789abcdef0123456789abcdef01234567";
   cmd.expected_revision_ = 42;
@@ -525,7 +525,7 @@ TEST(MetaModelCommands, RetireNodeRoundTrip) {
 // ---------------------------------------------------------------------------
 
 TEST(MetaModelCommands, CreateGroupRoundTrip) {
-  keylane::meta::CreateGroup cmd;
+  lavik::meta::CreateGroup cmd;
   cmd.request_id_ = MakeRequestId(0x30);
   cmd.group_id_ = "0123456789abcdef0123456789abcdef01234567";
   cmd.new_topology_epoch_ = 100;  // absolute value
@@ -533,18 +533,18 @@ TEST(MetaModelCommands, CreateGroupRoundTrip) {
 }
 
 TEST(MetaModelCommands, AssignNodeToGroupRoundTrip) {
-  keylane::meta::AssignNodeToGroup cmd;
+  lavik::meta::AssignNodeToGroup cmd;
   cmd.request_id_ = MakeRequestId(0x31);
   cmd.group_id_ = "0123456789abcdef0123456789abcdef01234567";
   cmd.node_id_ = "89abcdef0123456789abcdef0123456789abcdef";
   cmd.assignment_id_.fill(0x31);
-  cmd.role_ = keylane::meta::MetaNodeRole::kReplica;
+  cmd.role_ = lavik::meta::MetaNodeRole::kReplica;
   cmd.expected_revision_ = 7;
   ExpectRoundTrip(cmd);
 }
 
 TEST(MetaModelCommands, RemoveNodeFromGroupRoundTrip) {
-  keylane::meta::RemoveNodeFromGroup cmd;
+  lavik::meta::RemoveNodeFromGroup cmd;
   cmd.request_id_ = MakeRequestId(0x32);
   cmd.group_id_ = "0123456789abcdef0123456789abcdef01234567";
   cmd.node_id_ = "89abcdef0123456789abcdef0123456789abcdef";
@@ -553,7 +553,7 @@ TEST(MetaModelCommands, RemoveNodeFromGroupRoundTrip) {
 }
 
 TEST(MetaModelCommands, SetSlotMapRoundTrip) {
-  keylane::meta::SetSlotMap cmd;
+  lavik::meta::SetSlotMap cmd;
   cmd.request_id_ = MakeRequestId(0x33);
   cmd.ranges_ = {
       {0, 5460, "0123456789abcdef0123456789abcdef01234567"},
@@ -569,22 +569,22 @@ TEST(MetaModelCommands, GroupRecordRoundTrip) {
   // population_manifest_revision, and partition_replication_epoch.
   // replication_history_id is deliberately absent because it is scoped to a
   // data-plane boot. The record codec is defined here.
-  keylane::meta::MetaGroupRecord record;
+  lavik::meta::MetaGroupRecord record;
   record.owner_ = "0123456789abcdef0123456789abcdef01234567";
   record.group_term_ = 9;
   record.population_manifest_revision_ = 777;
   record.population_manifest_digest_.fill(0x77);
   record.partition_replication_epoch_ = 3;
 
-  const auto encoded = keylane::meta::EncodeMetaGroupRecord(record);
+  const auto encoded = lavik::meta::EncodeMetaGroupRecord(record);
   ASSERT_TRUE(encoded.ok()) << encoded.status();
   // Records carry the same u16 format-version envelope convention.
   ASSERT_GE(encoded->size(), 2u);
   const auto* p = reinterpret_cast<const unsigned char*>(encoded->data());
   EXPECT_EQ(static_cast<std::uint16_t>(p[0] | (p[1] << 8)),
-            keylane::meta::kMetaFormatVersion);
+            lavik::meta::kMetaFormatVersion);
 
-  const auto decoded = keylane::meta::DecodeMetaGroupRecord(*encoded);
+  const auto decoded = lavik::meta::DecodeMetaGroupRecord(*encoded);
   ASSERT_TRUE(decoded.ok()) << decoded.status();
   EXPECT_EQ(*decoded, record);
 
@@ -598,7 +598,7 @@ TEST(MetaModelCommands, GroupRecordRoundTrip) {
 // ---------------------------------------------------------------------------
 
 TEST(MetaModelCommands, BeginGroupTermRoundTrip) {
-  keylane::meta::BeginGroupTerm cmd;
+  lavik::meta::BeginGroupTerm cmd;
   cmd.request_id_ = MakeRequestId(0x40);
   cmd.group_id_ = "0123456789abcdef0123456789abcdef01234567";
   cmd.expected_term_ = 41;  // T-1
@@ -607,7 +607,7 @@ TEST(MetaModelCommands, BeginGroupTermRoundTrip) {
 }
 
 TEST(MetaModelCommands, ActivateAuthorityRoundTrip) {
-  keylane::meta::ActivateAuthority cmd;
+  lavik::meta::ActivateAuthority cmd;
   cmd.request_id_ = MakeRequestId(0x42);
   cmd.group_id_ = "0123456789abcdef0123456789abcdef01234567";
   cmd.expected_term_ = 42;
@@ -624,14 +624,12 @@ template <typename T>
 concept HasBareTermField = requires(T t) { t.term_; };
 template <typename T>
 concept HasNewTermField = requires(T t) { t.new_term_; };
-static_assert(!HasBareTermField<keylane::meta::ActivateAuthority>);
-static_assert(!HasNewTermField<keylane::meta::ActivateAuthority>);
-static_assert(requires(keylane::meta::ActivateAuthority t) {
-  t.expected_term_;
-});
+static_assert(!HasBareTermField<lavik::meta::ActivateAuthority>);
+static_assert(!HasNewTermField<lavik::meta::ActivateAuthority>);
+static_assert(requires(lavik::meta::ActivateAuthority t) { t.expected_term_; });
 
 TEST(MetaModelCommands, FenceGroupRoundTrip) {
-  keylane::meta::FenceGroup cmd;
+  lavik::meta::FenceGroup cmd;
   cmd.request_id_ = MakeRequestId(0x44);
   cmd.group_id_ = "0123456789abcdef0123456789abcdef01234567";
   cmd.expected_term_ = 42;
@@ -639,10 +637,10 @@ TEST(MetaModelCommands, FenceGroupRoundTrip) {
   ExpectRoundTrip(cmd);
 }
 
-keylane::meta::MetaOperationId MakeOperationId(std::uint8_t seed);
+lavik::meta::MetaOperationId MakeOperationId(std::uint8_t seed);
 
-keylane::meta::MetaFailoverCandidate MakeFailoverCandidate(std::uint8_t seed) {
-  keylane::meta::MetaFailoverCandidate candidate;
+lavik::meta::MetaFailoverCandidate MakeFailoverCandidate(std::uint8_t seed) {
+  lavik::meta::MetaFailoverCandidate candidate;
   candidate.node_id_ = seed == 1 ? "0123456789abcdef0123456789abcdef01234567"
                                  : "89abcdef0123456789abcdef0123456789abcdef";
   candidate.assignment_id_.fill(static_cast<std::uint8_t>(seed + 0x10));
@@ -650,9 +648,9 @@ keylane::meta::MetaFailoverCandidate MakeFailoverCandidate(std::uint8_t seed) {
   return candidate;
 }
 
-keylane::meta::MetaFailoverCandidateAction MakeFailoverAction(
+lavik::meta::MetaFailoverCandidateAction MakeFailoverAction(
     std::uint8_t seed, bool authorized = false) {
-  keylane::meta::MetaFailoverCandidateAction action;
+  lavik::meta::MetaFailoverCandidateAction action;
   action.action_id_.fill(static_cast<std::uint8_t>(seed + 0x30));
   action.candidate_ = MakeFailoverCandidate(seed);
   action.domain_.source_group_term_ = 41;
@@ -662,9 +660,9 @@ keylane::meta::MetaFailoverCandidateAction MakeFailoverAction(
   action.domain_.source_history_id_.fill(0x43);
   action.domain_.flow_count_ = 3;
   if (authorized) {
-    action.authorization_ = keylane::meta::MetaFailoverAuthorization{
+    action.authorization_ = lavik::meta::MetaFailoverAuthorization{
         .authorized_revision_ = 88,
-        .loss_if_cutover_ = keylane::meta::MetaFailoverLoss::kNone};
+        .loss_if_cutover_ = lavik::meta::MetaFailoverLoss::kNone};
   }
   return action;
 }
@@ -681,56 +679,55 @@ void SetFailoverGroupAnchors(Command& command) {
 }
 
 template <typename Command>
-void ExpectFailoverCommandRoundTrip(
-    const Command& command, keylane::meta::MetaCommandTag expected_tag) {
+void ExpectFailoverCommandRoundTrip(const Command& command,
+                                    lavik::meta::MetaCommandTag expected_tag) {
   ExpectRoundTrip(command);
   const std::string bytes = MustEncode(command);
   ASSERT_GE(bytes.size(), 4u);
   const auto* raw = reinterpret_cast<const unsigned char*>(bytes.data());
   EXPECT_EQ(static_cast<std::uint16_t>(raw[0] | (raw[1] << 8)),
-            keylane::meta::kMetaCommandFormatVersion);
+            lavik::meta::kMetaCommandFormatVersion);
   EXPECT_EQ(static_cast<std::uint16_t>(raw[2] | (raw[3] << 8)),
             static_cast<std::uint16_t>(expected_tag));
 }
 
 TEST(MetaModelCommands, FailoverTransitionValueRoundTrips) {
-  keylane::meta::MetaFailoverTransition transition;
+  lavik::meta::MetaFailoverTransition transition;
   transition.transition_id_.fill(0x51);
   transition.revision_ = 88;
-  transition.mode_ = keylane::meta::MetaFailoverMode::kControlled;
+  transition.mode_ = lavik::meta::MetaFailoverMode::kControlled;
   transition.target_term_ = 42;
   transition.candidate_action_ = MakeFailoverAction(2, true);
-  transition.controlled_ = keylane::meta::MetaControlledFailover{
+  transition.controlled_ = lavik::meta::MetaControlledFailover{
       .operation_id_ = MakeOperationId(0x31),
       .absolute_deadline_unix_ms_ = 1'800'000'000'000};
 
-  keylane::meta::MetaWriter writer;
+  lavik::meta::MetaWriter writer;
   ASSERT_TRUE(
-      keylane::meta::WriteMetaFailoverTransition(writer, transition).ok());
-  keylane::meta::MetaReader reader(writer.buffer());
-  const auto decoded = keylane::meta::ReadMetaFailoverTransition(reader);
+      lavik::meta::WriteMetaFailoverTransition(writer, transition).ok());
+  lavik::meta::MetaReader reader(writer.buffer());
+  const auto decoded = lavik::meta::ReadMetaFailoverTransition(reader);
   ASSERT_TRUE(decoded.ok()) << decoded.status();
   EXPECT_EQ(*decoded, transition);
   EXPECT_TRUE(reader.Finish().ok());
 
-  transition.mode_ = keylane::meta::MetaFailoverMode::kUncontrolled;
+  transition.mode_ = lavik::meta::MetaFailoverMode::kUncontrolled;
   transition.candidate_action_.reset();
   transition.controlled_.reset();
-  keylane::meta::MetaWriter candidate_null_writer;
-  ASSERT_TRUE(keylane::meta::WriteMetaFailoverTransition(candidate_null_writer,
-                                                         transition)
+  lavik::meta::MetaWriter candidate_null_writer;
+  ASSERT_TRUE(lavik::meta::WriteMetaFailoverTransition(candidate_null_writer,
+                                                       transition)
                   .ok());
-  keylane::meta::MetaReader candidate_null_reader(
-      candidate_null_writer.buffer());
+  lavik::meta::MetaReader candidate_null_reader(candidate_null_writer.buffer());
   const auto candidate_null =
-      keylane::meta::ReadMetaFailoverTransition(candidate_null_reader);
+      lavik::meta::ReadMetaFailoverTransition(candidate_null_reader);
   ASSERT_TRUE(candidate_null.ok()) << candidate_null.status();
   EXPECT_EQ(*candidate_null, transition);
   EXPECT_TRUE(candidate_null_reader.Finish().ok());
 }
 
 TEST(MetaModelCommands, TypedFailoverCommandsRoundTrip) {
-  keylane::meta::BeginControlledFailover controlled;
+  lavik::meta::BeginControlledFailover controlled;
   controlled.request_id_ = MakeRequestId(0x91);
   controlled.group_id_ = "group-a";
   controlled.transition_id_.fill(0x51);
@@ -741,16 +738,16 @@ TEST(MetaModelCommands, TypedFailoverCommandsRoundTrip) {
   controlled.absolute_deadline_unix_ms_ = 1'800'000'000'000;
   SetFailoverGroupAnchors(controlled);
   ExpectFailoverCommandRoundTrip(
-      controlled, keylane::meta::MetaCommandTag::kBeginControlledFailover);
+      controlled, lavik::meta::MetaCommandTag::kBeginControlledFailover);
 
-  keylane::meta::BeginUncontrolledFailover uncontrolled;
+  lavik::meta::BeginUncontrolledFailover uncontrolled;
   uncontrolled.request_id_ = MakeRequestId(0x92);
   uncontrolled.group_id_ = "group-a";
   uncontrolled.transition_id_.fill(0x52);
   uncontrolled.target_term_ = 42;
   uncontrolled.candidate_action_ = std::nullopt;
   uncontrolled.trigger_reason_ =
-      keylane::meta::MetaAutomaticFailoverReason::kHeartbeatExpired;
+      lavik::meta::MetaAutomaticFailoverReason::kHeartbeatExpired;
   uncontrolled.suspect_duration_ms_ = 5000;
   uncontrolled.preempted_operation_id_ = MakeOperationId(0x32);
   uncontrolled.expected_preempted_operation_revision_ = 0;
@@ -762,40 +759,40 @@ TEST(MetaModelCommands, TypedFailoverCommandsRoundTrip) {
   uncontrolled.expected_population_manifest_digest_ = {};
   uncontrolled.expected_partition_replication_epoch_ = 0;
   ExpectFailoverCommandRoundTrip(
-      uncontrolled, keylane::meta::MetaCommandTag::kBeginUncontrolledFailover);
+      uncontrolled, lavik::meta::MetaCommandTag::kBeginUncontrolledFailover);
 
-  keylane::meta::BeginUncontrolledFailover manual_uncontrolled = uncontrolled;
+  lavik::meta::BeginUncontrolledFailover manual_uncontrolled = uncontrolled;
   manual_uncontrolled.request_id_ = MakeRequestId(0x99);
   manual_uncontrolled.transition_id_.fill(0x59);
   manual_uncontrolled.candidate_action_ = MakeFailoverAction(2);
   manual_uncontrolled.trigger_reason_ =
-      keylane::meta::MetaAutomaticFailoverReason::kManual;
+      lavik::meta::MetaAutomaticFailoverReason::kManual;
   manual_uncontrolled.suspect_duration_ms_ = 0;
   manual_uncontrolled.preempted_operation_id_.reset();
   manual_uncontrolled.expected_preempted_operation_revision_.reset();
   ExpectFailoverCommandRoundTrip(
       manual_uncontrolled,
-      keylane::meta::MetaCommandTag::kBeginUncontrolledFailover);
+      lavik::meta::MetaCommandTag::kBeginUncontrolledFailover);
 
-  keylane::meta::SetUncontrolledCandidate set_candidate;
+  lavik::meta::SetUncontrolledCandidate set_candidate;
   set_candidate.request_id_ = MakeRequestId(0x93);
   set_candidate.group_id_ = "group-a";
   set_candidate.expected_transition_ = {{}, 88};
   set_candidate.expected_transition_.transition_id_.fill(0x52);
   set_candidate.candidate_action_ = MakeFailoverAction(2);
   ExpectFailoverCommandRoundTrip(
-      set_candidate, keylane::meta::MetaCommandTag::kSetUncontrolledCandidate);
+      set_candidate, lavik::meta::MetaCommandTag::kSetUncontrolledCandidate);
 
-  keylane::meta::AuthorizeFailoverPrepare authorize;
+  lavik::meta::AuthorizeFailoverPrepare authorize;
   authorize.request_id_ = MakeRequestId(0x94);
   authorize.group_id_ = "group-a";
   authorize.expected_transition_ = set_candidate.expected_transition_;
   authorize.action_id_ = set_candidate.candidate_action_->action_id_;
-  authorize.loss_if_cutover_ = keylane::meta::MetaFailoverLoss::kUnknown;
+  authorize.loss_if_cutover_ = lavik::meta::MetaFailoverLoss::kUnknown;
   ExpectFailoverCommandRoundTrip(
-      authorize, keylane::meta::MetaCommandTag::kAuthorizeFailoverPrepare);
+      authorize, lavik::meta::MetaCommandTag::kAuthorizeFailoverPrepare);
 
-  keylane::meta::AbortControlledFailover abort;
+  lavik::meta::AbortControlledFailover abort;
   abort.request_id_ = MakeRequestId(0x95);
   abort.operation_id_ = controlled.operation_id_;
   abort.expected_operation_revision_ = 0;
@@ -803,9 +800,9 @@ TEST(MetaModelCommands, TypedFailoverCommandsRoundTrip) {
   abort.expected_transition_ = std::nullopt;
   abort.reason_ = "no eligible candidate before deadline";
   ExpectFailoverCommandRoundTrip(
-      abort, keylane::meta::MetaCommandTag::kAbortControlledFailover);
+      abort, lavik::meta::MetaCommandTag::kAbortControlledFailover);
 
-  keylane::meta::DegradeControlledFailover degrade;
+  lavik::meta::DegradeControlledFailover degrade;
   degrade.request_id_ = MakeRequestId(0x96);
   degrade.operation_id_ = controlled.operation_id_;
   degrade.expected_operation_revision_ = 0;
@@ -815,9 +812,9 @@ TEST(MetaModelCommands, TypedFailoverCommandsRoundTrip) {
   degrade.retain_candidate_action_ = true;
   degrade.reason_ = "source incarnation was replaced";
   ExpectFailoverCommandRoundTrip(
-      degrade, keylane::meta::MetaCommandTag::kDegradeControlledFailover);
+      degrade, lavik::meta::MetaCommandTag::kDegradeControlledFailover);
 
-  keylane::meta::CommitControlledFailover commit_controlled;
+  lavik::meta::CommitControlledFailover commit_controlled;
   commit_controlled.request_id_ = MakeRequestId(0x97);
   commit_controlled.operation_id_ = controlled.operation_id_;
   commit_controlled.expected_operation_revision_ = 0;
@@ -831,16 +828,16 @@ TEST(MetaModelCommands, TypedFailoverCommandsRoundTrip) {
   commit_controlled.new_topology_epoch_ = 101;
   ExpectFailoverCommandRoundTrip(
       commit_controlled,
-      keylane::meta::MetaCommandTag::kCommitControlledFailover);
+      lavik::meta::MetaCommandTag::kCommitControlledFailover);
 
-  keylane::meta::CommitUncontrolledFailover commit_uncontrolled;
+  lavik::meta::CommitUncontrolledFailover commit_uncontrolled;
   commit_uncontrolled.request_id_ = MakeRequestId(0x98);
   commit_uncontrolled.group_id_ = "group-a";
   commit_uncontrolled.expected_transition_ = set_candidate.expected_transition_;
   commit_uncontrolled.action_id_ =
       degrade.expected_candidate_action_->action_id_;
   commit_uncontrolled.authorized_revision_ = 88;
-  commit_uncontrolled.loss_if_cutover_ = keylane::meta::MetaFailoverLoss::kNone;
+  commit_uncontrolled.loss_if_cutover_ = lavik::meta::MetaFailoverLoss::kNone;
   commit_uncontrolled.expected_candidate_ =
       degrade.expected_candidate_action_->candidate_;
   SetFailoverGroupAnchors(commit_uncontrolled);
@@ -848,16 +845,16 @@ TEST(MetaModelCommands, TypedFailoverCommandsRoundTrip) {
   commit_uncontrolled.new_topology_epoch_ = 101;
   ExpectFailoverCommandRoundTrip(
       commit_uncontrolled,
-      keylane::meta::MetaCommandTag::kCommitUncontrolledFailover);
+      lavik::meta::MetaCommandTag::kCommitUncontrolledFailover);
 }
 
 TEST(MetaModelCommands, FailoverCodecRejectsInvalidValues) {
-  keylane::meta::BeginUncontrolledFailover automatic;
+  lavik::meta::BeginUncontrolledFailover automatic;
   automatic.group_id_ = "group-a";
   automatic.transition_id_.fill(0x51);
   automatic.target_term_ = 42;
   automatic.trigger_reason_ =
-      keylane::meta::MetaAutomaticFailoverReason::kHeartbeatExpired;
+      lavik::meta::MetaAutomaticFailoverReason::kHeartbeatExpired;
   automatic.suspect_duration_ms_ = 5000;
   SetFailoverGroupAnchors(automatic);
 
@@ -873,29 +870,28 @@ TEST(MetaModelCommands, FailoverCodecRejectsInvalidValues) {
   ExpectEncodeDomainReject(automatic);
 
   automatic.preempted_operation_id_ = MakeOperationId(0x33);
-  automatic.trigger_reason_ =
-      keylane::meta::MetaAutomaticFailoverReason::kManual;
+  automatic.trigger_reason_ = lavik::meta::MetaAutomaticFailoverReason::kManual;
   automatic.suspect_duration_ms_ = 0;
   ExpectEncodeDomainReject(automatic);
 
   automatic.trigger_reason_ =
-      keylane::meta::MetaAutomaticFailoverReason::kHeartbeatExpired;
+      lavik::meta::MetaAutomaticFailoverReason::kHeartbeatExpired;
   automatic.suspect_duration_ms_ = 5000;
-  automatic.preempted_operation_id_ = keylane::meta::MetaOperationId{};
+  automatic.preempted_operation_id_ = lavik::meta::MetaOperationId{};
   ExpectEncodeDomainReject(automatic);
 
-  keylane::meta::SetUncontrolledCandidate set_candidate;
+  lavik::meta::SetUncontrolledCandidate set_candidate;
   set_candidate.group_id_ = "group-a";
   set_candidate.expected_transition_.transition_id_.fill(0x52);
   set_candidate.expected_transition_.revision_ = 88;
   set_candidate.candidate_action_ = MakeFailoverAction(2, true);
   ExpectEncodeDomainReject(set_candidate);
 
-  keylane::meta::AuthorizeFailoverPrepare authorize;
+  lavik::meta::AuthorizeFailoverPrepare authorize;
   authorize.group_id_ = "group-a";
   authorize.expected_transition_ = set_candidate.expected_transition_;
   authorize.action_id_.fill(0x71);
-  authorize.loss_if_cutover_ = keylane::meta::MetaFailoverLoss::kUnknown;
+  authorize.loss_if_cutover_ = lavik::meta::MetaFailoverLoss::kUnknown;
   std::string encoded = MustEncode(authorize);
   encoded.back() = static_cast<char>(0x7f);
   ExpectDecodeFailStop(encoded);
@@ -905,8 +901,8 @@ TEST(MetaModelCommands, FailoverCodecRejectsInvalidValues) {
 // Policy documents are versioned raw content.
 // ---------------------------------------------------------------------------
 
-keylane::meta::MetaHash256 MakeHash(std::uint8_t seed) {
-  keylane::meta::MetaHash256 h{};
+lavik::meta::MetaHash256 MakeHash(std::uint8_t seed) {
+  lavik::meta::MetaHash256 h{};
   for (std::size_t i = 0; i < h.size(); ++i) {
     h[i] = static_cast<std::uint8_t>(seed ^ i);
   }
@@ -914,7 +910,7 @@ keylane::meta::MetaHash256 MakeHash(std::uint8_t seed) {
 }
 
 TEST(MetaModelCommands, PutPolicyRoundTrip) {
-  keylane::meta::PutPolicy cmd;
+  lavik::meta::PutPolicy cmd;
   cmd.request_id_ = MakeRequestId(0x50);
   cmd.policy_id_ = "migration-policy";
   cmd.version_ = 3;
@@ -929,17 +925,16 @@ TEST(MetaModelCommands, PutPolicyRoundTrip) {
 // appears in commands only as an archive reference.
 // ---------------------------------------------------------------------------
 
-keylane::meta::MetaOperationId MakeOperationId(std::uint8_t seed) {
-  keylane::meta::MetaOperationId id{};
+lavik::meta::MetaOperationId MakeOperationId(std::uint8_t seed) {
+  lavik::meta::MetaOperationId id{};
   for (std::size_t i = 0; i < id.size(); ++i) {
     id[i] = static_cast<std::uint8_t>(seed * 3 + i);
   }
   return id;
 }
 
-
 TEST(MetaModelCommands, SubmitOperationRoundTrip) {
-  keylane::meta::SubmitOperation cmd;
+  lavik::meta::SubmitOperation cmd;
   cmd.request_id_ = MakeRequestId(0x60);
   cmd.operation_id_ = MakeOperationId(0x01);
   cmd.kind_ = "migration";
@@ -950,12 +945,12 @@ TEST(MetaModelCommands, SubmitOperationRoundTrip) {
 }
 
 TEST(MetaModelCommands, TransitionOperationPhaseRoundTrip) {
-  keylane::meta::TransitionOperationPhase cmd;
+  lavik::meta::TransitionOperationPhase cmd;
   cmd.request_id_ = MakeRequestId(0x61);
   cmd.operation_id_ = MakeOperationId(0x02);
   cmd.expected_revision_ = 3;
   cmd.kind_phase_blob_ = "{\"phase\":\"cutover\"}";
-  keylane::meta::MetaDirectiveSpec directive;
+  lavik::meta::MetaDirectiveSpec directive;
   directive.directive_id_.fill(0x10);
   directive.attempt_id_.fill(0x11);
   directive.recipient_node_id_ = "0123456789abcdef0123456789abcdef01234567";
@@ -979,7 +974,7 @@ TEST(MetaModelCommands, TransitionOperationPhaseRoundTrip) {
 }
 
 TEST(MetaModelCommands, CompleteOperationRoundTrip) {
-  keylane::meta::CompleteOperation cmd;
+  lavik::meta::CompleteOperation cmd;
   cmd.request_id_ = MakeRequestId(0x62);
   cmd.operation_id_ = MakeOperationId(0x03);
   cmd.expected_revision_ = 4;
@@ -989,7 +984,7 @@ TEST(MetaModelCommands, CompleteOperationRoundTrip) {
 }
 
 TEST(MetaModelCommands, AbortOperationRoundTrip) {
-  keylane::meta::AbortOperation cmd;
+  lavik::meta::AbortOperation cmd;
   cmd.request_id_ = MakeRequestId(0x63);
   cmd.operation_id_ = MakeOperationId(0x04);
   cmd.expected_revision_ = 2;
@@ -1000,14 +995,14 @@ TEST(MetaModelCommands, AbortOperationRoundTrip) {
 TEST(MetaModelCommands, ArchiveOperationsRoundTrip) {
   // Non-contiguous archival of terminal operations; apply
   // rejects references to non-terminal or unknown operations.
-  keylane::meta::ArchiveOperations cmd;
+  lavik::meta::ArchiveOperations cmd;
   cmd.request_id_ = MakeRequestId(0x64);
   cmd.operation_seqs_ = {100, 137, 4096};
   ExpectRoundTrip(cmd);
 }
 
 TEST(MetaModelCommands, DirectiveResultReceiptCommandsRoundTrip) {
-  keylane::meta::CommitDirectiveResult commit;
+  lavik::meta::CommitDirectiveResult commit;
   commit.request_id_ = MakeRequestId(0x65);
   commit.operation_id_ = MakeOperationId(0x05);
   commit.directive_id_.fill(0x20);
@@ -1016,11 +1011,11 @@ TEST(MetaModelCommands, DirectiveResultReceiptCommandsRoundTrip) {
   commit.recipient_node_id_ = "0123456789abcdef0123456789abcdef01234567";
   commit.recipient_boot_id_.fill(0x22);
   commit.assignment_id_.fill(0x23);
-  commit.status_ = keylane::meta::MetaDirectiveResultStatus::kFailed;
+  commit.status_ = lavik::meta::MetaDirectiveResultStatus::kFailed;
   commit.result_ = "source rejected the replication handshake";
   ExpectRoundTrip(commit);
 
-  keylane::meta::PruneTerminalReceipts prune;
+  lavik::meta::PruneTerminalReceipts prune;
   prune.request_id_ = MakeRequestId(0x66);
   prune.receipts_ = {{commit.operation_id_, commit.directive_id_,
                       commit.attempt_id_, commit.directive_revision_}};
@@ -1028,50 +1023,49 @@ TEST(MetaModelCommands, DirectiveResultReceiptCommandsRoundTrip) {
 }
 
 TEST(MetaModelCommands, AdministrativeCommandsRoundTrip) {
-  EXPECT_EQ(keylane::meta::kMetaFormatVersion, 1);
-  EXPECT_EQ(keylane::meta::kMetaCommandFormatVersion, 1);
+  EXPECT_EQ(lavik::meta::kMetaFormatVersion, 1);
+  EXPECT_EQ(lavik::meta::kMetaCommandFormatVersion, 1);
   // Removed command tags are permanent holes: 9 was GrantAuthority and 14
   // was RetirePolicy. Later tags must never shift into those values.
   EXPECT_EQ(static_cast<std::uint16_t>(
-                keylane::meta::MetaCommandTag::kActivateAuthority),
+                lavik::meta::MetaCommandTag::kActivateAuthority),
             10);
+  EXPECT_EQ(static_cast<std::uint16_t>(lavik::meta::MetaCommandTag::kPutPolicy),
+            13);
   EXPECT_EQ(
-      static_cast<std::uint16_t>(keylane::meta::MetaCommandTag::kPutPolicy),
-      13);
-  EXPECT_EQ(static_cast<std::uint16_t>(
-                keylane::meta::MetaCommandTag::kSubmitOperation),
-            15);
+      static_cast<std::uint16_t>(lavik::meta::MetaCommandTag::kSubmitOperation),
+      15);
 
-  keylane::meta::PruneAudit audit;
+  lavik::meta::PruneAudit audit;
   audit.through_log_index_ = 42;
   ExpectRoundTrip(audit);
 
-  keylane::meta::PruneOperationArchive operations;
+  lavik::meta::PruneOperationArchive operations;
   operations.operation_seqs_ = {3, 8, 13};
   ExpectRoundTrip(operations);
 
-  keylane::meta::BindMetaMember bind;
+  lavik::meta::BindMetaMember bind;
   bind.server_id_ = 7;
-  bind.principal_ = "keylane://meta/7";
+  bind.principal_ = "lavik://meta/7";
   bind.data_control_endpoint_ = "10.0.0.7:7100";
   bind.ctl_endpoint_ = "10.0.0.7:7200";
   ExpectRoundTrip(bind);
 
-  keylane::meta::RetireMetaMember retire;
+  lavik::meta::RetireMetaMember retire;
   retire.server_id_ = 7;
   ExpectRoundTrip(retire);
 }
 
 TEST(MetaModelCommands, SetAuditPolicyRoundTrips) {
-  keylane::meta::SetAuditPolicy command;
+  lavik::meta::SetAuditPolicy command;
   command.request_id_ = MakeRequestId(0x74);
-  command.policy_ = keylane::meta::MetaAuditPolicy::kStrictExport;
+  command.policy_ = lavik::meta::MetaAuditPolicy::kStrictExport;
   command.attestation_ = "ticket OPS-4321";
   ExpectRoundTrip(command);
 }
 
 TEST(MetaModelCommands, SetGroupReplicationStateRoundTrip) {
-  keylane::meta::SetGroupReplicationState command;
+  lavik::meta::SetGroupReplicationState command;
   command.request_id_ = MakeRequestId(0x75);
   command.group_id_ = "g1";
   command.expected_population_manifest_revision_ = 7;
@@ -1091,47 +1085,47 @@ TEST(MetaModelCommands, SetGroupReplicationStateRoundTrip) {
 // ---------------------------------------------------------------------------
 
 TEST(MetaModelCommands, EncodeRejectsOverCapPayload) {
-  keylane::meta::PutPolicy cmd;
+  lavik::meta::PutPolicy cmd;
   cmd.request_id_ = MakeRequestId(0x80);
   cmd.policy_id_ = "migration-policy";
   cmd.version_ = 1;
-  cmd.content_ = std::string(keylane::meta::kMaxMetaPayloadBytes + 1, 'x');
+  cmd.content_ = std::string(lavik::meta::kMaxMetaPayloadBytes + 1, 'x');
   ExpectEncodeDomainReject(cmd);
   // Exactly at the cap it still encodes (bounds are inclusive).
-  cmd.content_.resize(keylane::meta::kMaxMetaPayloadBytes);
+  cmd.content_.resize(lavik::meta::kMaxMetaPayloadBytes);
   EXPECT_TRUE(EncodeMetaCommand(cmd).ok());
 }
 
 TEST(MetaModelCommands, EncodeRejectsOverCapListsAndFields) {
-  keylane::meta::RegisterNode reg = MakeRegisterNode();
-  reg.endpoints_.resize(keylane::meta::kMaxMetaEndpointsPerNode + 1, "e");
+  lavik::meta::RegisterNode reg = MakeRegisterNode();
+  reg.endpoints_.resize(lavik::meta::kMaxMetaEndpointsPerNode + 1, "e");
   ExpectEncodeDomainReject(reg);
 
-  keylane::meta::RegisterNode bad_id = MakeRegisterNode();
-  bad_id.node_id_ = std::string(keylane::meta::kMetaNodeIdBytes + 1, 'a');
+  lavik::meta::RegisterNode bad_id = MakeRegisterNode();
+  bad_id.node_id_ = std::string(lavik::meta::kMetaNodeIdBytes + 1, 'a');
   ExpectEncodeDomainReject(bad_id);
 
-  keylane::meta::ArchiveOperations arch;
+  lavik::meta::ArchiveOperations arch;
   arch.request_id_ = MakeRequestId(0x81);
-  arch.operation_seqs_.resize(keylane::meta::kMaxMetaActiveOperations + 1, 1);
+  arch.operation_seqs_.resize(lavik::meta::kMaxMetaActiveOperations + 1, 1);
   ExpectEncodeDomainReject(arch);
 }
 
 TEST(MetaModelCommands, EncodeRejectsOutOfRangeSlotRange) {
-  keylane::meta::SetSlotMap cmd;
+  lavik::meta::SetSlotMap cmd;
   cmd.request_id_ = MakeRequestId(0x82);
   cmd.ranges_ = {{100, 99, "g"}};  // first > last
   ExpectEncodeDomainReject(cmd);
-  cmd.ranges_ = {{0, keylane::meta::kMetaSlotCount, "g"}};  // slot out of range
+  cmd.ranges_ = {{0, lavik::meta::kMetaSlotCount, "g"}};  // slot out of range
   ExpectEncodeDomainReject(cmd);
 }
 
 TEST(MetaModelCommands, EncodeRejectsOversizedCommand) {
   // 16384 maximally-sized slot assignments exceed the 1 MiB command cap.
-  keylane::meta::SetSlotMap cmd;
+  lavik::meta::SetSlotMap cmd;
   cmd.request_id_ = MakeRequestId(0x83);
-  const std::string group_id(keylane::meta::kMaxMetaGroupIdBytes, 'g');
-  for (std::uint32_t i = 0; i < keylane::meta::kMaxMetaSlotRangeCount; ++i) {
+  const std::string group_id(lavik::meta::kMaxMetaGroupIdBytes, 'g');
+  for (std::uint32_t i = 0; i < lavik::meta::kMaxMetaSlotRangeCount; ++i) {
     cmd.ranges_.push_back({0, 0, group_id});
   }
   ExpectEncodeDomainReject(cmd);
@@ -1140,14 +1134,14 @@ TEST(MetaModelCommands, EncodeRejectsOversizedCommand) {
 TEST(MetaModelCommands, DecodeRejectsOverCapLengthPrefix) {
   // Hand-build a PutPolicy whose content length prefix exceeds the payload
   // cap; the reader must reject on the cap before even looking for the body.
-  keylane::meta::MetaWriter w;
-  w.WriteU16(keylane::meta::kMetaCommandFormatVersion);
+  lavik::meta::MetaWriter w;
+  w.WriteU16(lavik::meta::kMetaCommandFormatVersion);
   w.WriteU16(
-      static_cast<std::uint16_t>(keylane::meta::MetaCommandTag::kPutPolicy));
+      static_cast<std::uint16_t>(lavik::meta::MetaCommandTag::kPutPolicy));
   w.WriteRaw(std::string(16, '\0'));  // request_id
   w.WriteString("migration-policy");
   w.WriteU64(1);
-  w.WriteU32(keylane::meta::kMaxMetaPayloadBytes + 1);  // content prefix
+  w.WriteU32(lavik::meta::kMaxMetaPayloadBytes + 1);  // content prefix
   ExpectDecodeFailStop(w.buffer());
 }
 
@@ -1159,7 +1153,7 @@ TEST(MetaModelCommands, DecodeRejectsCorruptEnumAndBool) {
     ExpectDecodeFailStop(corrupt);
   }
   {
-    keylane::meta::CompleteOperation cmd;
+    lavik::meta::CompleteOperation cmd;
     cmd.request_id_ = MakeRequestId(0x84);
     cmd.operation_id_ = MakeOperationId(0x05);
     cmd.expected_revision_ = 1;
@@ -1178,7 +1172,7 @@ TEST(MetaModelCommands, DecodeRejectsTrailingBytes) {
 
 TEST(MetaModelCommands, DecodeRejectsBufferOverCommandCap) {
   std::string bytes = MustEncode(MakeRegisterNode());
-  bytes.resize(keylane::meta::kMaxMetaCommandBytes + 1, '\0');
+  bytes.resize(lavik::meta::kMaxMetaCommandBytes + 1, '\0');
   ExpectDecodeFailStop(bytes);
 }
 
@@ -1188,12 +1182,12 @@ TEST(MetaModelCommands, DecodeRejectsBufferOverCommandCap) {
 // caller-injected actor fields, plus the whole-aggregate snapshot codec.
 // ---------------------------------------------------------------------------
 
-using keylane::meta::ApplyCommitted;
-using keylane::meta::MetaApplyResult;
-using keylane::meta::MetaAuditVerdict;
-using keylane::meta::MetaStores;
+using lavik::meta::ApplyCommitted;
+using lavik::meta::MetaApplyResult;
+using lavik::meta::MetaAuditVerdict;
+using lavik::meta::MetaStores;
 
-constexpr std::string_view kActorPrincipal = "keylane://operator/alice";
+constexpr std::string_view kActorPrincipal = "lavik://operator/alice";
 constexpr std::string_view kReadableTime = "2026-09-04T00:00:00Z";
 
 // 40 lowercase hex chars, distinct per n (the data-plane node_id convention).
@@ -1205,14 +1199,14 @@ std::string MakeNodeId(std::uint32_t n) {
   return id;
 }
 
-keylane::meta::RegisterNode MakeRegisterFor(std::uint32_t n) {
-  keylane::meta::RegisterNode cmd;
+lavik::meta::RegisterNode MakeRegisterFor(std::uint32_t n) {
+  lavik::meta::RegisterNode cmd;
   cmd.request_id_ = MakeRequestId(static_cast<std::uint8_t>(n));
   cmd.node_id_ = MakeNodeId(n);
-  cmd.principal_ = "keylane://node/" + MakeNodeId(n);
+  cmd.principal_ = "lavik://node/" + MakeNodeId(n);
   cmd.endpoints_ = {"10.0.0.1:7000"};
 
-  cmd.role_ = keylane::meta::MetaNodeRole::kPrimary;
+  cmd.role_ = lavik::meta::MetaNodeRole::kPrimary;
   return cmd;
 }
 
@@ -1248,8 +1242,8 @@ void ExpectAggregateSnapshotFailStop(const MetaStores& stores) {
   ASSERT_TRUE(bytes.ok()) << bytes.status();
   const auto restored = MetaStores::Deserialize(*bytes);
   ASSERT_FALSE(restored.ok());
-  EXPECT_EQ(keylane::meta::MetaFailureClassOf(restored.status()),
-            keylane::meta::MetaFailureClass::kFailStop);
+  EXPECT_EQ(lavik::meta::MetaFailureClassOf(restored.status()),
+            lavik::meta::MetaFailureClass::kFailStop);
 }
 
 // The committed DOMAIN state (everything but the audit window): a rejected
@@ -1267,9 +1261,9 @@ std::string DomainStateBytes(const MetaStores& stores) {
 
 TEST(MetaStateApply, RegisterNodeAcceptedAndAudited) {
   MetaStores stores;
-  const keylane::meta::RegisterNode cmd = MakeRegisterFor(1);
+  const lavik::meta::RegisterNode cmd = MakeRegisterFor(1);
   const MetaApplyResult result = ApplyOk(stores, 1, cmd);
-  EXPECT_EQ(result.command_tag_, keylane::meta::MetaCommandTag::kRegisterNode);
+  EXPECT_EQ(result.command_tag_, lavik::meta::MetaCommandTag::kRegisterNode);
   EXPECT_TRUE(stores.identity_.IsActiveNode(cmd.node_id_));
 
   // Every privileged command appends exactly one audit record keyed by its
@@ -1287,7 +1281,7 @@ TEST(MetaStateApply, RegisterNodeAcceptedAndAudited) {
 
 TEST(MetaStateApply, ReplaySameIndexProducesSameVerdictStateAndAudit) {
   MetaStores stores;
-  const keylane::meta::RegisterNode cmd = MakeRegisterFor(1);
+  const lavik::meta::RegisterNode cmd = MakeRegisterFor(1);
   const MetaApplyResult first = ApplyOk(stores, 1, cmd);
   const std::string state_after_first = MustSerialize(stores);
   const auto record_after_first = stores.audit_.Find(1);
@@ -1307,11 +1301,11 @@ TEST(MetaStateApply, RejectedCommandIsAuditedAndLeavesStateUnchanged) {
   ApplyOk(stores, 1, MakeRegisterFor(1));
   // Same principal bound to a second node_id: domain rejection because the
   // binding is globally one-to-one.
-  keylane::meta::RegisterNode conflict = MakeRegisterFor(2);
-  conflict.principal_ = "keylane://node/" + MakeNodeId(1);
+  lavik::meta::RegisterNode conflict = MakeRegisterFor(2);
+  conflict.principal_ = "lavik://node/" + MakeNodeId(1);
   const std::string domain_before = DomainStateBytes(stores);
   const MetaApplyResult result = ApplyRejected(stores, 2, conflict);
-  EXPECT_EQ(result.command_tag_, keylane::meta::MetaCommandTag::kRegisterNode);
+  EXPECT_EQ(result.command_tag_, lavik::meta::MetaCommandTag::kRegisterNode);
 
   // Domain state is unchanged; the audit window still grew by the rejection
   // record (the index is consumed).
@@ -1331,7 +1325,7 @@ TEST(MetaStateApply, UpdateAndRetireNodeThroughDispatcher) {
   ApplyOk(stores, 1, MakeRegisterFor(1));
   const std::string node_id = MakeNodeId(1);
 
-  keylane::meta::UpdateNode update;
+  lavik::meta::UpdateNode update;
   update.request_id_ = MakeRequestId(0x21);
   update.node_id_ = node_id;
   update.expected_revision_ = 1;
@@ -1346,13 +1340,13 @@ TEST(MetaStateApply, UpdateAndRetireNodeThroughDispatcher) {
 
   // CAS conflict: a DIFFERENT update carrying the stale expected_revision is
   // a domain rejection.
-  keylane::meta::UpdateNode stale = update;
+  lavik::meta::UpdateNode stale = update;
   stale.request_id_ = MakeRequestId(0x23);
   stale.endpoints_ = {"10.0.0.10:7000"};
   ApplyRejected(stores, 3, stale);
   EXPECT_EQ(stores.identity_.FindNode(node_id)->revision_, 2u);
 
-  keylane::meta::RetireNode retire;
+  lavik::meta::RetireNode retire;
   retire.request_id_ = MakeRequestId(0x22);
   retire.node_id_ = node_id;
   retire.expected_revision_ = 2;
@@ -1366,7 +1360,7 @@ TEST(MetaStateApply, UpdateAndRetireNodeThroughDispatcher) {
 
 TEST(MetaStateApply, CreateGroupOwnsInitiallyFencedAuthority) {
   MetaStores stores;
-  keylane::meta::CreateGroup cmd;
+  lavik::meta::CreateGroup cmd;
   cmd.request_id_ = MakeRequestId(0x30);
   cmd.group_id_ = "g1";
   cmd.new_topology_epoch_ = 1;
@@ -1389,7 +1383,7 @@ TEST(MetaStateApply, CreateGroupOwnsInitiallyFencedAuthority) {
 
 TEST(MetaStateApply, CreateGroupEpochMustBeExactlyNext) {
   MetaStores stores;
-  keylane::meta::CreateGroup cmd;
+  lavik::meta::CreateGroup cmd;
   cmd.request_id_ = MakeRequestId(0x31);
   cmd.group_id_ = "g1";
   cmd.new_topology_epoch_ = 7;  // not current(0)+1
@@ -1402,7 +1396,7 @@ TEST(MetaStateApply, CreateGroupEpochMustBeExactlyNext) {
 TEST(MetaStateApply, MetaStoresSnapshotRoundTrip) {
   MetaStores stores;
   ApplyOk(stores, 1, MakeRegisterFor(1));
-  keylane::meta::CreateGroup group;
+  lavik::meta::CreateGroup group;
   group.request_id_ = MakeRequestId(0x32);
   group.group_id_ = "g1";
   group.new_topology_epoch_ = 1;
@@ -1420,7 +1414,7 @@ TEST(MetaStateApply, MetaStoresSnapshotRoundTrip) {
   const auto* envelope = reinterpret_cast<const unsigned char*>(bytes.data());
   EXPECT_EQ(static_cast<std::uint16_t>(envelope[0] | (envelope[1] << 8)), 1);
   EXPECT_EQ(static_cast<std::uint16_t>(envelope[0] | (envelope[1] << 8)),
-            keylane::meta::kMetaFormatVersion);
+            lavik::meta::kMetaFormatVersion);
 }
 
 TEST(MetaStateApply, MetaStoresDeserializeRejectsCorruption) {
@@ -1432,13 +1426,13 @@ TEST(MetaStateApply, MetaStoresDeserializeRejectsCorruption) {
     const auto decoded =
         MetaStores::Deserialize(std::string_view(bytes).substr(0, len));
     ASSERT_FALSE(decoded.ok()) << "len=" << len;
-    EXPECT_EQ(keylane::meta::MetaFailureClassOf(decoded.status()),
-              keylane::meta::MetaFailureClass::kFailStop);
+    EXPECT_EQ(lavik::meta::MetaFailureClassOf(decoded.status()),
+              lavik::meta::MetaFailureClass::kFailStop);
   }
   const auto trailing = MetaStores::Deserialize(bytes + '\0');
   ASSERT_FALSE(trailing.ok());
-  EXPECT_EQ(keylane::meta::MetaFailureClassOf(trailing.status()),
-            keylane::meta::MetaFailureClass::kFailStop);
+  EXPECT_EQ(lavik::meta::MetaFailureClassOf(trailing.status()),
+            lavik::meta::MetaFailureClass::kFailStop);
 
   for (const char version : {'\x02', '\x03'}) {
     std::string future = bytes;
@@ -1446,8 +1440,8 @@ TEST(MetaStateApply, MetaStoresDeserializeRejectsCorruption) {
     future[1] = '\0';
     const auto unsupported = MetaStores::Deserialize(future);
     ASSERT_FALSE(unsupported.ok());
-    EXPECT_EQ(keylane::meta::MetaFailureClassOf(unsupported.status()),
-              keylane::meta::MetaFailureClass::kFailStop);
+    EXPECT_EQ(lavik::meta::MetaFailureClassOf(unsupported.status()),
+              lavik::meta::MetaFailureClass::kFailStop);
     EXPECT_NE(unsupported.status().message().find("version"),
               std::string_view::npos);
   }
@@ -1469,8 +1463,8 @@ TEST(MetaStateApply, OverCapActorContextRejectedBeforeDispatch) {
   // The trusted entry guarantees bounded actor fields; an over-cap field is
   // an entry-contract violation. The command is rejected before dispatch so
   // committed state stays unchanged and identical on every node.
-  const keylane::meta::RegisterNode cmd = MakeRegisterFor(1);
-  const std::string huge_principal(keylane::meta::kMaxMetaPrincipalBytes + 1,
+  const lavik::meta::RegisterNode cmd = MakeRegisterFor(1);
+  const std::string huge_principal(lavik::meta::kMaxMetaPrincipalBytes + 1,
                                    'p');
   const MetaApplyResult result =
       ApplyCommitted(stores, 1, cmd, huge_principal, kReadableTime);
@@ -1484,10 +1478,10 @@ TEST(MetaStateApply, OverCapActorContextRejectedBeforeDispatch) {
 // every fixture step is itself exercised through the dispatcher.
 // ---------------------------------------------------------------------------
 
-keylane::meta::PutPolicy MakePutPolicy(const std::string& policy_id,
-                                       std::uint64_t version,
-                                       const std::string& content) {
-  keylane::meta::PutPolicy cmd;
+lavik::meta::PutPolicy MakePutPolicy(const std::string& policy_id,
+                                     std::uint64_t version,
+                                     const std::string& content) {
+  lavik::meta::PutPolicy cmd;
   cmd.request_id_ = MakeRequestId(static_cast<std::uint8_t>(0x50 + version));
   cmd.policy_id_ = policy_id;
   cmd.version_ = version;
@@ -1495,25 +1489,25 @@ keylane::meta::PutPolicy MakePutPolicy(const std::string& policy_id,
   return cmd;
 }
 
-keylane::meta::CreateGroup MakeCreateGroup(const std::string& group_id,
-                                           std::uint64_t topology_epoch) {
-  keylane::meta::CreateGroup cmd;
+lavik::meta::CreateGroup MakeCreateGroup(const std::string& group_id,
+                                         std::uint64_t topology_epoch) {
+  lavik::meta::CreateGroup cmd;
   cmd.request_id_ = MakeRequestId(0x30);
   cmd.group_id_ = group_id;
   cmd.new_topology_epoch_ = topology_epoch;
   return cmd;
 }
 
-keylane::meta::AssignNodeToGroup MakeAssign(const std::string& group_id,
-                                            std::uint32_t node,
-                                            std::uint64_t expected_revision,
-                                            std::uint64_t topology_epoch = 0) {
-  keylane::meta::AssignNodeToGroup cmd;
+lavik::meta::AssignNodeToGroup MakeAssign(const std::string& group_id,
+                                          std::uint32_t node,
+                                          std::uint64_t expected_revision,
+                                          std::uint64_t topology_epoch = 0) {
+  lavik::meta::AssignNodeToGroup cmd;
   cmd.request_id_ = MakeRequestId(0x31);
   cmd.group_id_ = group_id;
   cmd.node_id_ = MakeNodeId(node);
   cmd.assignment_id_.fill(static_cast<std::uint8_t>(node));
-  cmd.role_ = keylane::meta::MetaNodeRole::kPrimary;
+  cmd.role_ = lavik::meta::MetaNodeRole::kPrimary;
   cmd.expected_revision_ = expected_revision;
   cmd.new_topology_epoch_ =
       topology_epoch == 0 ? expected_revision + 1 : topology_epoch;
@@ -1522,11 +1516,11 @@ keylane::meta::AssignNodeToGroup MakeAssign(const std::string& group_id,
 
 // A fully valid ActivateAuthority against the state built by the fixture
 // helpers: group with term 1 begun and owner a member.
-keylane::meta::ActivateAuthority MakeActivate(const std::string& group_id,
-                                              std::uint64_t expected_term,
-                                              std::uint32_t owner_node,
-                                              std::uint64_t topology_epoch) {
-  keylane::meta::ActivateAuthority cmd;
+lavik::meta::ActivateAuthority MakeActivate(const std::string& group_id,
+                                            std::uint64_t expected_term,
+                                            std::uint32_t owner_node,
+                                            std::uint64_t topology_epoch) {
+  lavik::meta::ActivateAuthority cmd;
   cmd.request_id_ = MakeRequestId(0x42);
   cmd.group_id_ = group_id;
   cmd.expected_term_ = expected_term;
@@ -1546,9 +1540,9 @@ void SetupActivatedGroupPrerequisites(MetaStores& stores, std::uint32_t node,
   ApplyOk(stores, 3, MakeAssign(group_id, node, 1));
   ApplyOk(
       stores, 4,
-      MakePutPolicy(std::string(keylane::meta::kAuthorityLeasePolicyId), 1,
+      MakePutPolicy(std::string(lavik::meta::kAuthorityLeasePolicyId), 1,
                     "{\"kind\":\"authority-lease-v1\",\"duration_ms\":5000}"));
-  keylane::meta::BeginGroupTerm begin;
+  lavik::meta::BeginGroupTerm begin;
   begin.request_id_ = MakeRequestId(0x40);
   begin.group_id_ = group_id;
   begin.expected_term_ = 0;
@@ -1569,7 +1563,7 @@ TEST(MetaStateApply, AssignNodeToGroupRequiresRegisteredActiveNode) {
 
   // Retired node (terminal): rejected as well. Retire is legal here because
   // the node holds no membership.
-  keylane::meta::RetireNode retire;
+  lavik::meta::RetireNode retire;
   retire.request_id_ = MakeRequestId(0x22);
   retire.node_id_ = MakeNodeId(2);
   retire.expected_revision_ = 1;
@@ -1606,7 +1600,7 @@ TEST(MetaStateApply, RetireNodeWithMembershipRejected) {
   MetaStores stores;
   SetupActivatedGroupPrerequisites(stores, 1, "g1");
 
-  keylane::meta::RetireNode retire;
+  lavik::meta::RetireNode retire;
   retire.request_id_ = MakeRequestId(0x22);
   retire.node_id_ = MakeNodeId(1);
   retire.expected_revision_ = 1;
@@ -1615,7 +1609,7 @@ TEST(MetaStateApply, RetireNodeWithMembershipRejected) {
   EXPECT_TRUE(stores.identity_.IsActiveNode(MakeNodeId(1)));
 
   // Remove the membership first, then retire succeeds.
-  keylane::meta::RemoveNodeFromGroup remove;
+  lavik::meta::RemoveNodeFromGroup remove;
   remove.request_id_ = MakeRequestId(0x32);
   remove.group_id_ = "g1";
   remove.node_id_ = MakeNodeId(1);
@@ -1631,7 +1625,7 @@ TEST(MetaStateApply, RemoveNodeFromGroupOfGrantOwnerRejected) {
   SetupActivatedGroupPrerequisites(stores, 1, "g1");
   ApplyOk(stores, 6, MetaCommand{MakeActivate("g1", 1, 1, 3)});
 
-  keylane::meta::RemoveNodeFromGroup remove;
+  lavik::meta::RemoveNodeFromGroup remove;
   remove.request_id_ = MakeRequestId(0x32);
   remove.group_id_ = "g1";
   remove.node_id_ = MakeNodeId(1);
@@ -1643,7 +1637,7 @@ TEST(MetaStateApply, RemoveNodeFromGroupOfGrantOwnerRejected) {
   ApplyRejected(stores, 7, remove);
   EXPECT_TRUE(stores.topology_.FindGroup("g1")->members_.size() == 1u);
 
-  keylane::meta::FenceGroup fence;
+  lavik::meta::FenceGroup fence;
   fence.request_id_ = MakeRequestId(0x44);
   fence.group_id_ = "g1";
   fence.expected_term_ = 1;
@@ -1658,7 +1652,7 @@ TEST(MetaStateApply, BeginGroupTermRaisesTermInBothStores) {
   SetupActivatedGroupPrerequisites(stores, 1, "g1");
   ApplyOk(stores, 6, MetaCommand{MakeActivate("g1", 1, 1, 3)});
 
-  keylane::meta::BeginGroupTerm begin;
+  lavik::meta::BeginGroupTerm begin;
   begin.request_id_ = MakeRequestId(0x41);
   begin.group_id_ = "g1";
   begin.expected_term_ = 1;
@@ -1684,17 +1678,15 @@ TEST(MetaStateApply, BeginGroupTermRaisesTermInBothStores) {
   ApplyRejected(stores, 8, MetaCommand{MakeActivate("g1", 1, 1, 4)});
 }
 
-
-
 TEST(MetaStateApply, GroupReplicationStateAdvancesWithTopologyEpoch) {
   MetaStores stores;
   ApplyOk(stores, 1, MakeCreateGroup("g1", 1));
-  keylane::meta::PutPopulationManifest put;
+  lavik::meta::PutPopulationManifest put;
   put.entries_ = {{1, 1}};
   put.manifest_digest_ =
-      keylane::meta::MetaPopulationManifestStore::CanonicalDigest(put.entries_);
+      lavik::meta::MetaPopulationManifestStore::CanonicalDigest(put.entries_);
   ApplyOk(stores, 2, put);
-  keylane::meta::SetGroupReplicationState update;
+  lavik::meta::SetGroupReplicationState update;
   update.request_id_ = MakeRequestId(0x79);
   update.group_id_ = "g1";
   update.new_population_manifest_revision_ = 1;
@@ -1708,7 +1700,7 @@ TEST(MetaStateApply, GroupReplicationStateAdvancesWithTopologyEpoch) {
   EXPECT_EQ(group->record_.partition_replication_epoch_, 1u);
   EXPECT_EQ(stores.topology_.TopologyEpoch(), 2u);
 
-  keylane::meta::SetGroupReplicationState stale = update;
+  lavik::meta::SetGroupReplicationState stale = update;
   stale.request_id_ = MakeRequestId(0x7a);
   stale.new_population_manifest_revision_ = 2;
   stale.new_topology_epoch_ = 3;
@@ -1719,18 +1711,18 @@ TEST(MetaStateApply, ManifestRevisionDistinguishesAtoBtoAAndGuardsPrune) {
   MetaStores stores;
   ApplyOk(stores, 1, MakeCreateGroup("g1", 1));
 
-  keylane::meta::PutPopulationManifest a;
+  lavik::meta::PutPopulationManifest a;
   a.entries_ = {{1, 10}};
   a.manifest_digest_ =
-      keylane::meta::MetaPopulationManifestStore::CanonicalDigest(a.entries_);
-  keylane::meta::PutPopulationManifest b;
+      lavik::meta::MetaPopulationManifestStore::CanonicalDigest(a.entries_);
+  lavik::meta::PutPopulationManifest b;
   b.entries_ = {{1, 11}};
   b.manifest_digest_ =
-      keylane::meta::MetaPopulationManifestStore::CanonicalDigest(b.entries_);
+      lavik::meta::MetaPopulationManifestStore::CanonicalDigest(b.entries_);
   ApplyOk(stores, 2, a);
   ApplyOk(stores, 3, b);
 
-  keylane::meta::SetGroupReplicationState set;
+  lavik::meta::SetGroupReplicationState set;
   set.group_id_ = "g1";
   set.new_population_manifest_revision_ = 1;
   set.new_population_manifest_digest_ = a.manifest_digest_;
@@ -1754,7 +1746,7 @@ TEST(MetaStateApply, ManifestRevisionDistinguishesAtoBtoAAndGuardsPrune) {
   EXPECT_EQ(group->record_.population_manifest_revision_, 3u);
   EXPECT_EQ(group->record_.population_manifest_digest_, a.manifest_digest_);
 
-  keylane::meta::PrunePopulationManifest prune;
+  lavik::meta::PrunePopulationManifest prune;
   prune.manifest_digest_ = a.manifest_digest_;
   ApplyRejected(stores, 7, prune);
   prune.manifest_digest_ = b.manifest_digest_;
@@ -1767,7 +1759,7 @@ TEST(MetaStateApply, SetSlotMapThroughDispatcher) {
   SetupActivatedGroupPrerequisites(stores, 1, "g1");
   ApplyOk(stores, 6, MakeCreateGroup("g2", 3));
 
-  keylane::meta::SetSlotMap slots;
+  lavik::meta::SetSlotMap slots;
   slots.request_id_ = MakeRequestId(0x33);
   slots.ranges_ = {{0, 9999, "g1"}, {10000, 16383, "g2"}};
   slots.new_topology_epoch_ = 4;
@@ -1783,7 +1775,7 @@ TEST(MetaStateApply, SetSlotMapThroughDispatcher) {
 
   // A range referencing an unknown group is rejected; the map is absolute,
   // so the whole command is atomic.
-  keylane::meta::SetSlotMap bad = slots;
+  lavik::meta::SetSlotMap bad = slots;
   bad.request_id_ = MakeRequestId(0x34);
   bad.new_topology_epoch_ = 5;
   bad.ranges_ = {{0, 1, "g-unknown"}};
@@ -1794,14 +1786,14 @@ TEST(MetaStateApply, SetSlotMapThroughDispatcher) {
 TEST(MetaStateApply, SetSlotMapCannotClearSlotsCoveredByAnActiveGrant) {
   MetaStores stores;
   SetupActivatedGroupPrerequisites(stores, 1, "g1");
-  keylane::meta::SetSlotMap initial;
+  lavik::meta::SetSlotMap initial;
   initial.request_id_ = MakeRequestId(0x82);
   initial.ranges_ = {{0, 16383, "g1"}};
   initial.new_topology_epoch_ = 3;
   ApplyOk(stores, 6, MetaCommand{initial});
   ApplyOk(stores, 7, MetaCommand{MakeActivate("g1", 1, 1, 4)});
 
-  keylane::meta::SetSlotMap clear;
+  lavik::meta::SetSlotMap clear;
   clear.request_id_ = MakeRequestId(0x83);
   clear.new_topology_epoch_ = 5;
   const std::string before = DomainStateBytes(stores);
@@ -1817,14 +1809,14 @@ TEST(MetaStateApply, SetSlotMapRequiresEveryAffectedGrantToBeFenced) {
   ApplyOk(stores, 7, MakeCreateGroup("g2", 3));
   ApplyOk(stores, 8, MakeAssign("g2", 2, 1, 4));
 
-  keylane::meta::BeginGroupTerm begin_g2;
+  lavik::meta::BeginGroupTerm begin_g2;
   begin_g2.request_id_ = MakeRequestId(0x84);
   begin_g2.group_id_ = "g2";
   begin_g2.expected_term_ = 0;
   begin_g2.new_term_ = 1;
   ApplyOk(stores, 9, MetaCommand{begin_g2});
 
-  keylane::meta::SetSlotMap initial;
+  lavik::meta::SetSlotMap initial;
   initial.request_id_ = MakeRequestId(0x85);
   initial.ranges_ = {{0, 8191, "g1"}, {8192, 16383, "g2"}};
   initial.new_topology_epoch_ = 5;
@@ -1832,7 +1824,7 @@ TEST(MetaStateApply, SetSlotMapRequiresEveryAffectedGrantToBeFenced) {
   ApplyOk(stores, 11, MetaCommand{MakeActivate("g1", 1, 1, 6)});
   ApplyOk(stores, 12, MetaCommand{MakeActivate("g2", 1, 2, 7)});
 
-  keylane::meta::SetSlotMap moved = initial;
+  lavik::meta::SetSlotMap moved = initial;
   moved.request_id_ = MakeRequestId(0x86);
   moved.ranges_ = {{0, 4095, "g1"}, {4096, 16383, "g2"}};
   moved.new_topology_epoch_ = 8;
@@ -1841,7 +1833,7 @@ TEST(MetaStateApply, SetSlotMapRequiresEveryAffectedGrantToBeFenced) {
   EXPECT_NE(source_live.detail_.find("fenced"), std::string::npos);
   EXPECT_EQ(DomainStateBytes(stores), before);
 
-  keylane::meta::FenceGroup fence_g1;
+  lavik::meta::FenceGroup fence_g1;
   fence_g1.request_id_ = MakeRequestId(0x87);
   fence_g1.group_id_ = "g1";
   fence_g1.expected_term_ = 1;
@@ -1856,7 +1848,7 @@ TEST(MetaStateApply, SetSlotMapRequiresEveryAffectedGrantToBeFenced) {
   EXPECT_EQ(stores.topology_.SlotOwner(5000), std::optional<std::string>("g1"));
   EXPECT_EQ(stores.topology_.TopologyEpoch(), 7u);
 
-  keylane::meta::FenceGroup fence_g2;
+  lavik::meta::FenceGroup fence_g2;
   fence_g2.request_id_ = MakeRequestId(0x88);
   fence_g2.group_id_ = "g2";
   fence_g2.expected_term_ = 1;
@@ -1892,7 +1884,7 @@ TEST(MetaStateApply, ActivateAuthorityRejectionLeavesBothHalvesUntouched) {
 
   std::uint64_t index = 7;
   const auto expect_rejected_untouched =
-      [&](keylane::meta::ActivateAuthority cmd) {
+      [&](lavik::meta::ActivateAuthority cmd) {
         ApplyRejected(stores, index, MetaCommand{std::move(cmd)});
         ExpectPreActivationState(stores, "g1");
         ++index;
@@ -1906,7 +1898,7 @@ TEST(MetaStateApply, ActivateAuthorityRejectionLeavesBothHalvesUntouched) {
   expect_rejected_untouched(MakeActivate("g1", 1, 2, 3));
   // New owner not registered at all.
   {
-    keylane::meta::ActivateAuthority cmd = MakeActivate("g1", 1, 1, 3);
+    lavik::meta::ActivateAuthority cmd = MakeActivate("g1", 1, 1, 3);
     cmd.new_owner_ = MakeNodeId(99);
     expect_rejected_untouched(std::move(cmd));
   }
@@ -1919,7 +1911,7 @@ TEST(MetaStateApply, ActivateAuthorityRequiresABegunNonzeroTerm) {
   ApplyOk(stores, 3, MakeAssign("g1", 1, 1));
   ApplyOk(
       stores, 4,
-      MakePutPolicy(std::string(keylane::meta::kAuthorityLeasePolicyId), 1,
+      MakePutPolicy(std::string(lavik::meta::kAuthorityLeasePolicyId), 1,
                     "{\"kind\":\"authority-lease-v1\",\"duration_ms\":5000}"));
 
   ApplyRejected(stores, 5, MetaCommand{MakeActivate("g1", 0, 1, 3)});
@@ -1940,7 +1932,7 @@ TEST(MetaStateApply, ActivateAuthorityAcceptedWritesBothHalvesAtomically) {
   const MetaApplyResult result =
       ApplyOk(stores, 6, MetaCommand{MakeActivate("g1", 1, 1, 3)});
   EXPECT_EQ(result.command_tag_,
-            keylane::meta::MetaCommandTag::kActivateAuthority);
+            lavik::meta::MetaCommandTag::kActivateAuthority);
 
   // Grant half: the one Grant for the CURRENT term is installed; activation
   // never moves the term.
@@ -1960,7 +1952,7 @@ TEST(MetaStateApply, ActivateAuthorityAcceptedWritesBothHalvesAtomically) {
 TEST(MetaStateApply, ActivateAuthorityReplaySameIndexIsIdempotent) {
   MetaStores stores;
   SetupActivatedGroupPrerequisites(stores, 1, "g1");
-  const keylane::meta::ActivateAuthority cmd = MakeActivate("g1", 1, 1, 3);
+  const lavik::meta::ActivateAuthority cmd = MakeActivate("g1", 1, 1, 3);
   const MetaApplyResult first = ApplyOk(stores, 6, MetaCommand{cmd});
   const std::string state_after_first = MustSerialize(stores);
 
@@ -1980,7 +1972,7 @@ TEST(MetaStateApply, ActivateAuthorityReplaySameIndexIsIdempotent) {
 
   // A genuinely different activation is rejected: the term already has its
   // one Grant and a changed topology epoch is not its exact post-effect.
-  keylane::meta::ActivateAuthority different = cmd;
+  lavik::meta::ActivateAuthority different = cmd;
   different.request_id_ = MakeRequestId(0x45);
   different.new_topology_epoch_ = 4;
   ApplyRejected(stores, 8, MetaCommand{different});
@@ -2001,7 +1993,7 @@ TEST(MetaStateApply, FenceRequiresNewTermBeforeSameOwnerReauthorization) {
   ApplyRejected(stores, 10, MetaCommand{MakeActivate("g1", 1, 1, 5)});
   EXPECT_EQ(DomainStateBytes(stores), active);
 
-  keylane::meta::FenceGroup fence;
+  lavik::meta::FenceGroup fence;
   fence.group_id_ = "g1";
   fence.expected_term_ = 1;
   fence.new_term_ = 1;
@@ -2034,9 +2026,9 @@ TEST(MetaStateApply, FenceRequiresNewTermBeforeSameOwnerReauthorization) {
 // of the SubmitOperation; the journal persists the injected ActorContext.
 // ---------------------------------------------------------------------------
 
-keylane::meta::SubmitOperation MakeSubmit(std::uint8_t seed,
-                                          std::uint8_t intent_seed) {
-  keylane::meta::SubmitOperation cmd;
+lavik::meta::SubmitOperation MakeSubmit(std::uint8_t seed,
+                                        std::uint8_t intent_seed) {
+  lavik::meta::SubmitOperation cmd;
   cmd.request_id_ = MakeRequestId(seed);
   cmd.operation_id_ = MakeOperationId(seed);
   cmd.kind_ = "migration";
@@ -2045,9 +2037,9 @@ keylane::meta::SubmitOperation MakeSubmit(std::uint8_t seed,
   return cmd;
 }
 
-keylane::meta::SubmitOperation MakeClusterCreateSubmit(
+lavik::meta::SubmitOperation MakeClusterCreateSubmit(
     std::uint8_t seed, std::string group_id = "group-a") {
-  keylane::meta::ClusterCreateManifestV1 manifest;
+  lavik::meta::ClusterCreateManifestV1 manifest;
   manifest.schema_version_ = 1;
   manifest.meta_members_ = {{1, "tcp://127.0.0.1:7101", "tcp://127.0.0.1:7301",
                              "tcp://127.0.0.1:7201"}};
@@ -2056,30 +2048,28 @@ keylane::meta::SubmitOperation MakeClusterCreateSubmit(
   manifest.slot_ranges_ = {{0, 16383, group_id}};
   const auto operation_id = MakeOperationId(seed);
   const auto intent =
-      keylane::meta::EncodeClusterCreateRequest(manifest, operation_id);
+      lavik::meta::EncodeClusterCreateRequest(manifest, operation_id);
   EXPECT_TRUE(intent.ok()) << intent.status();
 
-  keylane::meta::SubmitOperation cmd;
+  lavik::meta::SubmitOperation cmd;
   cmd.request_id_ = MakeRequestId(seed);
   cmd.operation_id_ = operation_id;
-  cmd.kind_ = keylane::meta::kMetaClusterCreateOperationKind;
+  cmd.kind_ = lavik::meta::kMetaClusterCreateOperationKind;
   cmd.intent_ = intent.value_or("");
-  cmd.intent_hash_ = keylane::meta::MetaSha256(cmd.intent_);
+  cmd.intent_hash_ = lavik::meta::MetaSha256(cmd.intent_);
   return cmd;
 }
 
-keylane::meta::PutPolicy MakeAutomaticFailoverPolicy(
-    std::uint64_t version = 1) {
+lavik::meta::PutPolicy MakeAutomaticFailoverPolicy(std::uint64_t version = 1) {
   return MakePutPolicy(
-      std::string(keylane::meta::kAutomaticUncontrolledFailoverPolicyId),
-      version,
+      std::string(lavik::meta::kAutomaticUncontrolledFailoverPolicyId), version,
       "{\"kind\":\"automatic-uncontrolled-failover-v1\",\"enabled\":true,"
       "\"suspect_after_ms\":5000}");
 }
 
-keylane::meta::PutPolicy MakeAuthorityLeasePolicy(std::uint64_t version = 1) {
+lavik::meta::PutPolicy MakeAuthorityLeasePolicy(std::uint64_t version = 1) {
   return MakePutPolicy(
-      std::string(keylane::meta::kAuthorityLeasePolicyId), version,
+      std::string(lavik::meta::kAuthorityLeasePolicyId), version,
       "{\"kind\":\"authority-lease-v1\",\"duration_ms\":5000}");
 }
 
@@ -2089,7 +2079,7 @@ void SeedRequiredCurrentPolicies(MetaStores& stores) {
 }
 
 std::string ClusterCreateFailureSummaryForTest(
-    const keylane::meta::MetaOperationId& id) {
+    const lavik::meta::MetaOperationId& id) {
   return absl::StrCat(
       "cluster-create provisioning failed; root-operation=",
       absl::BytesToHexString(std::string_view(
@@ -2102,7 +2092,7 @@ TEST(MetaStateApply, ClusterCreateRootAtomicallyOwnsLifecycle) {
   ApplyOk(stores, 11, MetaCommand{root});
 
   const auto& creating = stores.topology_.ClusterLifecycle();
-  EXPECT_EQ(creating.state_, keylane::meta::MetaClusterLifecycle::kCreating);
+  EXPECT_EQ(creating.state_, lavik::meta::MetaClusterLifecycle::kCreating);
   EXPECT_EQ(creating.root_operation_id_, root.operation_id_);
   EXPECT_EQ(creating.genesis_commit_index_, 11u);
   EXPECT_EQ(creating.Revision(), 1u);
@@ -2122,7 +2112,7 @@ TEST(MetaStateApply, ClusterCreateRootAtomicallyOwnsLifecycle) {
   EXPECT_FALSE(
       stores.operation_.FindOperation(different.operation_id_).has_value());
 
-  keylane::meta::CompleteOperation complete;
+  lavik::meta::CompleteOperation complete;
   complete.request_id_ = MakeRequestId(0x74);
   complete.operation_id_ = root.operation_id_;
   complete.expected_revision_ = 0;
@@ -2130,19 +2120,19 @@ TEST(MetaStateApply, ClusterCreateRootAtomicallyOwnsLifecycle) {
   SeedRequiredCurrentPolicies(stores);
   ApplyOk(stores, 14, MetaCommand{complete});
   EXPECT_EQ(stores.topology_.ClusterLifecycle().state_,
-            keylane::meta::MetaClusterLifecycle::kCreated);
+            lavik::meta::MetaClusterLifecycle::kCreated);
   EXPECT_EQ(stores.topology_.ClusterLifecycle().Revision(), 2u);
 
   // Exact Genesis replay validates both already-applied halves and remains a
   // no-op after the root reaches its terminal state.
   ApplyOk(stores, 11, MetaCommand{root});
   EXPECT_EQ(stores.topology_.ClusterLifecycle().state_,
-            keylane::meta::MetaClusterLifecycle::kCreated);
+            lavik::meta::MetaClusterLifecycle::kCreated);
 
-  keylane::meta::ArchiveOperations archive;
+  lavik::meta::ArchiveOperations archive;
   archive.operation_seqs_ = {11};
   ApplyOk(stores, 15, MetaCommand{archive});
-  keylane::meta::PruneOperationArchive prune;
+  lavik::meta::PruneOperationArchive prune;
   prune.operation_seqs_ = {11};
   ApplyOk(stores, 16, MetaCommand{prune});
   EXPECT_FALSE(stores.operation_.OperationKnown(root.operation_id_));
@@ -2169,7 +2159,7 @@ TEST(MetaStateApply,
             MetaCommand{install_automatic ? MakeAutomaticFailoverPolicy()
                                           : MakeAuthorityLeasePolicy()});
 
-    keylane::meta::CompleteOperation complete;
+    lavik::meta::CompleteOperation complete;
     complete.request_id_ = MakeRequestId(0x6c);
     complete.operation_id_ = root.operation_id_;
     complete.expected_revision_ = 0;
@@ -2177,11 +2167,11 @@ TEST(MetaStateApply,
     ApplyRejected(stores, 3, MetaCommand{complete});
 
     EXPECT_EQ(stores.topology_.ClusterLifecycle().state_,
-              keylane::meta::MetaClusterLifecycle::kCreating);
+              lavik::meta::MetaClusterLifecycle::kCreating);
     ASSERT_TRUE(
         stores.operation_.FindOperation(root.operation_id_).has_value());
     EXPECT_EQ(stores.operation_.FindOperation(root.operation_id_)->lifecycle_,
-              keylane::meta::MetaOperationLifecycle::kSubmitted);
+              lavik::meta::MetaOperationLifecycle::kSubmitted);
     const auto restored = MetaStores::Deserialize(MustSerialize(stores));
     EXPECT_TRUE(restored.ok()) << restored.status();
   };
@@ -2204,54 +2194,52 @@ TEST(MetaStateApply,
     ApplyOk(
         stores, log_index++,
         MakePutPolicy(
-            std::string(keylane::meta::kAutomaticUncontrolledFailoverPolicyId),
-            1, automatic_raw));
+            std::string(lavik::meta::kAutomaticUncontrolledFailoverPolicyId), 1,
+            automatic_raw));
     if (seed_both_families) {
       ApplyOk(stores, log_index++,
-              MakePutPolicy(std::string(keylane::meta::kAuthorityLeasePolicyId),
+              MakePutPolicy(std::string(lavik::meta::kAuthorityLeasePolicyId),
                             1, lease_raw));
     }
-    EXPECT_FALSE(keylane::meta::HasDataClusterArtifacts(stores));
+    EXPECT_FALSE(lavik::meta::HasDataClusterArtifacts(stores));
 
     const auto root = MakeClusterCreateSubmit(
         seed_both_families ? std::uint8_t{0x6d} : std::uint8_t{0x6e});
     ApplyOk(stores, log_index, MetaCommand{root});
 
     EXPECT_EQ(stores.topology_.ClusterLifecycle().state_,
-              keylane::meta::MetaClusterLifecycle::kCreating);
+              lavik::meta::MetaClusterLifecycle::kCreating);
     ASSERT_TRUE(
         stores.policy_
             .FindVersion(
                 std::string(
-                    keylane::meta::kAutomaticUncontrolledFailoverPolicyId),
+                    lavik::meta::kAutomaticUncontrolledFailoverPolicyId),
                 1)
             .has_value());
-    EXPECT_EQ(
-        stores.policy_
-            .FindVersion(
-                std::string(
-                    keylane::meta::kAutomaticUncontrolledFailoverPolicyId),
-                1)
-            ->content_,
-        automatic_raw);
+    EXPECT_EQ(stores.policy_
+                  .FindVersion(
+                      std::string(
+                          lavik::meta::kAutomaticUncontrolledFailoverPolicyId),
+                      1)
+                  ->content_,
+              automatic_raw);
     EXPECT_EQ(
         stores.policy_.CurrentAutomaticUncontrolledFailover(),
-        (keylane::meta::MetaAutomaticUncontrolledFailoverPolicy{
+        (lavik::meta::MetaAutomaticUncontrolledFailoverPolicy{
             .version_ = 1, .enabled_ = false, .suspect_after_ms_ = 9000}));
     if (seed_both_families) {
       ASSERT_TRUE(
           stores.policy_
-              .FindVersion(std::string(keylane::meta::kAuthorityLeasePolicyId),
-                           1)
+              .FindVersion(std::string(lavik::meta::kAuthorityLeasePolicyId), 1)
               .has_value());
-      EXPECT_EQ(stores.policy_
-                    .FindVersion(
-                        std::string(keylane::meta::kAuthorityLeasePolicyId), 1)
-                    ->content_,
-                lease_raw);
+      EXPECT_EQ(
+          stores.policy_
+              .FindVersion(std::string(lavik::meta::kAuthorityLeasePolicyId), 1)
+              ->content_,
+          lease_raw);
       EXPECT_EQ(stores.policy_.CurrentAuthorityLease(),
-                (keylane::meta::MetaAuthorityLeasePolicy{
-                    .version_ = 1, .duration_ms_ = 7000}));
+                (lavik::meta::MetaAuthorityLeasePolicy{.version_ = 1,
+                                                       .duration_ms_ = 7000}));
     }
   }
 }
@@ -2261,7 +2249,7 @@ TEST(MetaStateApply,
   MetaStores stores;
   MetaApplyResult first_result;
   const std::uint64_t last_version =
-      keylane::meta::kMaxMetaPolicyVersionsPerPolicy + 1;
+      lavik::meta::kMaxMetaPolicyVersionsPerPolicy + 1;
   for (std::uint64_t version = 1; version <= last_version; ++version) {
     const MetaApplyResult result = ApplyOk(
         stores, version, MetaCommand{MakeAutomaticFailoverPolicy(version)});
@@ -2272,12 +2260,11 @@ TEST(MetaStateApply,
   EXPECT_FALSE(
       stores.policy_
           .FindVersion(
-              std::string(
-                  keylane::meta::kAutomaticUncontrolledFailoverPolicyId),
+              std::string(lavik::meta::kAutomaticUncontrolledFailoverPolicyId),
               1)
           .has_value());
   EXPECT_EQ(stores.policy_.LatestVersion(std::string(
-                keylane::meta::kAutomaticUncontrolledFailoverPolicyId)),
+                lavik::meta::kAutomaticUncontrolledFailoverPolicyId)),
             std::optional<std::uint64_t>(last_version));
 }
 
@@ -2286,7 +2273,7 @@ TEST(MetaStateApply, ClusterCreateAbortAtomicallyRecordsSafeFailure) {
   const auto root = MakeClusterCreateSubmit(0x74);
   ApplyOk(stores, 21, MetaCommand{root});
 
-  keylane::meta::AbortOperation abort;
+  lavik::meta::AbortOperation abort;
   abort.request_id_ = MakeRequestId(0x75);
   abort.operation_id_ = root.operation_id_;
   abort.expected_revision_ = 0;
@@ -2295,12 +2282,11 @@ TEST(MetaStateApply, ClusterCreateAbortAtomicallyRecordsSafeFailure) {
 
   const auto& failed = stores.topology_.ClusterLifecycle();
   EXPECT_EQ(failed.state_,
-            keylane::meta::MetaClusterLifecycle::kProvisioningFailed);
+            lavik::meta::MetaClusterLifecycle::kProvisioningFailed);
 
   EXPECT_EQ(failed.failure_summary_.find("hunter2"), std::string::npos);
   EXPECT_NE(failed.failure_summary_.find("root-operation="), std::string::npos);
 }
-
 
 TEST(MetaStateApply, SnapshotValidatesClusterLifecycleAggregate) {
   {
@@ -2314,7 +2300,7 @@ TEST(MetaStateApply, SnapshotValidatesClusterLifecycleAggregate) {
     auto root = MakeClusterCreateSubmit(0x7d);
     const auto other = MakeClusterCreateSubmit(0x7e);
     root.intent_ = other.intent_;
-    root.intent_hash_ = keylane::meta::MetaSha256(root.intent_);
+    root.intent_hash_ = lavik::meta::MetaSha256(root.intent_);
     ASSERT_TRUE(stores.operation_.SubmitOperation(root, 10).ok());
     ASSERT_TRUE(
         stores.topology_.BeginClusterCreate(root.operation_id_, 10).ok());
@@ -2326,14 +2312,14 @@ TEST(MetaStateApply, SnapshotValidatesClusterLifecycleAggregate) {
     MetaStores stores;
     ASSERT_TRUE(stores.policy_
                     .Apply(MakePutPolicy(
-                        std::string(keylane::meta::kAuthorityLeasePolicyId), 1,
+                        std::string(lavik::meta::kAuthorityLeasePolicyId), 1,
                         "{\"kind\":\"authority-lease-v1\","
                         "\"duration_ms\":5000}"))
                     .ok());
     const auto restored = MetaStores::Deserialize(MustSerialize(stores));
     ASSERT_TRUE(restored.ok()) << restored.status();
     EXPECT_EQ(restored->topology_.ClusterLifecycle().state_,
-              keylane::meta::MetaClusterLifecycle::kUninitialized);
+              lavik::meta::MetaClusterLifecycle::kUninitialized);
   }
   {
     MetaStores stores;
@@ -2341,7 +2327,7 @@ TEST(MetaStateApply, SnapshotValidatesClusterLifecycleAggregate) {
     ApplyOk(stores, 43, MetaCommand{root});
     const auto extra = MakeClusterCreateSubmit(0x7c);
     ASSERT_TRUE(stores.operation_.SubmitOperation(extra, 44).ok());
-    keylane::meta::CompleteOperation complete;
+    lavik::meta::CompleteOperation complete;
     complete.operation_id_ = extra.operation_id_;
     complete.expected_revision_ = 0;
     complete.result_ = "cluster-created";
@@ -2352,7 +2338,7 @@ TEST(MetaStateApply, SnapshotValidatesClusterLifecycleAggregate) {
     MetaStores stores;
     const auto root = MakeClusterCreateSubmit(0x79);
     ApplyOk(stores, 40, MetaCommand{root});
-    keylane::meta::CompleteOperation complete;
+    lavik::meta::CompleteOperation complete;
     complete.operation_id_ = root.operation_id_;
     complete.expected_revision_ = 0;
     complete.result_ = "cluster-created";
@@ -2370,7 +2356,7 @@ TEST(MetaStateApply, ClusterRootTerminalizationRejectsASingleStoreEffect) {
   auto root = MakeClusterCreateSubmit(0x77);
   ASSERT_TRUE(stores.operation_.SubmitOperation(root, 30).ok());
 
-  keylane::meta::CompleteOperation complete;
+  lavik::meta::CompleteOperation complete;
   complete.request_id_ = MakeRequestId(0x78);
   complete.operation_id_ = root.operation_id_;
   complete.expected_revision_ = 0;
@@ -2380,9 +2366,9 @@ TEST(MetaStateApply, ClusterRootTerminalizationRejectsASingleStoreEffect) {
   const auto operation = stores.operation_.FindOperation(root.operation_id_);
   ASSERT_TRUE(operation.has_value());
   EXPECT_EQ(operation->lifecycle_,
-            keylane::meta::MetaOperationLifecycle::kSubmitted);
+            lavik::meta::MetaOperationLifecycle::kSubmitted);
   EXPECT_EQ(stores.topology_.ClusterLifecycle().state_,
-            keylane::meta::MetaClusterLifecycle::kUninitialized);
+            lavik::meta::MetaClusterLifecycle::kUninitialized);
 }
 
 TEST(MetaStateApply, ClusterRootTerminalizationRequiresExactGenesisAnchor) {
@@ -2392,16 +2378,16 @@ TEST(MetaStateApply, ClusterRootTerminalizationRequiresExactGenesisAnchor) {
     ASSERT_TRUE(stores.operation_.SubmitOperation(root, 28).ok());
     ASSERT_TRUE(
         stores.topology_.BeginClusterCreate(root.operation_id_, 29).ok());
-    keylane::meta::CompleteOperation complete;
+    lavik::meta::CompleteOperation complete;
     complete.operation_id_ = root.operation_id_;
     complete.expected_revision_ = 0;
     complete.result_ = "cluster-created";
 
     ApplyRejected(stores, 30, MetaCommand{complete});
     EXPECT_EQ(stores.operation_.FindOperation(root.operation_id_)->lifecycle_,
-              keylane::meta::MetaOperationLifecycle::kSubmitted);
+              lavik::meta::MetaOperationLifecycle::kSubmitted);
     EXPECT_EQ(stores.topology_.ClusterLifecycle().state_,
-              keylane::meta::MetaClusterLifecycle::kCreating);
+              lavik::meta::MetaClusterLifecycle::kCreating);
   }
   {
     MetaStores stores;
@@ -2410,27 +2396,27 @@ TEST(MetaStateApply, ClusterRootTerminalizationRequiresExactGenesisAnchor) {
     ASSERT_TRUE(stores.operation_.SubmitOperation(root, 31).ok());
     ASSERT_TRUE(
         stores.topology_.BeginClusterCreate(root.operation_id_, 31).ok());
-    keylane::meta::AbortOperation abort;
+    lavik::meta::AbortOperation abort;
     abort.operation_id_ = root.operation_id_;
     abort.expected_revision_ = 0;
     abort.reason_ = "provisioning failed";
 
     ApplyRejected(stores, 32, MetaCommand{abort});
     EXPECT_EQ(stores.operation_.FindOperation(root.operation_id_)->lifecycle_,
-              keylane::meta::MetaOperationLifecycle::kSubmitted);
+              lavik::meta::MetaOperationLifecycle::kSubmitted);
     EXPECT_EQ(stores.topology_.ClusterLifecycle().state_,
-              keylane::meta::MetaClusterLifecycle::kCreating);
+              lavik::meta::MetaClusterLifecycle::kCreating);
   }
   {
     MetaStores stores;
     auto root = MakeClusterCreateSubmit(0x77);
     const auto other = MakeClusterCreateSubmit(0x78);
     root.intent_ = other.intent_;
-    root.intent_hash_ = keylane::meta::MetaSha256(root.intent_);
+    root.intent_hash_ = lavik::meta::MetaSha256(root.intent_);
     ASSERT_TRUE(stores.operation_.SubmitOperation(root, 33).ok());
     ASSERT_TRUE(
         stores.topology_.BeginClusterCreate(root.operation_id_, 33).ok());
-    keylane::meta::CompleteOperation complete;
+    lavik::meta::CompleteOperation complete;
     complete.operation_id_ = root.operation_id_;
     complete.expected_revision_ = 0;
     complete.result_ = "cluster-created";
@@ -2438,7 +2424,7 @@ TEST(MetaStateApply, ClusterRootTerminalizationRequiresExactGenesisAnchor) {
 
     ApplyRejected(stores, 34, MetaCommand{complete});
     EXPECT_EQ(stores.topology_.ClusterLifecycle().state_,
-              keylane::meta::MetaClusterLifecycle::kCreating);
+              lavik::meta::MetaClusterLifecycle::kCreating);
   }
   {
     MetaStores stores;
@@ -2446,7 +2432,7 @@ TEST(MetaStateApply, ClusterRootTerminalizationRequiresExactGenesisAnchor) {
     ASSERT_TRUE(stores.operation_.SubmitOperation(root, 35).ok());
     ASSERT_TRUE(
         stores.topology_.BeginClusterCreate(root.operation_id_, 36).ok());
-    keylane::meta::AbortOperation abort;
+    lavik::meta::AbortOperation abort;
     abort.operation_id_ = root.operation_id_;
     abort.expected_revision_ = 0;
     abort.reason_ = "provisioning failed";
@@ -2454,7 +2440,7 @@ TEST(MetaStateApply, ClusterRootTerminalizationRequiresExactGenesisAnchor) {
 
     ApplyRejected(stores, 37, MetaCommand{abort});
     EXPECT_EQ(stores.topology_.ClusterLifecycle().state_,
-              keylane::meta::MetaClusterLifecycle::kCreating);
+              lavik::meta::MetaClusterLifecycle::kCreating);
   }
 }
 
@@ -2463,7 +2449,7 @@ TEST(MetaStateApply, ClusterRootTerminalReplayRejectsEitherMissingHalf) {
     MetaStores stores;
     const auto root = MakeClusterCreateSubmit(0x75);
     ApplyOk(stores, 30, MetaCommand{root});
-    keylane::meta::CompleteOperation complete;
+    lavik::meta::CompleteOperation complete;
     complete.operation_id_ = root.operation_id_;
     complete.expected_revision_ = 0;
     complete.result_ = "cluster-created";
@@ -2471,7 +2457,7 @@ TEST(MetaStateApply, ClusterRootTerminalReplayRejectsEitherMissingHalf) {
 
     ApplyRejected(stores, 31, MetaCommand{complete});
     EXPECT_EQ(stores.topology_.ClusterLifecycle().state_,
-              keylane::meta::MetaClusterLifecycle::kCreating);
+              lavik::meta::MetaClusterLifecycle::kCreating);
   }
   {
     MetaStores stores;
@@ -2479,20 +2465,20 @@ TEST(MetaStateApply, ClusterRootTerminalReplayRejectsEitherMissingHalf) {
     ApplyOk(stores, 32, MetaCommand{root});
     ASSERT_TRUE(
         stores.topology_.CompleteClusterCreate(root.operation_id_).ok());
-    keylane::meta::CompleteOperation complete;
+    lavik::meta::CompleteOperation complete;
     complete.operation_id_ = root.operation_id_;
     complete.expected_revision_ = 0;
     complete.result_ = "cluster-created";
 
     ApplyRejected(stores, 33, MetaCommand{complete});
     EXPECT_EQ(stores.operation_.FindOperation(root.operation_id_)->lifecycle_,
-              keylane::meta::MetaOperationLifecycle::kSubmitted);
+              lavik::meta::MetaOperationLifecycle::kSubmitted);
   }
   {
     MetaStores stores;
     const auto root = MakeClusterCreateSubmit(0x79);
     ApplyOk(stores, 34, MetaCommand{root});
-    keylane::meta::AbortOperation abort;
+    lavik::meta::AbortOperation abort;
     abort.operation_id_ = root.operation_id_;
     abort.expected_revision_ = 0;
     abort.reason_ = "provisioning failed";
@@ -2500,7 +2486,7 @@ TEST(MetaStateApply, ClusterRootTerminalReplayRejectsEitherMissingHalf) {
 
     ApplyRejected(stores, 35, MetaCommand{abort});
     EXPECT_EQ(stores.topology_.ClusterLifecycle().state_,
-              keylane::meta::MetaClusterLifecycle::kCreating);
+              lavik::meta::MetaClusterLifecycle::kCreating);
   }
   {
     MetaStores stores;
@@ -2511,14 +2497,14 @@ TEST(MetaStateApply, ClusterRootTerminalReplayRejectsEitherMissingHalf) {
                         root.operation_id_,
                         ClusterCreateFailureSummaryForTest(root.operation_id_))
                     .ok());
-    keylane::meta::AbortOperation abort;
+    lavik::meta::AbortOperation abort;
     abort.operation_id_ = root.operation_id_;
     abort.expected_revision_ = 0;
     abort.reason_ = "provisioning failed";
 
     ApplyRejected(stores, 37, MetaCommand{abort});
     EXPECT_EQ(stores.operation_.FindOperation(root.operation_id_)->lifecycle_,
-              keylane::meta::MetaOperationLifecycle::kSubmitted);
+              lavik::meta::MetaOperationLifecycle::kSubmitted);
   }
 }
 
@@ -2530,7 +2516,7 @@ TEST(MetaStateApply, ClusterRootTerminalReplayRejectsInvalidGenesisAnchor) {
     ASSERT_TRUE(stores.operation_.SubmitOperation(root, 38).ok());
     ASSERT_TRUE(
         stores.topology_.BeginClusterCreate(root.operation_id_, 38).ok());
-    keylane::meta::CompleteOperation complete;
+    lavik::meta::CompleteOperation complete;
     complete.operation_id_ = root.operation_id_;
     complete.expected_revision_ = 0;
     complete.result_ = "cluster-created";
@@ -2545,11 +2531,11 @@ TEST(MetaStateApply, ClusterRootTerminalReplayRejectsInvalidGenesisAnchor) {
     auto root = MakeClusterCreateSubmit(0x7c);
     const auto other = MakeClusterCreateSubmit(0x7d);
     root.intent_ = other.intent_;
-    root.intent_hash_ = keylane::meta::MetaSha256(root.intent_);
+    root.intent_hash_ = lavik::meta::MetaSha256(root.intent_);
     ASSERT_TRUE(stores.operation_.SubmitOperation(root, 40).ok());
     ASSERT_TRUE(
         stores.topology_.BeginClusterCreate(root.operation_id_, 40).ok());
-    keylane::meta::CompleteOperation complete;
+    lavik::meta::CompleteOperation complete;
     complete.operation_id_ = root.operation_id_;
     complete.expected_revision_ = 0;
     complete.result_ = "cluster-created";
@@ -2565,7 +2551,7 @@ TEST(MetaStateApply, ClusterRootTerminalReplayRejectsInvalidGenesisAnchor) {
     ASSERT_TRUE(stores.operation_.SubmitOperation(root, 42).ok());
     ASSERT_TRUE(
         stores.topology_.BeginClusterCreate(root.operation_id_, 43).ok());
-    keylane::meta::AbortOperation abort;
+    lavik::meta::AbortOperation abort;
     abort.operation_id_ = root.operation_id_;
     abort.expected_revision_ = 0;
     abort.reason_ = "provisioning failed";
@@ -2589,7 +2575,7 @@ TEST(MetaStateApply, ClusterRootSubmitReplayRejectsASingleStoreEffect) {
     ApplyRejected(stores, 32, MetaCommand{root});
 
     EXPECT_EQ(stores.topology_.ClusterLifecycle().state_,
-              keylane::meta::MetaClusterLifecycle::kUninitialized);
+              lavik::meta::MetaClusterLifecycle::kUninitialized);
   }
   {
     MetaStores stores;
@@ -2614,7 +2600,7 @@ TEST(MetaStateApply,
   {
     MetaStores stores;
     ApplyOk(stores, 1, MakeCreateGroup("g1", 1));
-    ASSERT_TRUE(keylane::meta::MetaTopologyTestAccess::SetGroupTerm(
+    ASSERT_TRUE(lavik::meta::MetaTopologyTestAccess::SetGroupTerm(
                     stores.topology_, "g1", 1)
                     .ok());
     EXPECT_TRUE(MetaStores::Deserialize(MustSerialize(stores)).ok());
@@ -2634,7 +2620,7 @@ TEST(MetaStateApply,
   MetaStores stores;
   SetupActivatedGroupPrerequisites(stores, 1, "g1");
   ApplyOk(stores, 6, MetaCommand{MakeActivate("g1", 1, 1, 3)});
-  ASSERT_TRUE(keylane::meta::MetaTopologyTestAccess::SetGroupTerm(
+  ASSERT_TRUE(lavik::meta::MetaTopologyTestAccess::SetGroupTerm(
                   stores.topology_, "g1", 0)
                   .ok());
   ExpectAggregateSnapshotFailStop(stores);
@@ -2642,14 +2628,14 @@ TEST(MetaStateApply,
 
 TEST(MetaStateApply, SubmitOperationSeqIsLogIndexAndActorPersisted) {
   MetaStores stores;
-  const keylane::meta::SubmitOperation cmd = MakeSubmit(0x60, 0x11);
+  const lavik::meta::SubmitOperation cmd = MakeSubmit(0x60, 0x11);
   ApplyOk(stores, 3, MetaCommand{cmd});
 
   const auto record = stores.operation_.FindOperation(cmd.operation_id_);
   ASSERT_TRUE(record.has_value());
   EXPECT_EQ(record->operation_seq_, 3u);  // the raft log index of the submit
   EXPECT_EQ(record->lifecycle_,
-            keylane::meta::MetaOperationLifecycle::kSubmitted);
+            lavik::meta::MetaOperationLifecycle::kSubmitted);
   // The journal persists the trusted-entry-injected ActorContext, carried by
   // the raft-log encoding and only copied by apply.
   EXPECT_EQ(record->actor_.principal_, kActorPrincipal);
@@ -2668,20 +2654,20 @@ TEST(MetaStateApply, SubmitOperationSeqIsLogIndexAndActorPersisted) {
 
 TEST(MetaStateApply, OperationLifecycleAndArchiveThroughDispatcher) {
   MetaStores stores;
-  const keylane::meta::SubmitOperation submit = MakeSubmit(0x61, 0x21);
+  const lavik::meta::SubmitOperation submit = MakeSubmit(0x61, 0x21);
   ApplyOk(stores, 1, MetaCommand{submit});
   const auto op_id = submit.operation_id_;
 
-  keylane::meta::TransitionOperationPhase transition;
+  lavik::meta::TransitionOperationPhase transition;
   transition.request_id_ = MakeRequestId(0x62);
   transition.operation_id_ = op_id;
   transition.expected_revision_ = 0;
   transition.kind_phase_blob_ = "{\"phase\":\"prepare\"}";
   ApplyOk(stores, 2, MetaCommand{transition});
   EXPECT_EQ(stores.operation_.FindOperation(op_id)->lifecycle_,
-            keylane::meta::MetaOperationLifecycle::kRunning);
+            lavik::meta::MetaOperationLifecycle::kRunning);
 
-  keylane::meta::CompleteOperation complete;
+  lavik::meta::CompleteOperation complete;
   complete.request_id_ = MakeRequestId(0x63);
   complete.operation_id_ = op_id;
   complete.expected_revision_ = 1;
@@ -2690,18 +2676,17 @@ TEST(MetaStateApply, OperationLifecycleAndArchiveThroughDispatcher) {
   ApplyOk(stores, 3, MetaCommand{complete});
   const auto done = stores.operation_.FindOperation(op_id);
   ASSERT_TRUE(done.has_value());
-  EXPECT_EQ(done->lifecycle_,
-            keylane::meta::MetaOperationLifecycle::kCompleted);
+  EXPECT_EQ(done->lifecycle_, lavik::meta::MetaOperationLifecycle::kCompleted);
   EXPECT_TRUE(done->data_loss_possible_);
 
   // Terminal states are irreversible.
-  keylane::meta::TransitionOperationPhase late = transition;
+  lavik::meta::TransitionOperationPhase late = transition;
   late.request_id_ = MakeRequestId(0x64);
   late.expected_revision_ = 2;
   ApplyRejected(stores, 4, MetaCommand{late});
 
   // Non-contiguous archival of the terminal operation (seq = submit index).
-  keylane::meta::ArchiveOperations archive;
+  lavik::meta::ArchiveOperations archive;
   archive.request_id_ = MakeRequestId(0x65);
   archive.operation_seqs_ = {1};
   ApplyOk(stores, 5, MetaCommand{archive});
@@ -2710,7 +2695,7 @@ TEST(MetaStateApply, OperationLifecycleAndArchiveThroughDispatcher) {
   ASSERT_TRUE(tombstone.has_value());
   EXPECT_EQ(tombstone->operation_seq_, 1u);
   EXPECT_EQ(tombstone->terminal_lifecycle_,
-            keylane::meta::MetaOperationLifecycle::kCompleted);
+            lavik::meta::MetaOperationLifecycle::kCompleted);
   EXPECT_TRUE(tombstone->data_loss_possible_);
   EXPECT_EQ(tombstone->actor_.principal_, kActorPrincipal);
 
@@ -2727,10 +2712,10 @@ TEST(MetaStateApply, DirectiveResultCommitUsesFirstRaftIndexOnReplay) {
   ApplyOk(stores, 6, MakeRegisterFor(2));
   ApplyOk(stores, 7, MakeAssign("g1", 2, 2, 3));
   ApplyOk(stores, 8, MetaCommand{MakeActivate("g1", 1, 1, 4)});
-  const keylane::meta::SubmitOperation submit = MakeSubmit(0x68, 0x41);
+  const lavik::meta::SubmitOperation submit = MakeSubmit(0x68, 0x41);
   ApplyOk(stores, 9, MetaCommand{submit});
 
-  keylane::meta::MetaDirectiveSpec directive;
+  lavik::meta::MetaDirectiveSpec directive;
   directive.directive_id_.fill(1);
   directive.attempt_id_.fill(2);
   directive.recipient_node_id_ = MakeNodeId(1);
@@ -2744,14 +2729,14 @@ TEST(MetaStateApply, DirectiveResultCommitUsesFirstRaftIndexOnReplay) {
   directive.group_id_ = "g1";
   directive.group_term_ = 1;
   directive.kind_ = "rebuild";
-  directive.payload_ = *keylane::cluster::control::EncodeRebuildRequest({3});
+  directive.payload_ = *lavik::cluster::control::EncodeRebuildRequest({3});
 
-  keylane::meta::TransitionOperationPhase transition;
+  lavik::meta::TransitionOperationPhase transition;
   transition.operation_id_ = submit.operation_id_;
   transition.current_directives_ = {directive};
   ApplyOk(stores, 10, MetaCommand{transition});
 
-  keylane::meta::CommitDirectiveResult commit;
+  lavik::meta::CommitDirectiveResult commit;
   commit.operation_id_ = submit.operation_id_;
   commit.directive_id_ = directive.directive_id_;
   commit.attempt_id_ = directive.attempt_id_;
@@ -2763,15 +2748,15 @@ TEST(MetaStateApply, DirectiveResultCommitUsesFirstRaftIndexOnReplay) {
 
   const auto applied = ApplyOk(stores, 11, MetaCommand{commit});
   EXPECT_EQ(applied.command_tag_,
-            keylane::meta::MetaCommandTag::kCommitDirectiveResult);
-  const keylane::meta::MetaTerminalReceiptKey key{
+            lavik::meta::MetaCommandTag::kCommitDirectiveResult);
+  const lavik::meta::MetaTerminalReceiptKey key{
       submit.operation_id_, directive.directive_id_, directive.attempt_id_, 10};
   ASSERT_TRUE(stores.operation_.FindTerminalReceipt(key).has_value());
   EXPECT_EQ(stores.operation_.FindTerminalReceipt(key)->committed_index_, 11u);
   EXPECT_EQ(stores.operation_.FindOperation(submit.operation_id_)->revision_,
             2u);
 
-  keylane::meta::CompleteOperation stale_complete;
+  lavik::meta::CompleteOperation stale_complete;
   stale_complete.operation_id_ = submit.operation_id_;
   stale_complete.expected_revision_ = 1;
   ApplyRejected(stores, 12, MetaCommand{stale_complete});
@@ -2788,10 +2773,10 @@ TEST(MetaStateApply, DirectiveIntentMustMatchCommittedAuthorityAndAssignment) {
   ApplyOk(stores, 6, MakeRegisterFor(2));
   ApplyOk(stores, 7, MakeAssign("g1", 2, 2, 3));
   ApplyOk(stores, 8, MetaCommand{MakeActivate("g1", 1, 1, 4)});
-  const keylane::meta::SubmitOperation submit = MakeSubmit(0x69, 0x42);
+  const lavik::meta::SubmitOperation submit = MakeSubmit(0x69, 0x42);
   ApplyOk(stores, 9, MetaCommand{submit});
 
-  keylane::meta::MetaDirectiveSpec directive;
+  lavik::meta::MetaDirectiveSpec directive;
   directive.directive_id_.fill(1);
   directive.attempt_id_.fill(2);
   directive.recipient_node_id_ = MakeNodeId(2);
@@ -2806,9 +2791,9 @@ TEST(MetaStateApply, DirectiveIntentMustMatchCommittedAuthorityAndAssignment) {
   directive.group_term_ = 1;
   directive.partition_replication_epoch_ = 0;
   directive.kind_ = "rebuild";
-  directive.payload_ = *keylane::cluster::control::EncodeRebuildRequest({3});
+  directive.payload_ = *lavik::cluster::control::EncodeRebuildRequest({3});
 
-  keylane::meta::TransitionOperationPhase transition;
+  lavik::meta::TransitionOperationPhase transition;
   transition.operation_id_ = submit.operation_id_;
   transition.current_directives_ = {directive};
   transition.current_directives_[0].group_term_ = 2;
@@ -2830,8 +2815,8 @@ TEST(MetaStateApply, DirectiveIntentMustMatchCommittedAuthorityAndAssignment) {
 
 struct InstalledDirectiveFixture {
   MetaStores stores;
-  keylane::meta::SubmitOperation submit;
-  keylane::meta::MetaDirectiveSpec directive;
+  lavik::meta::SubmitOperation submit;
+  lavik::meta::MetaDirectiveSpec directive;
   std::uint64_t directive_revision = 12;
 };
 
@@ -2864,18 +2849,18 @@ InstalledDirectiveFixture MakeInstalledDirectiveFixture() {
   fixture.directive.group_term_ = 1;
   fixture.directive.kind_ = "rebuild";
   fixture.directive.payload_ =
-      *keylane::cluster::control::EncodeRebuildRequest({3});
+      *lavik::cluster::control::EncodeRebuildRequest({3});
 
-  keylane::meta::TransitionOperationPhase transition;
+  lavik::meta::TransitionOperationPhase transition;
   transition.operation_id_ = fixture.submit.operation_id_;
   transition.current_directives_ = {fixture.directive};
   ApplyOk(fixture.stores, fixture.directive_revision, MetaCommand{transition});
   return fixture;
 }
 
-keylane::meta::CommitDirectiveResult MakeDirectiveResult(
+lavik::meta::CommitDirectiveResult MakeDirectiveResult(
     const InstalledDirectiveFixture& fixture) {
-  keylane::meta::CommitDirectiveResult result;
+  lavik::meta::CommitDirectiveResult result;
   result.operation_id_ = fixture.submit.operation_id_;
   result.directive_id_ = fixture.directive.directive_id_;
   result.attempt_id_ = fixture.directive.attempt_id_;
@@ -2904,7 +2889,7 @@ TEST(MetaStateApply,
     SCOPED_TRACE("removed_node=" + std::to_string(removed_node));
     InstalledDirectiveFixture fixture = MakeInstalledDirectiveFixture();
 
-    keylane::meta::RemoveNodeFromGroup remove;
+    lavik::meta::RemoveNodeFromGroup remove;
     remove.request_id_ = MakeRequestId(0x6e);
     remove.group_id_ = "g1";
     remove.node_id_ = MakeNodeId(removed_node);
@@ -2923,15 +2908,14 @@ TEST(MetaStateApply,
 
     // Reusing the stable node id with a fresh membership incarnation cannot
     // revive work authorized for the removed assignment.
-    keylane::meta::AssignNodeToGroup readd =
-        MakeAssign("g1", removed_node, 5, 7);
+    lavik::meta::AssignNodeToGroup readd = MakeAssign("g1", removed_node, 5, 7);
     readd.assignment_id_.fill(static_cast<std::uint8_t>(0x20 + removed_node));
     ApplyOk(fixture.stores, 14, MetaCommand{readd});
     ExpectDirectiveInvalidated(fixture);
 
     const auto result = MakeDirectiveResult(fixture);
     ApplyRejected(fixture.stores, 15, MetaCommand{result});
-    const keylane::meta::MetaTerminalReceiptKey key{
+    const lavik::meta::MetaTerminalReceiptKey key{
         result.operation_id_, result.directive_id_, result.attempt_id_,
         result.directive_revision_};
     EXPECT_FALSE(
@@ -2942,7 +2926,7 @@ TEST(MetaStateApply,
 TEST(MetaStateApply, AuthorityAnchorMutationsInvalidateLiveDirectives) {
   {
     InstalledDirectiveFixture fixture = MakeInstalledDirectiveFixture();
-    keylane::meta::BeginGroupTerm begin;
+    lavik::meta::BeginGroupTerm begin;
     begin.group_id_ = "g1";
     begin.expected_term_ = 1;
     begin.new_term_ = 2;
@@ -2951,7 +2935,7 @@ TEST(MetaStateApply, AuthorityAnchorMutationsInvalidateLiveDirectives) {
   }
   {
     InstalledDirectiveFixture fixture = MakeInstalledDirectiveFixture();
-    keylane::meta::FenceGroup fence;
+    lavik::meta::FenceGroup fence;
     fence.group_id_ = "g1";
     fence.expected_term_ = 1;
     fence.new_term_ = 2;
@@ -2963,18 +2947,17 @@ TEST(MetaStateApply, AuthorityAnchorMutationsInvalidateLiveDirectives) {
 TEST(MetaStateApply, PopulationAnchorMutationsInvalidateLiveDirectives) {
   {
     InstalledDirectiveFixture fixture = MakeInstalledDirectiveFixture();
-    keylane::meta::PutPopulationManifest put;
+    lavik::meta::PutPopulationManifest put;
     put.entries_ = {{1, 11}};
     put.manifest_digest_ =
-        keylane::meta::MetaPopulationManifestStore::CanonicalDigest(
-            put.entries_);
+        lavik::meta::MetaPopulationManifestStore::CanonicalDigest(put.entries_);
     ApplyOk(fixture.stores, 13, MetaCommand{put});
     EXPECT_EQ(
         fixture.stores.operation_.FindOperation(fixture.submit.operation_id_)
             ->current_directives_.size(),
         1u);
 
-    keylane::meta::SetGroupReplicationState update;
+    lavik::meta::SetGroupReplicationState update;
     update.group_id_ = "g1";
     update.new_population_manifest_revision_ = 1;
     update.new_population_manifest_digest_ = put.manifest_digest_;
@@ -2984,7 +2967,7 @@ TEST(MetaStateApply, PopulationAnchorMutationsInvalidateLiveDirectives) {
   }
   {
     InstalledDirectiveFixture fixture = MakeInstalledDirectiveFixture();
-    keylane::meta::SetGroupReplicationState update;
+    lavik::meta::SetGroupReplicationState update;
     update.group_id_ = "g1";
     update.new_partition_replication_epoch_ = 1;
     update.new_topology_epoch_ = 6;
@@ -2995,7 +2978,7 @@ TEST(MetaStateApply, PopulationAnchorMutationsInvalidateLiveDirectives) {
 
 TEST(MetaStateApply, RejectedAnchorMutationDoesNotInvalidateDirective) {
   InstalledDirectiveFixture fixture = MakeInstalledDirectiveFixture();
-  keylane::meta::RemoveNodeFromGroup remove;
+  lavik::meta::RemoveNodeFromGroup remove;
   remove.group_id_ = "g1";
   remove.node_id_ = fixture.directive.target_node_id_;
   remove.expected_revision_ = 99;
@@ -3012,7 +2995,7 @@ TEST(MetaStateApply, RejectedAnchorMutationDoesNotInvalidateDirective) {
 
 TEST(MetaStateApply, DirectiveResultRevalidatesCurrentAggregateAnchor) {
   InstalledDirectiveFixture fixture = MakeInstalledDirectiveFixture();
-  keylane::meta::RemoveNodeFromGroup remove;
+  lavik::meta::RemoveNodeFromGroup remove;
   remove.group_id_ = "g1";
   remove.node_id_ = fixture.directive.target_node_id_;
   remove.expected_revision_ = 4;
@@ -3029,7 +3012,7 @@ TEST(MetaStateApply, DirectiveResultRevalidatesCurrentAggregateAnchor) {
 
   const auto result = MakeDirectiveResult(fixture);
   ApplyRejected(fixture.stores, 13, MetaCommand{result});
-  const keylane::meta::MetaTerminalReceiptKey key{
+  const lavik::meta::MetaTerminalReceiptKey key{
       result.operation_id_, result.directive_id_, result.attempt_id_,
       result.directive_revision_};
   EXPECT_FALSE(fixture.stores.operation_.FindTerminalReceipt(key).has_value());
@@ -3041,7 +3024,7 @@ TEST(MetaStateApply,
   const auto result = MakeDirectiveResult(fixture);
   ApplyOk(fixture.stores, 13, MetaCommand{result});
 
-  keylane::meta::RemoveNodeFromGroup remove;
+  lavik::meta::RemoveNodeFromGroup remove;
   remove.group_id_ = "g1";
   remove.node_id_ = fixture.directive.target_node_id_;
   remove.expected_revision_ = 4;
@@ -3050,7 +3033,7 @@ TEST(MetaStateApply,
   ExpectDirectiveInvalidated(fixture, 3);
 
   ApplyOk(fixture.stores, 15, MetaCommand{result});
-  const keylane::meta::MetaTerminalReceiptKey key{
+  const lavik::meta::MetaTerminalReceiptKey key{
       result.operation_id_, result.directive_id_, result.attempt_id_,
       result.directive_revision_};
   const auto receipt = fixture.stores.operation_.FindTerminalReceipt(key);
@@ -3064,10 +3047,10 @@ TEST(MetaStateApply, DirectiveRejectsSourceAssignmentFromBeforeRemoveAndReadd) {
   ApplyOk(stores, 6, MakeRegisterFor(2));
   ApplyOk(stores, 7, MakeAssign("g1", 2, 2, 3));
   ApplyOk(stores, 8, MetaCommand{MakeActivate("g1", 1, 1, 4)});
-  const keylane::meta::SubmitOperation submit = MakeSubmit(0x6a, 0x43);
+  const lavik::meta::SubmitOperation submit = MakeSubmit(0x6a, 0x43);
   ApplyOk(stores, 9, MetaCommand{submit});
 
-  keylane::meta::RemoveNodeFromGroup remove;
+  lavik::meta::RemoveNodeFromGroup remove;
   remove.request_id_ = MakeRequestId(0x6b);
   remove.group_id_ = "g1";
   remove.node_id_ = MakeNodeId(2);
@@ -3075,12 +3058,12 @@ TEST(MetaStateApply, DirectiveRejectsSourceAssignmentFromBeforeRemoveAndReadd) {
   remove.new_topology_epoch_ = 5;
   ApplyOk(stores, 10, MetaCommand{remove});
 
-  keylane::meta::AssignNodeToGroup readd = MakeAssign("g1", 2, 4, 6);
+  lavik::meta::AssignNodeToGroup readd = MakeAssign("g1", 2, 4, 6);
   readd.request_id_ = MakeRequestId(0x6c);
   readd.assignment_id_.fill(0x22);
   ApplyOk(stores, 11, MetaCommand{readd});
 
-  keylane::meta::MetaDirectiveSpec directive;
+  lavik::meta::MetaDirectiveSpec directive;
   directive.directive_id_.fill(1);
   directive.attempt_id_.fill(2);
   directive.recipient_node_id_ = MakeNodeId(2);
@@ -3094,9 +3077,9 @@ TEST(MetaStateApply, DirectiveRejectsSourceAssignmentFromBeforeRemoveAndReadd) {
   directive.group_id_ = "g1";
   directive.group_term_ = 1;
   directive.kind_ = "authorize-source";
-  directive.payload_ = *keylane::cluster::control::EncodeRebuildRequest({3});
+  directive.payload_ = *lavik::cluster::control::EncodeRebuildRequest({3});
 
-  keylane::meta::TransitionOperationPhase transition;
+  lavik::meta::TransitionOperationPhase transition;
   transition.operation_id_ = submit.operation_id_;
   transition.current_directives_ = {directive};
   ApplyRejected(stores, 12, MetaCommand{transition});
@@ -3110,9 +3093,9 @@ TEST(MetaStateApply, DirectiveRejectsSourceAssignmentFromBeforeRemoveAndReadd) {
 
 TEST(MetaStateApply,
      TransitionRejectsAggregateRecipientProjectionOverDirectiveCapAtomically) {
-  namespace control = keylane::cluster::control;
+  namespace control = lavik::cluster::control;
   static_assert(control::kMaxProjectedDirectives %
-                    keylane::meta::kMaxMetaDirectivesPerOperation ==
+                    lavik::meta::kMaxMetaDirectivesPerOperation ==
                 0);
 
   MetaStores stores;
@@ -3120,7 +3103,7 @@ TEST(MetaStateApply,
   ApplyOk(stores, 6, MetaCommand{MakeActivate("g1", 1, 1, 3)});
 
   const auto make_directive = [](std::size_t ordinal) {
-    keylane::meta::MetaDirectiveSpec directive;
+    lavik::meta::MetaDirectiveSpec directive;
     directive.directive_id_.fill(0);
     directive.directive_id_[0] = 1;
     directive.directive_id_[14] =
@@ -3142,32 +3125,32 @@ TEST(MetaStateApply,
     directive.group_id_ = "g1";
     directive.group_term_ = 1;
     directive.kind_ = "authorize-source";
-    directive.payload_ = *keylane::cluster::control::EncodeRebuildRequest({3});
+    directive.payload_ = *lavik::cluster::control::EncodeRebuildRequest({3});
     return directive;
   };
 
   std::uint64_t log_index = 7;
   const std::size_t full_operation_count =
       control::kMaxProjectedDirectives /
-      keylane::meta::kMaxMetaDirectivesPerOperation;
+      lavik::meta::kMaxMetaDirectivesPerOperation;
   // Seed all but the last per-operation block through the store seam to keep
   // this cap test linear. The final block and the one-over command below go
   // through ApplyCommitted, which is the behavior under test.
   for (std::size_t operation_ordinal = 0;
        operation_ordinal + 1 < full_operation_count; ++operation_ordinal) {
-    keylane::meta::SubmitOperation submit =
+    lavik::meta::SubmitOperation submit =
         MakeSubmit(static_cast<std::uint8_t>(operation_ordinal + 1),
                    static_cast<std::uint8_t>(operation_ordinal + 101));
     submit.replication_history_id_.fill(3);
     ASSERT_TRUE(stores.operation_.SubmitOperation(submit, log_index++).ok());
 
-    keylane::meta::TransitionOperationPhase transition;
+    lavik::meta::TransitionOperationPhase transition;
     transition.operation_id_ = submit.operation_id_;
     transition.kind_phase_blob_ = "dispatch";
     transition.current_directives_.reserve(
-        keylane::meta::kMaxMetaDirectivesPerOperation);
+        lavik::meta::kMaxMetaDirectivesPerOperation);
     for (std::size_t directive_ordinal = 0;
-         directive_ordinal < keylane::meta::kMaxMetaDirectivesPerOperation;
+         directive_ordinal < lavik::meta::kMaxMetaDirectivesPerOperation;
          ++directive_ordinal) {
       transition.current_directives_.push_back(
           make_directive(directive_ordinal));
@@ -3177,33 +3160,33 @@ TEST(MetaStateApply,
             .ok());
   }
 
-  keylane::meta::SubmitOperation boundary_operation = MakeSubmit(0x6f, 0x70);
+  lavik::meta::SubmitOperation boundary_operation = MakeSubmit(0x6f, 0x70);
   boundary_operation.replication_history_id_.fill(3);
   ApplyOk(stores, log_index++, MetaCommand{boundary_operation});
-  keylane::meta::TransitionOperationPhase boundary_transition;
+  lavik::meta::TransitionOperationPhase boundary_transition;
   boundary_transition.operation_id_ = boundary_operation.operation_id_;
   boundary_transition.kind_phase_blob_ = "dispatch";
   boundary_transition.current_directives_.reserve(
-      keylane::meta::kMaxMetaDirectivesPerOperation);
+      lavik::meta::kMaxMetaDirectivesPerOperation);
   for (std::size_t directive_ordinal = 0;
-       directive_ordinal < keylane::meta::kMaxMetaDirectivesPerOperation;
+       directive_ordinal < lavik::meta::kMaxMetaDirectivesPerOperation;
        ++directive_ordinal) {
     boundary_transition.current_directives_.push_back(
         make_directive(directive_ordinal));
   }
   ApplyOk(stores, log_index++, MetaCommand{boundary_transition});
 
-  const auto boundary = keylane::meta::MetaControlProjector::ProjectNode(
-      keylane::meta::MetaCommittedView(stores, log_index - 1), MakeNodeId(1));
+  const auto boundary = lavik::meta::MetaControlProjector::ProjectNode(
+      lavik::meta::MetaCommittedView(stores, log_index - 1), MakeNodeId(1));
   ASSERT_TRUE(boundary.ok()) << boundary.status();
   EXPECT_EQ(boundary->full_state.current_directives.size(),
             control::kMaxProjectedDirectives);
 
-  keylane::meta::SubmitOperation overflow = MakeSubmit(0x70, 0x71);
+  lavik::meta::SubmitOperation overflow = MakeSubmit(0x70, 0x71);
   overflow.replication_history_id_.fill(3);
   ApplyOk(stores, log_index++, MetaCommand{overflow});
 
-  keylane::meta::TransitionOperationPhase transition;
+  lavik::meta::TransitionOperationPhase transition;
   transition.operation_id_ = overflow.operation_id_;
   transition.kind_phase_blob_ = "would-overflow";
   transition.current_directives_ = {make_directive(0)};
@@ -3235,7 +3218,7 @@ TEST(MetaStateApply, ArchiveOperationsRejectsNonTerminal) {
   MetaStores stores;
   ApplyOk(stores, 1, MetaCommand{MakeSubmit(0x66, 0x31)});
 
-  keylane::meta::ArchiveOperations archive;
+  lavik::meta::ArchiveOperations archive;
   archive.request_id_ = MakeRequestId(0x67);
   archive.operation_seqs_ = {1};
   ApplyRejected(stores, 2, MetaCommand{archive});  // still Submitted
@@ -3247,20 +3230,20 @@ TEST(MetaStateApply, ArchiveOperationsRejectsNonTerminal) {
 }
 
 TEST(MetaStateApply, AuditPruneIsReplicatedAndAudited) {
-  keylane::meta::MetaStores stores;
+  lavik::meta::MetaStores stores;
   auto create = MakeCreateGroup("g-prune", 1);
-  ASSERT_EQ(keylane::meta::ApplyCommitted(stores, 1, create,
-                                          "keylane://operator/test", "t")
+  ASSERT_EQ(lavik::meta::ApplyCommitted(stores, 1, create,
+                                        "lavik://operator/test", "t")
                 .verdict_,
-            keylane::meta::MetaAuditVerdict::kAccepted);
+            lavik::meta::MetaAuditVerdict::kAccepted);
   ASSERT_EQ(stores.audit_.size(), 1u);
 
-  keylane::meta::PruneAudit prune;
+  lavik::meta::PruneAudit prune;
   prune.request_id_[0] = 9;
   prune.through_log_index_ = 1;
-  const auto result = keylane::meta::ApplyCommitted(
-      stores, 2, prune, "keylane://operator/test", "t2");
-  EXPECT_EQ(result.verdict_, keylane::meta::MetaAuditVerdict::kAccepted);
+  const auto result = lavik::meta::ApplyCommitted(
+      stores, 2, prune, "lavik://operator/test", "t2");
+  EXPECT_EQ(result.verdict_, lavik::meta::MetaAuditVerdict::kAccepted);
   EXPECT_EQ(stores.audit_.pruned_floor(), 1u);
   EXPECT_EQ(stores.audit_.size(), 1u);
   EXPECT_TRUE(stores.audit_.Find(2).has_value());
@@ -3273,7 +3256,7 @@ TEST(MetaStateApply, AuditPruneIsReplicatedAndAudited) {
 // ---------------------------------------------------------------------------
 
 struct ScriptedCommand {
-  keylane::meta::MetaCommand command;
+  lavik::meta::MetaCommand command;
   MetaAuditVerdict expected;
 };
 
@@ -3282,7 +3265,7 @@ std::vector<ScriptedCommand> MakeCommandScript() {
   std::vector<ScriptedCommand> script;
   const auto accept = MetaAuditVerdict::kAccepted;
   const auto reject = MetaAuditVerdict::kRejected;
-  auto push = [&script](keylane::meta::MetaCommand cmd,
+  auto push = [&script](lavik::meta::MetaCommand cmd,
                         MetaAuditVerdict expected) {
     script.push_back(ScriptedCommand{std::move(cmd), expected});
   };
@@ -3291,8 +3274,8 @@ std::vector<ScriptedCommand> MakeCommandScript() {
   push(MakeRegisterFor(1), accept);
   push(MakeRegisterFor(2), accept);
   {
-    keylane::meta::RegisterNode conflict = MakeRegisterFor(3);
-    conflict.principal_ = "keylane://node/" + MakeNodeId(1);
+    lavik::meta::RegisterNode conflict = MakeRegisterFor(3);
+    conflict.principal_ = "lavik://node/" + MakeNodeId(1);
     push(std::move(conflict), reject);  // principal 1:1
   }
   // topology: groups
@@ -3300,7 +3283,7 @@ std::vector<ScriptedCommand> MakeCommandScript() {
   push(MakeCreateGroup("g2", 2), accept);
   push(MakeCreateGroup("g1", 3), reject);  // existing group, epoch mismatch
   // policy
-  const std::string authority_policy_id(keylane::meta::kAuthorityLeasePolicyId);
+  const std::string authority_policy_id(lavik::meta::kAuthorityLeasePolicyId);
   push(MakePutPolicy(authority_policy_id, 1,
                      "{\"kind\":\"authority-lease-v1\",\"duration_ms\":5000}"),
        accept);
@@ -3314,7 +3297,7 @@ std::vector<ScriptedCommand> MakeCommandScript() {
   push(MakeAssign("g1", 9, 3), reject);  // unregistered node
   // term
   {
-    keylane::meta::BeginGroupTerm begin;
+    lavik::meta::BeginGroupTerm begin;
     begin.request_id_ = MakeRequestId(0x40);
     begin.group_id_ = "g1";
     begin.expected_term_ = 0;
@@ -3326,24 +3309,24 @@ std::vector<ScriptedCommand> MakeCommandScript() {
     push(begin, reject);
   }
   // activation
-  const keylane::meta::ActivateAuthority activate = MakeActivate("g1", 1, 1, 5);
+  const lavik::meta::ActivateAuthority activate = MakeActivate("g1", 1, 1, 5);
   push(activate, accept);
   push(activate, accept);  // same content, new index: idempotent path
   // operation lifecycle
-  const keylane::meta::SubmitOperation submit = MakeSubmit(0x60, 0x11);
+  const lavik::meta::SubmitOperation submit = MakeSubmit(0x60, 0x11);
   push(submit, accept);  // index 17: operation_seq == 17
   {
-    keylane::meta::SubmitOperation reuse = MakeSubmit(0x60, 0x12);
+    lavik::meta::SubmitOperation reuse = MakeSubmit(0x60, 0x12);
     push(std::move(reuse), reject);  // id reused with a different intent
   }
   {
-    keylane::meta::TransitionOperationPhase transition;
+    lavik::meta::TransitionOperationPhase transition;
     transition.request_id_ = MakeRequestId(0x61);
     transition.operation_id_ = submit.operation_id_;
     transition.expected_revision_ = 0;
     transition.kind_phase_blob_ = "{\"phase\":\"prepare\"}";
     push(transition, accept);
-    keylane::meta::CompleteOperation complete;
+    lavik::meta::CompleteOperation complete;
     complete.request_id_ = MakeRequestId(0x62);
     complete.operation_id_ = submit.operation_id_;
     complete.expected_revision_ = 1;
@@ -3354,7 +3337,7 @@ std::vector<ScriptedCommand> MakeCommandScript() {
     push(transition, reject);  // terminal is irreversible
   }
   {
-    keylane::meta::ArchiveOperations archive;
+    lavik::meta::ArchiveOperations archive;
     archive.request_id_ = MakeRequestId(0x64);
     archive.operation_seqs_ = {17};
     push(archive, accept);
@@ -3364,7 +3347,7 @@ std::vector<ScriptedCommand> MakeCommandScript() {
   // slot projection. This placement also proves the accepted
   // SetSlotMap path in the full matrix.
   {
-    keylane::meta::FenceGroup fence;
+    lavik::meta::FenceGroup fence;
     fence.request_id_ = MakeRequestId(0x44);
     fence.group_id_ = "g1";
     fence.expected_term_ = 1;
@@ -3373,22 +3356,21 @@ std::vector<ScriptedCommand> MakeCommandScript() {
   }
   // slot map
   {
-    keylane::meta::SetSlotMap slots;
+    lavik::meta::SetSlotMap slots;
     slots.request_id_ = MakeRequestId(0x33);
     slots.ranges_ = {{0, 16383, "g1"}};
     slots.new_topology_epoch_ = 6;
     push(slots, accept);
   }
   {
-    keylane::meta::PutPopulationManifest put;
+    lavik::meta::PutPopulationManifest put;
     put.request_id_ = MakeRequestId(0x34);
     put.entries_ = {{1, 1}};
     put.manifest_digest_ =
-        keylane::meta::MetaPopulationManifestStore::CanonicalDigest(
-            put.entries_);
+        lavik::meta::MetaPopulationManifestStore::CanonicalDigest(put.entries_);
     push(put, accept);
 
-    keylane::meta::SetGroupReplicationState replication;
+    lavik::meta::SetGroupReplicationState replication;
     replication.request_id_ = MakeRequestId(0x35);
     replication.group_id_ = "g1";
     replication.new_population_manifest_revision_ = 1;
@@ -3399,21 +3381,21 @@ std::vector<ScriptedCommand> MakeCommandScript() {
   }
   // membership removal, retire, retired-node assign
   {
-    keylane::meta::UpdateNode update;
+    lavik::meta::UpdateNode update;
     update.request_id_ = MakeRequestId(0x21);
     update.node_id_ = MakeNodeId(2);
     update.expected_revision_ = 1;
     update.endpoints_ = {"10.0.0.9:7000"};
     update.new_topology_epoch_ = 8;
     push(update, accept);
-    keylane::meta::RemoveNodeFromGroup remove;
+    lavik::meta::RemoveNodeFromGroup remove;
     remove.request_id_ = MakeRequestId(0x32);
     remove.group_id_ = "g1";
     remove.node_id_ = MakeNodeId(2);
     remove.expected_revision_ = 3;
     remove.new_topology_epoch_ = 9;
     push(remove, accept);
-    keylane::meta::RetireNode retire;
+    lavik::meta::RetireNode retire;
     retire.request_id_ = MakeRequestId(0x22);
     retire.node_id_ = MakeNodeId(2);
     retire.expected_revision_ = 2;
@@ -3423,7 +3405,7 @@ std::vector<ScriptedCommand> MakeCommandScript() {
   // An explicit new fence advances even an already-grantless term. The matrix
   // below also checks exact replay of this command at its original index.
   {
-    keylane::meta::FenceGroup fence;
+    lavik::meta::FenceGroup fence;
     fence.request_id_ = MakeRequestId(0x46);
     fence.group_id_ = "g1";
     fence.expected_term_ = 2;

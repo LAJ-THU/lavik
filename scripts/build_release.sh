@@ -15,8 +15,8 @@
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
-cmake -B build -DCMAKE_BUILD_TYPE=Release -DKEYLANE_ENABLE_OPT=ON \
-  -DKEYLANE_MARCH=native -DKEYLANE_STATIC_OPENSSL=ON \
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DLAVIK_ENABLE_OPT=ON \
+  -DLAVIK_MARCH=native -DLAVIK_STATIC_OPENSSL=ON \
   -DBUILD_TESTING=OFF
-cmake --build build --target keylane -j"$(nproc)"
-echo "Release build complete: build/keylane"
+cmake --build build --target lavik -j"$(nproc)"
+echo "Release build complete: build/lavik"

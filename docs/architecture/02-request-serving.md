@@ -56,7 +56,7 @@ known before protocol negotiation. Every session owns its slot through TLS
 setup and serving, so handshake failures and all disconnect paths release it.
 `CONFIG SET maxclients` changes admission immediately; lowering it below the
 active count leaves existing connections intact and rejects new ones until the
-count falls below the new limit. Keylane keeps 256 file descriptors outside the
+count falls below the new limit. Lavik keeps 256 file descriptors outside the
 client budget. Startup attempts to raise `RLIMIT_NOFILE` and reduces the
 effective initial limit when the process hard limit is insufficient; a runtime
 increase that cannot preserve the reserve fails without changing the live
@@ -77,7 +77,7 @@ watermark, and name state.
 
 The service recognizes authentication and replication handshakes before
 ordinary dispatch. An isolated Redis `PSYNC` connection is transferred to the
-Redis exporter; an isolated native Keylane handshake is transferred to the
+Redis exporter; an isolated native Lavik handshake is transferred to the
 replication manager. Other authenticated traffic enters the request-drain gate
 used by graceful shutdown. That gate stores a closed bit and active count in
 one cache-line-isolated shard per worker. Normal traffic therefore mutates only
@@ -106,7 +106,7 @@ racing closure is either rejected or remains visible to the drain.
    Independently, `client-query-buffer-limit` bounds the wire bytes retained
    while one connection incrementally assembles a command. It defaults to 1
    GiB and, like Redis, accepts an absolute value from 1 MiB through
-   `LONG_MAX`. Keylane consumes the small socket input window directly into
+   `LONG_MAX`. Lavik consumes the small socket input window directly into
    argument strings, so this is a parser-retained-byte limit rather than a
    requirement for a second contiguous query buffer. Completed pipelined and
    `MULTI` commands remain governed by `maxmemory-clients` after parser
@@ -168,7 +168,7 @@ Commands needing atomic access to several keys build a `tx::Transaction` and
 execute one or more shard callbacks. Global commands explicitly collect from or
 coordinate all workers.
 
-`KEYLANE.HREPLACE key field value [field value ...]` is a Keylane-only RESP
+`LAVIK.HREPLACE key field value [field value ...]` is a Lavik-only RESP
 extension: it atomically replaces the entire field set of an existing Hash,
 preserves the absolute key expiry, and returns `OK`. Missing/expired keys return
 RESP null without a write; another live type returns `WRONGTYPE`. At least one
@@ -371,7 +371,7 @@ samples.
 Redis Sentinel observes compatible `ROLE`, `INFO replication`, `CLIENT`, and
 Pub/Sub behavior. It can drive role changes and persistence through
 `REPLICAOF`, `CONFIG REWRITE`, and client eviction. Sentinel sends those
-management commands together in `MULTI`/`EXEC`; Keylane accepts a dedicated
+management commands together in `MULTI`/`EXEC`; Lavik accepts a dedicated
 management-only batch, preserves its command order and individual replies, and
 uses the role transition rather than a process-wide transaction to provide the
 storage admission boundary. Runtime `replica-priority` controls promotion
@@ -421,18 +421,18 @@ real server executable.
 | Claim | Repository source |
 |---|---|
 | Bycorf service integration, pre-TLS connection admission, connection setup/cleanup, parsing loop, batching, reply paths, and handshake transfer | `bycorf/include/bycorf/net/tcp_service.h`, `bycorf/src/net/tcp_service.cpp`, `src/redis/server.cpp` |
-| Per-connection database, authentication, reply version, MULTI, WATCH, monitor, Pub/Sub, and client identity state | `include/keylane/session.h`, `include/keylane/resp_version.h` |
-| Incremental RESP parser and version-aware reusable reply builder | `include/keylane/resp.h`, `src/redis/resp.cpp` |
-| Command request/reply contracts, dispatch, replay, and gate interfaces | `include/keylane/command.h` |
-| Static command classification and key extraction | `include/keylane/command_table.h`, `src/redis/command_table.cpp` |
+| Per-connection database, authentication, reply version, MULTI, WATCH, monitor, Pub/Sub, and client identity state | `include/lavik/session.h`, `include/lavik/resp_version.h` |
+| Incremental RESP parser and version-aware reusable reply builder | `include/lavik/resp.h`, `src/redis/resp.cpp` |
+| Command request/reply contracts, dispatch, replay, and gate interfaces | `include/lavik/command.h` |
+| Static command classification and key extraction | `include/lavik/command_table.h`, `src/redis/command_table.cpp` |
 | Admission, controlled-failover pause, role checks, database/replication gates, transaction integration, PUBLISH fencing, routing, and replay | `src/redis/command.cpp`, `src/redis/blocking_wait.cpp` |
-| Cluster admission gate, CLUSTER subcommands, and discovery replies | `include/keylane/cluster/`, `src/cluster/`, `src/redis/cluster_command.cpp` |
-| Final logical-mutation precondition and WATCH/publication seam | `include/keylane/storage/engine.h`, `src/storage/engine/write.cpp`, `src/storage/engine/hash_tree.cpp` |
+| Cluster admission gate, CLUSTER subcommands, and discovery replies | `include/lavik/cluster/`, `src/cluster/`, `src/redis/cluster_command.cpp` |
+| Final logical-mutation precondition and WATCH/publication seam | `include/lavik/storage/engine.h`, `src/storage/engine/write.cpp`, `src/storage/engine/hash_tree.cpp` |
 | Type-family command handlers | `src/redis/string_command.cpp`, `src/redis/list_command.cpp`, `src/redis/hash_command.cpp`, `src/redis/set_command.cpp`, `src/redis/zset_command.cpp`, `src/redis/stream_command.cpp`, `src/redis/sort_command.cpp` |
 | Blocking waiter ownership and wakeups | `src/redis/blocking_wait.h`, `src/redis/blocking_wait.cpp` |
 | Worker-local Lua VM, script cache, Function runtime staging, invocation state, and command re-entry | `src/redis/lua_eval.h`, `src/redis/lua_eval.cpp`, `src/redis/command.cpp` |
 | Durable process-global Function catalog lifecycle | `src/redis/function_catalog.h`, `src/redis/function_catalog.cpp`, `src/storage/engine/system_state.cpp` |
-| Pub/Sub session queues, worker-local registries, fan-out, and subscribed connection serving | `include/keylane/pubsub.h`, `src/redis/pubsub.cpp`, `src/redis/server.cpp` |
-| SLOWLOG shards, command-stat reset, and client/Sentinel administration | `include/keylane/slowlog.h`, `src/redis/slowlog.cpp`, `include/keylane/metrics.h`, `src/metrics.cpp`, `src/redis/command.cpp` |
-| Redis RDB import/export and backup commands | `include/keylane/rdb.h`, `src/redis/rdb.cpp`, `include/keylane/rdb_collection.h`, `src/redis/rdb_collection.cpp`, `src/redis/backup.h`, `src/redis/backup.cpp` |
+| Pub/Sub session queues, worker-local registries, fan-out, and subscribed connection serving | `include/lavik/pubsub.h`, `src/redis/pubsub.cpp`, `src/redis/server.cpp` |
+| SLOWLOG shards, command-stat reset, and client/Sentinel administration | `include/lavik/slowlog.h`, `src/redis/slowlog.cpp`, `include/lavik/metrics.h`, `src/metrics.cpp`, `src/redis/command.cpp` |
+| Redis RDB import/export and backup commands | `include/lavik/rdb.h`, `src/redis/rdb.cpp`, `include/lavik/rdb_collection.h`, `src/redis/rdb_collection.cpp`, `src/redis/backup.h`, `src/redis/backup.cpp` |
 | Parser, metadata, configuration, max-client admission, and end-to-end command coverage | `tests/resp_test.cpp`, `tests/command_table_test.cpp`, `tests/config_test.cpp`, `tests/multikey_e2e_test.cpp`, `tests/multi_exec_e2e_test.cpp`, `tests/pubsub_e2e_test.cpp`, `tests/metrics_e2e_test.cpp`, `tests/sentinel_e2e_test.cpp`, `tests/list_e2e_test.cpp` |

@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-#include "keylane/tx/tx_shard.h"
+#include "lavik/tx/tx_shard.h"
 
 #include <algorithm>
 
 #include "bycorf/runtime/worker.h"
-#include "keylane/tx/transaction.h"
+#include "lavik/tx/transaction.h"
 
-namespace keylane::tx {
+namespace lavik::tx {
 
 namespace {
 
@@ -163,4 +163,4 @@ TxShard& CurrentTxShard() {
   return TxRuntime::Get()->shard(bycorf::ThisWorker().id_);
 }
 
-}  // namespace keylane::tx
+}  // namespace lavik::tx

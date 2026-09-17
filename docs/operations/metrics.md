@@ -19,7 +19,7 @@ limitations under the License.
 Enable the HTTP endpoint with a separate listen port:
 
 ```sh
-./keylane --port 6379 --metrics-port 9100 --data-file keylane.data
+./lavik --port 6379 --metrics-port 9100 --data-file lavik.data
 curl http://127.0.0.1:9100/metrics
 ```
 
@@ -81,28 +81,28 @@ Recovery bounds its avoidable routing and live-accounting allocations with a
 or external-value manifest is indivisible and may exceed one worker's share,
 but that batch is applied before the worker retains another record.
 Ordinary temporary allocations do not reserve headroom:
-the official mimalloc global new/delete override performs no Keylane
+the official mimalloc global new/delete override performs no Lavik
 accounting. RSS and allocator diagnostics remain outside command execution.
 
 ## Business metrics
 
-- `keylane_commands_total`: completed Redis commands. QPS is
-  `rate(keylane_commands_total[1m])`.
-- `keylane_command_calls_total{command}`: completed commands by command name.
-- `keylane_command_duration_seconds`: command execution histogram, from
+- `lavik_commands_total`: completed Redis commands. QPS is
+  `rate(lavik_commands_total[1m])`.
+- `lavik_command_calls_total{command}`: completed commands by command name.
+- `lavik_command_duration_seconds`: command execution histogram, from
   dispatch through reply construction; socket response writes are excluded.
-- `keylane_connections`: all current TCP connections, including Redis clients,
+- `lavik_connections`: all current TCP connections, including Redis clients,
   Prometheus scrapes, and replication connections.
-- `keylane_connected_clients`: current Redis client connections. This is always
-  less than or equal to `keylane_connections`.
+- `lavik_connected_clients`: current Redis client connections. This is always
+  less than or equal to `lavik_connections`.
 
 For example, per-command QPS and aggregate p99 latency are:
 
 ```promql
-sum by (command) (rate(keylane_command_calls_total[1m]))
+sum by (command) (rate(lavik_command_calls_total[1m]))
 histogram_quantile(
   0.99,
-  sum by (le) (rate(keylane_command_duration_seconds_bucket[5m]))
+  sum by (le) (rate(lavik_command_duration_seconds_bucket[5m]))
 )
 ```
 
@@ -111,19 +111,19 @@ histogram_quantile(
 Meta-managed Data nodes export process-level control health without node,
 group, assignment, directive, or operation identifiers as labels:
 
-- `keylane_cluster_control_connected`: 1 while worker 0 owns an accepted Meta
+- `lavik_cluster_control_connected`: 1 while worker 0 owns an accepted Meta
   session, otherwise 0.
-- `keylane_cluster_control_reconnects_total`: reconnect rounds after the first
+- `lavik_cluster_control_reconnects_total`: reconnect rounds after the first
   attempt.
-- `keylane_cluster_control_protocol_errors_total`: sessions closed for invalid
+- `lavik_cluster_control_protocol_errors_total`: sessions closed for invalid
   framing or protocol state.
-- `keylane_cluster_control_full_states_applied_total`: complete desired-state
+- `lavik_cluster_control_full_states_applied_total`: complete desired-state
   projections installed atomically.
-- `keylane_cluster_control_lease_decisions_total{decision="granted|denied"}`:
+- `lavik_cluster_control_lease_decisions_total{decision="granted|denied"}`:
   finite-authority outcomes returned by Meta.
-- `keylane_cluster_control_lease_expirations_total`: locally detected lease
+- `lavik_cluster_control_lease_expirations_total`: locally detected lease
   expirations that fenced authority.
-- `keylane_cluster_control_directive_results_total{result="success|failure"}`:
+- `lavik_cluster_control_directive_results_total{result="success|failure"}`:
   terminal Data-side directive execution outcomes.
 
 Alert on a Meta-managed node remaining disconnected, repeated protocol errors,
@@ -135,12 +135,12 @@ process restarts legitimately increment it.
 The active defrag tuning values are exported alongside the work gauges so
 latency graphs can be correlated with runtime A/B changes:
 
-- `keylane_storage_defrag_max_active_per_device`
-- `keylane_storage_defrag_block_sleep_seconds`
-- `keylane_storage_defrag_record_sleep_seconds`
-- `keylane_storage_defrag_paused`
+- `lavik_storage_defrag_max_active_per_device`
+- `lavik_storage_defrag_block_sleep_seconds`
+- `lavik_storage_defrag_record_sleep_seconds`
+- `lavik_storage_defrag_paused`
 
-They can be changed without restarting Keylane:
+They can be changed without restarting Lavik:
 
 ```text
 DEFRAG PAUSE
@@ -158,58 +158,58 @@ jobs from starting but lets an already active job finish; queued candidates are
 woken by `RESUME`. Pausing defrag indefinitely can eventually prevent writes
 from reclaiming space on a nearly full device.
 
-- `keylane_storage_defrag_runs_total{result}`: completed defrag attempts,
+- `lavik_storage_defrag_runs_total{result}`: completed defrag attempts,
   classified as `success`, `resource_exhausted`, or `error`.
-- `keylane_storage_defrag_active`: defrag jobs currently running.
-- `keylane_storage_defrag_pending`: workers waiting to start a defrag job.
-- `keylane_storage_capacity_bytes{device,path}`: usable data capacity.
-- `keylane_storage_available_bytes{device,path}`: space available to normal
+- `lavik_storage_defrag_active`: defrag jobs currently running.
+- `lavik_storage_defrag_pending`: workers waiting to start a defrag job.
+- `lavik_storage_capacity_bytes{device,path}`: usable data capacity.
+- `lavik_storage_available_bytes{device,path}`: space available to normal
   writes after preserving the defrag reserve. This is the capacity metric to
-  alert on when Keylane is close to rejecting writes.
-- `keylane_filesystem_available_bytes{device,path}`: free space reported by
+  alert on when Lavik is close to rejecting writes.
+- `lavik_filesystem_available_bytes{device,path}`: free space reported by
   the filesystem containing a regular data file. It is omitted for raw block
   devices. A preallocated data file can leave this value unchanged while
-  `keylane_storage_available_bytes` falls.
+  `lavik_storage_available_bytes` falls.
 
 Defrag activity can be compared with command latency using:
 
 ```promql
-sum by (result) (rate(keylane_storage_defrag_runs_total[5m]))
+sum by (result) (rate(lavik_storage_defrag_runs_total[5m]))
 ```
 
 ## Memory metrics
 
-- `keylane_memory_current_bytes`: cached explicitly retained bytes used for
+- `lavik_memory_current_bytes`: cached explicitly retained bytes used for
   limit enforcement.
-- `keylane_memory_used_bytes`: explicitly retained bytes. This is not total
+- `lavik_memory_used_bytes`: explicitly retained bytes. This is not total
   process heap usage; compare RSS and mimalloc diagnostics for that view.
-- `keylane_memory_rss_bytes`: resident process memory, refreshed when metrics
+- `lavik_memory_rss_bytes`: resident process memory, refreshed when metrics
   or `INFO memory` is requested.
-- `keylane_memory_committed_bytes`: pages committed by mimalloc; diagnostic
+- `lavik_memory_committed_bytes`: pages committed by mimalloc; diagnostic
   only and valid without per-allocation mimalloc statistics.
-- `keylane_memory_reserved_bytes`: virtual address space reserved by mimalloc;
+- `lavik_memory_reserved_bytes`: virtual address space reserved by mimalloc;
   diagnostic only.
-- `keylane_memory_max_bytes`: configured process memory limit.
-- `keylane_client_request_buffer_limit_bytes`: effective client request-buffer
+- `lavik_memory_max_bytes`: configured process memory limit.
+- `lavik_client_request_buffer_limit_bytes`: effective client request-buffer
   limit after resolving percentages and the nonzero 128 KiB floor.
-- `keylane_client_buffered_request_bytes`: wire bytes currently retained by
+- `lavik_client_buffered_request_bytes`: wire bytes currently retained by
   ordinary parsers, ready command batches, and queued transactions.
-- `keylane_fullsync_reserved_memory_bytes`: reusable retained-memory headroom
+- `lavik_fullsync_reserved_memory_bytes`: reusable retained-memory headroom
   promised to active full-sync coverage maps.
-- `keylane_memory_admission_pending_bytes`: short-lived worker-local permits
+- `lavik_memory_admission_pending_bytes`: short-lived worker-local permits
   held while retained page, bucket, replication-owner, or replica-staging
   ownership is constructed.
-- `keylane_memory_rejected_commands_total`: commands rejected by the limit.
-- `keylane_worker_retained_memory_bytes{worker}`: retained bytes charged to
+- `lavik_memory_rejected_commands_total`: commands rejected by the limit.
+- `lavik_worker_retained_memory_bytes{worker}`: retained bytes charged to
   one worker's admission share, including its deterministic share of retained
   allocations created outside a bound worker.
-- `keylane_worker_memory_admission_pending_bytes{worker}`: that worker's
+- `lavik_worker_memory_admission_pending_bytes{worker}`: that worker's
   short-lived allocation permits.
-- `keylane_worker_fullsync_reserved_memory_bytes{worker}`: that worker's
+- `lavik_worker_fullsync_reserved_memory_bytes{worker}`: that worker's
   reusable full-sync coverage reservation.
-- `keylane_worker_client_buffered_request_bytes{worker}`: request bytes charged
+- `lavik_worker_client_buffered_request_bytes{worker}`: request bytes charged
   to that worker's independent client-buffer quota.
-- `keylane_worker_memory_limit_bytes{worker}`: the worker's fixed share of the
+- `lavik_worker_memory_limit_bytes{worker}`: the worker's fixed share of the
   90% retained-memory waterline.
 
 The provisioned Grafana **Retained Admission Utilization** gauge approximates
@@ -217,10 +217,10 @@ the process-wide admission decision as:
 
 ```promql
 100 * (
-  keylane_memory_current_bytes
-  + keylane_fullsync_reserved_memory_bytes
-  + keylane_memory_admission_pending_bytes
-) / (0.9 * keylane_memory_max_bytes)
+  lavik_memory_current_bytes
+  + lavik_fullsync_reserved_memory_bytes
+  + lavik_memory_admission_pending_bytes
+) / (0.9 * lavik_memory_max_bytes)
 ```
 
 Admission is enforced per worker, so a single worker can still reject growth
@@ -238,7 +238,7 @@ The same values are available through Redis `INFO memory`, including
 `oom_rejected_commands`.
 
 Worker 0 sums the cache-line-separated worker retained counters every 100 ms.
-Release builds use mimalloc's official global C++ override without Keylane
+Release builds use mimalloc's official global C++ override without Lavik
 hooks. Explicit retained allocators query `mi_usable_size` only on their much
 rarer allocation/free paths. The hot command path reads its own shard and adds
 a conservative retained-size estimate, so it performs no allocator aggregation
@@ -247,9 +247,9 @@ metrics/INFO request.
 
 ## Replication and Function catalog
 
-`INFO replication` exposes `keylane_replication_group_id`, the current boot
+`INFO replication` exposes `lavik_replication_group_id`, the current boot
 and replica-incarnation IDs, the local/upstream history, and
-`keylane_function_catalog_generation` plus its CRC64. Group ID is the stable
+`lavik_function_catalog_generation` plus its CRC64. Group ID is the stable
 peer/reparent lineage; boot, incarnation, and history are process-scoped.
 After a restart, expect a new history and whole-group full sync rather than a
 continuation from the old in-memory cursor.
@@ -263,27 +263,27 @@ equivalence. The CRC64 identifies the local dump content for diagnosis.
 
 Backlog and full-sync metrics are worker-labelled:
 
-- `keylane_replication_backlog_bytes` and
-  `keylane_replication_backlog_capacity_bytes` show the current hard reconnect
+- `lavik_replication_backlog_bytes` and
+  `lavik_replication_backlog_capacity_bytes` show the current hard reconnect
   window allocation and quota.
-- `keylane_replication_backlog_floor_lsn` and
-  `keylane_replication_backlog_tail_lsn` show retained event coverage. A
+- `lavik_replication_backlog_floor_lsn` and
+  `lavik_replication_backlog_tail_lsn` show retained event coverage. A
   consumer below the floor must full-sync.
-- `keylane_replication_backlog_pinned_cursors` counts current ACK coverage
+- `lavik_replication_backlog_pinned_cursors` counts current ACK coverage
   claims. At the hard cap, the default policy waits for cursor progress;
   `replication-backlog-backpressure no` instead revokes lagging claims and
   evicts complete old events without allowing the backlog to grow.
-- `keylane_replication_backlog_backpressured` identifies workers currently
+- `lavik_replication_backlog_backpressured` identifies workers currently
   waiting for cursor progress, and
-  `keylane_replication_backlog_backpressure_waits_total` counts capacity
+  `lavik_replication_backlog_backpressure_waits_total` counts capacity
   conflicts that entered that state.
-- `keylane_replication_backlog_coverage_revocations_total` counts those
+- `lavik_replication_backlog_coverage_revocations_total` counts those
   revocations.
-- `keylane_replication_publish_queue_bytes` and its capacity expose source
-  publication staging. The corresponding `keylane_fullsync_*` gauges expose
+- `lavik_replication_publish_queue_bytes` and its capacity expose source
+  publication staging. The corresponding `lavik_fullsync_*` gauges expose
   active full-sync sessions, their command queues, admission, and waits.
-- `keylane_replication_control_connections` and
-  `keylane_replication_flow_connections` distinguish native control sockets
+- `lavik_replication_control_connections` and
+  `lavik_replication_flow_connections` distinguish native control sockets
   from per-flow data sockets.
 
 Alert on sustained backlog backpressure together with a publisher queue near

@@ -14,10 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Keylane documentation
+# Lavik documentation
 
 This directory separates current architecture documentation, historical design
-references, and operational runbooks for Keylane.
+references, and operational runbooks for Lavik.
 
 ## Documentation map
 
