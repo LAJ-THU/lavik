@@ -94,11 +94,13 @@ authority token — owner identity, term, grant, and readiness, precomputed at
 build time — so an unrelated group's republication does not disturb
 in-flight work.
 
-Request-path reads go through a thread-local snapshot cache that re-reads only
-the publication sequence per call; a hit returns the last observed snapshot
-with no shared-memory writes at all. This keeps the admission gate free of
-cross-worker serialization — a direct `atomic<shared_ptr>` load per request
-would serialize on the toolchain's internal spin bit.
+Request-path reads go through a thread-local snapshot cache that checks the
+publication sequence before reusing its snapshot. Each worker has an
+independent ownership handle retaining the same published topology object;
+requests retain that handle rather than directly sharing global snapshot
+ownership. Retained admissions remain valid across cache refresh, worker
+exit, and cross-worker execution. The topology contents and per-group
+in-flight cells remain shared, preserving snapshot identity and fence drains.
 
 Readiness is per group and deliberately excludes the grant bit: a fenced
 group is not "still loading", it has no safe owner. Keyed requests consult
@@ -464,6 +466,17 @@ groups, commit the complete replacement map, and then activate fresh
 authorities. This committed-state precondition complements the per-session
 Fence/FDS drain: a source that has not consumed the replacement can never keep
 an old lease while the destination begins serving the same slot.
+
+The authority guard publishes session, leases, and revocation generation as
+one immutable snapshot, independently of committed topology. Control-plane
+writers serialize publication; request admission and mutation rechecks read
+owned snapshots without acquiring the writer mutex. Ordinary renewals neither
+close request admission nor drain readers. Deadline-only renewal preserves
+the revocation generation; revocation invalidates earlier write proofs.
+Cached snapshots still require a current absolute-deadline check on every
+lease-dependent admission and mutation recheck. Reads and writes use the same
+admission path; only writes retain their proof across suspension for the
+existing owner-side and final mutation rechecks.
 
 Finite leases are required only for a Meta-managed local primary. Admission
 and the final mutation recheck both prove the current session, group
