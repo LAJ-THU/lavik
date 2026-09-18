@@ -49,6 +49,7 @@
 #include <variant>
 #include <vector>
 
+#include "../../replication/log_block.h"
 #include "../ring_buffer.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
@@ -60,6 +61,7 @@
 #include "bycorf/runtime/worker.h"
 #include "lavik/fault_injection.h"
 #include "lavik/memory.h"
+#include "lavik/replication_history.h"
 #include "lavik/storage/detail/compact_write.h"
 #include "lavik/storage/detail/grouped_object_index.h"
 #include "lavik/storage/detail/hash_codec.h"
@@ -1348,43 +1350,11 @@ class StorageEngine::Impl {
       std::vector<TxShardWrites> writes_;
     };
 
-    struct ReplicationSparseOffset {
-      std::uint64_t lsn_ = 0;
-      std::uint32_t fragment_index_ = 0;
-      std::uint32_t byte_offset_ = 0;
-    };
-
-    struct RetainedByteDeleter {
-      RetainedAllocationDomain domain_;
-
-      void operator()(std::byte* pointer) noexcept {
-        DeallocateRetainedBytes(domain_, pointer, alignof(std::max_align_t));
-      }
-    };
-
-    struct ReplicationLogBlock {
-      using ByteOwner = std::unique_ptr<std::byte, RetainedByteDeleter>;
-      using SparseOffsets =
-          std::vector<ReplicationSparseOffset,
-                      RetainedAllocator<ReplicationSparseOffset>>;
-
-      ReplicationLogBlock()
-          : bytes_(nullptr, RetainedByteDeleter{RetainedAllocationDomain{}}),
-            sparse_offsets_(RetainedAllocator<ReplicationSparseOffset>(
-                RetainedAllocationDomain{})) {}
-
-      explicit ReplicationLogBlock(RetainedAllocationDomain domain)
-          : bytes_(nullptr, RetainedByteDeleter{domain}),
-            sparse_offsets_(
-                RetainedAllocator<ReplicationSparseOffset>(domain)) {}
-
-      ByteOwner bytes_;
-      std::uint64_t first_lsn_ = 0;
-      std::uint64_t last_lsn_ = 0;
-      std::uint32_t committed_bytes_ = 0;
-      std::uint32_t frame_count_ = 0;
-      bool sealed_ = false;
-      SparseOffsets sparse_offsets_;
+    struct ReplicationLogBlock : ::lavik::detail::ReplicationLogBlock {
+      ReplicationLogBlock() = default;
+      explicit ReplicationLogBlock(::lavik::detail::ReplicationLogBlock block)
+          : ::lavik::detail::ReplicationLogBlock(std::move(block)) {}
+      ReplicationHistory::PrimaryCharge history_charge_;
     };
 
     struct ReplicationLogRuntime {
@@ -1707,6 +1677,7 @@ class StorageEngine::Impl {
     std::deque<DetachedIndex> detached_indexes_;
     bool detached_reclaim_running_ = false;
     std::array<std::size_t, kLogicalDatabaseCount> live_key_count_{};
+    std::shared_ptr<lavik::ReplicationHistory> replication_history_;
     ReplicationLogRuntime replication_log_;
     std::optional<ActiveBlock> active_block_;
     // The ordinary stream prefetches only an ID; its 8 MiB staging buffer is
@@ -2596,6 +2567,10 @@ class StorageEngine::Impl {
 
   Task<absl::Status> EnableReplicationLog(std::uint64_t log_epoch,
                                           std::size_t capacity_bytes);
+  void SetReplicationHistory(
+      unsigned worker_id, std::shared_ptr<lavik::ReplicationHistory> history) {
+    stores_.at(worker_id)->replication_history_ = std::move(history);
+  }
   Task<absl::Status> SetReplicationLogCapacity(std::size_t capacity_bytes);
   Task<absl::Status> SetReplicationBacklogBackpressure(bool enabled);
   Task<absl::Status> SetReplicationPublishQueueCapacity(
