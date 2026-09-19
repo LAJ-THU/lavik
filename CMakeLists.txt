@@ -765,6 +765,9 @@ if (BUILD_TESTING)
   add_test(NAME lavik_runtime_backends
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runtime_backends_smoke.py $<TARGET_FILE:lavik>)
   set_tests_properties(lavik_runtime_backends PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+  add_test(NAME lavik_database_modes
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/database_modes_smoke.py $<TARGET_FILE:lavik>)
+  set_tests_properties(lavik_database_modes PROPERTIES TIMEOUT 120)
   add_test(NAME lavik_version COMMAND lavik --version)
   set_tests_properties(lavik_version PROPERTIES
     PASS_REGULAR_EXPRESSION "lavik ${LAVIK_VERSION}")
@@ -1312,7 +1315,7 @@ if (BUILD_TESTING)
       )
       set_tests_properties(cluster_integration.rebuild_protocol_guards PROPERTIES
         LABELS cluster-integration
-        # This entry runs nine process fixtures, including crash/restart and
+        # This entry runs multiple process fixtures, including crash/restart and
         # forced reconnects. Their combined runtime exceeds two minutes on
         # hosted runners; each fixture retains its own bounded progress waits.
         TIMEOUT 300
@@ -1364,6 +1367,7 @@ if (BUILD_TESTING)
     tests/native_replay_test.cpp
     tests/native_reparent_test.cpp
     tests/replica_applied_frontier_test.cpp
+    tests/full_sync_handoff_test.cpp
     tests/ring_buffer_test.cpp
     tests/tx_lock_test.cpp
     tests/storage_format_test.cpp

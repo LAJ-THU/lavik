@@ -52,6 +52,9 @@ class ReplicationHistory;
 namespace lavik::storage {
 
 struct StorageEngineOptions {
+  // Runtime databases [0, database_count_). Cluster servers use only DB0;
+  // durable and replication epoch metadata retain all 16 database slots.
+  std::uint8_t database_count_ = kLogicalDatabaseCount;
   std::vector<std::string> data_files_{"lavik.data"};
   // Logically resets every configured device by erasing its fixed metadata
   // before assigning a fresh storage-set identity. Data blocks are left
@@ -376,7 +379,6 @@ inline constexpr std::size_t kFullSyncReplacementMetadataBytes = 320;
 
 struct PartitionReplicationStart {
   std::uint64_t baseline_version_ = 0;
-  std::uint16_t nonempty_db_mask_ = 0;
   std::array<std::uint64_t, 16> db_epochs_{};
 };
 
@@ -1102,6 +1104,9 @@ class StorageEngine {
 
   unsigned OwnerForKey(std::string_view key) const noexcept;
   unsigned worker_count() const noexcept;
+  // Number of runtime databases, fixed before Prepare. Key operations
+  // require an ID in [0, database_count()).
+  std::uint8_t database_count() const noexcept;
   std::size_t LocalSize(std::uint8_t db_id) const noexcept;
 
   // The command layer closes and drains every DB gate before invoking Begin
@@ -1188,9 +1193,17 @@ class StorageEngine {
   // Source-side full-sync primitives. A partition scans one DB at a time;
   // only that DB owns a temporary ScanHashMap<KeyPhase>. Writes to an unseen
   // key coalesce a metadata-only replacement, while covered/completed keys
-  // enter the session/worker publish FIFO.
+  // enter the session/worker publish FIFO. db_count must be in
+  // [1, database_count()]. Only DBs [0, db_count) need scans; the caller must
+  // exclude writes to higher DBs for this session's lifetime.
   absl::StatusOr<PartitionReplicationStart> BeginPartitionReplication(
-      std::uint64_t session_id, std::uint16_t partition_id);
+      std::uint64_t session_id, std::uint16_t partition_id,
+      std::uint8_t db_count = kLogicalDatabaseCount);
+  // On the owning worker, atomically finish an unstarted DB if it has neither
+  // live keys nor outstanding UNSTARTED write admissions. Later writes enter
+  // the publish FIFO. False leaves the DB unstarted and requires a scan.
+  absl::StatusOr<bool> TrySkipEmptyPartitionDbReplication(
+      std::uint64_t session_id, std::uint16_t partition_id, std::uint8_t db_id);
   absl::Status BeginPartitionDbReplication(std::uint64_t session_id,
                                            std::uint16_t partition_id,
                                            std::uint8_t db_id);
